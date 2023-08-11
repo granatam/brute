@@ -1,7 +1,6 @@
-CC=gcc
 CFLAGS=-O2 -Wall -Wpedantic -Wextra
 
-main: main.c
+main: main.o
 
 clean:
 	${RM} main
