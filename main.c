@@ -2,17 +2,18 @@
 #include <string.h>
 
 void
-bruteforce (char *alphabet)
+brute_rec (char *password, char *alph, int length, int pos)
 {
-  size_t alph_size = strlen (alphabet);
-  for (size_t i = 0; i < alph_size; ++i)
+  if (pos == length)
     {
-      for (size_t j = 0; j < alph_size; ++j)
+      printf ("%s\n", password);
+    }
+  else
+    {
+      for (size_t i = 0; alph[i] != '\0'; ++i)
         {
-          for (size_t k = 0; k < alph_size; ++k)
-            {
-              printf ("%c%c%c\n", alphabet[i], alphabet[j], alphabet[k]);
-            }
+          password[pos] = alph[i];
+          brute_rec (password, alph, length, pos + 1);
         }
     }
 }
@@ -21,5 +22,8 @@ int
 main (void)
 {
   char *alphabet = "abc";
-  bruteforce (alphabet);
+  int length = 3;
+  char password[length + 1];
+  password[length] = '\0';
+  brute_rec (password, alphabet, length, 0);
 }
