@@ -18,6 +18,11 @@ brute_rec (char *password, char *alph, int length, int pos)
     }
 }
 
+void brute_rec_wrapper (char *password, char *alph, int length)
+{
+  brute_rec (password, alph, length, 0);
+}
+
 int
 main (void)
 {
@@ -25,5 +30,5 @@ main (void)
   int length = 3;
   char password[length + 1];
   password[length] = '\0';
-  brute_rec (password, alphabet, length, 0);
+  brute_rec_wrapper (password, alphabet, length);
 }
