@@ -64,7 +64,7 @@ brute_iter (char *password, char *alph, int length)
     }
 }
 
-void
+int
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
@@ -85,9 +85,11 @@ parse_params (config_t *config, int argc, char *argv[])
           config->brute_mode = BM_RECU;
           break;
         default:
-          exit (EXIT_FAILURE);
+          return EXIT_FAILURE;
         }
     }
+
+  return EXIT_SUCCESS;
 }
 
 int
@@ -98,7 +100,10 @@ main (int argc, char *argv[])
     .alph = "abc",
     .brute_mode = BM_ITER,
   };
-  parse_params (&config, argc, argv);
+  if (parse_params (&config, argc, argv) == EXIT_FAILURE)
+    {
+      return EXIT_FAILURE;
+    }
 
   char password[config.length + 1];
   password[config.length] = '\0';
@@ -112,4 +117,6 @@ main (int argc, char *argv[])
       brute_rec_wrapper (password, config.alph, config.length);
       break;
     }
+
+  return EXIT_SUCCESS;
 }
