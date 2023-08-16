@@ -1,7 +1,10 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
-typedef enum {
+typedef enum
+{
   BM_ITER,
   BM_RECU,
 } brute_mode_t;
@@ -61,13 +64,44 @@ brute_iter (char *password, char *alph, int length)
     }
 }
 
-int
-main (void)
+void
+parse_params (config_t *config, int argc, char *argv[])
 {
-  char *alphabet = "abc";
-  int length = 3;
-  char password[length + 1];
-  password[length] = '\0';
-  /* brute_rec_wrapper (password, alphabet, length); */
-  brute_iter (password, alphabet, length);
+  int opt = 0;
+  while ((opt = getopt (argc, argv, "l:a:ir")) != -1)
+    {
+      switch (opt)
+        {
+        case 'l':
+          config->length = atoi (optarg);
+          break;
+        case 'a':
+          config->alph = optarg;
+          break;
+        case 'i':
+          config->brute_mode = BM_ITER;
+          break;
+        case 'r':
+          config->brute_mode = BM_RECU;
+          break;
+        default:
+          exit (EXIT_FAILURE);
+        }
+    }
+}
+
+int
+main (int argc, char *argv[])
+{
+  config_t config = {
+    .length = 3,
+    .alph = "abc",
+    .brute_mode = BM_ITER,
+  };
+  parse_params (&config, argc, argv);
+
+  char password[config.length + 1];
+  password[config.length] = '\0';
+  /* brute_rec_wrapper (password, config.alphabet, config.length); */
+  brute_iter (password, config.alph, config.length);
 }
