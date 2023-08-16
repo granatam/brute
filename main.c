@@ -1,6 +1,18 @@
 #include <stdio.h>
 #include <string.h>
 
+typedef enum {
+  BM_ITER,
+  BM_RECU,
+} brute_mode_t;
+
+typedef struct config_t
+{
+  int length;
+  char *alph;
+  brute_mode_t brute_mode;
+} config_t;
+
 void
 brute_rec (char *password, char *alph, int length, int pos)
 {
