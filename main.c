@@ -85,11 +85,11 @@ parse_params (config_t *config, int argc, char *argv[])
           config->brute_mode = BM_RECU;
           break;
         default:
-          return EXIT_FAILURE;
+          return -1;
         }
     }
 
-  return EXIT_SUCCESS;
+  return 0;
 }
 
 int
@@ -100,7 +100,7 @@ main (int argc, char *argv[])
     .alph = "abc",
     .brute_mode = BM_ITER,
   };
-  if (parse_params (&config, argc, argv) == EXIT_FAILURE)
+  if (parse_params (&config, argc, argv) == -1)
     {
       return EXIT_FAILURE;
     }
