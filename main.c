@@ -102,6 +102,14 @@ main (int argc, char *argv[])
 
   char password[config.length + 1];
   password[config.length] = '\0';
-  /* brute_rec_wrapper (password, config.alphabet, config.length); */
-  brute_iter (password, config.alph, config.length);
+
+  switch (config.brute_mode)
+    {
+    case BM_ITER:
+      brute_iter (password, config.alph, config.length);
+      break;
+    case BM_RECU:
+      brute_rec_wrapper (password, config.alph, config.length);
+      break;
+    }
 }
