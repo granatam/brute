@@ -74,6 +74,11 @@ parse_params (config_t *config, int argc, char *argv[])
         {
         case 'l':
           config->length = atoi (optarg);
+          if (config->length == 0)
+            {
+              printf ("Password's length must be a number greater than 0\n");
+              return -1;
+            }
           break;
         case 'a':
           config->alph = optarg;
