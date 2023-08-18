@@ -24,35 +24,39 @@ password_handler (char *password, void *context)
 {
   (void)context; /* just to temporary suppress "unused parameter" warning*/
   printf ("%s\n", password);
-  return true;
+  return false;
 }
 
-void
+bool
 brute_rec (char *password, config_t *config,
            password_handler_t password_handler, void *context, int pos)
 {
   if (pos == config->length)
     {
-      password_handler (password, context);
+      return password_handler (password, context);
     }
   else
     {
       for (size_t i = 0; config->alph[i] != '\0'; ++i)
         {
           password[pos] = config->alph[i];
-          brute_rec (password, config, password_handler, context, pos + 1);
+          if (brute_rec (password, config, password_handler, context, pos + 1))
+            {
+              return true;
+            }
         }
     }
+  return false;
 }
 
-void
+bool
 brute_rec_wrapper (char *password, config_t *config,
                    password_handler_t password_handler, void *context)
 {
-  brute_rec (password, config, password_handler, context, 0);
+  return brute_rec (password, config, password_handler, context, 0);
 }
 
-void
+bool
 brute_iter (char *password, config_t *config,
             password_handler_t password_handler, void *context)
 {
@@ -64,7 +68,10 @@ brute_iter (char *password, config_t *config,
   int pos;
   while (true)
     {
-      password_handler (password, context);
+      if (password_handler (password, context))
+        {
+          return true;
+        }
       for (pos = config->length - 1; pos >= 0 && idx[pos] == alph_size; --pos)
         {
           idx[pos] = 0;
@@ -72,7 +79,7 @@ brute_iter (char *password, config_t *config,
         }
       if (pos < 0)
         {
-          break;
+          return false;
         }
       password[pos] = config->alph[++idx[pos]];
     }
