@@ -19,31 +19,42 @@ typedef struct config_t
 
 typedef bool (*password_handler_t) (char *password, void *context);
 
+bool
+password_handler (char *password, void *context)
+{
+  (void)context; /* just to temporary suppress "unused parameter" warning*/
+  printf ("%s\n", password);
+  return true;
+}
+
 void
-brute_rec (char *password, config_t *config, int pos)
+brute_rec (char *password, config_t *config,
+           password_handler_t password_handler, void *context, int pos)
 {
   if (pos == config->length)
     {
-      printf ("%s\n", password);
+      password_handler (password, context);
     }
   else
     {
       for (size_t i = 0; config->alph[i] != '\0'; ++i)
         {
           password[pos] = config->alph[i];
-          brute_rec (password, config, pos + 1);
+          brute_rec (password, config, password_handler, context, pos + 1);
         }
     }
 }
 
 void
-brute_rec_wrapper (char *password, config_t *config)
+brute_rec_wrapper (char *password, config_t *config,
+                   password_handler_t password_handler, void *context)
 {
-  brute_rec (password, config, 0);
+  brute_rec (password, config, password_handler, context, 0);
 }
 
 void
-brute_iter (char *password, config_t *config)
+brute_iter (char *password, config_t *config,
+            password_handler_t password_handler, void *context)
 {
   int alph_size = strlen (config->alph) - 1;
   int idx[config->length];
@@ -51,9 +62,9 @@ brute_iter (char *password, config_t *config)
   memset (password, config->alph[0], config->length);
 
   int pos;
-  while (!0)
+  while (true)
     {
-      printf ("%s\n", password);
+      password_handler (password, context);
       for (pos = config->length - 1; pos >= 0 && idx[pos] == alph_size; --pos)
         {
           idx[pos] = 0;
@@ -119,10 +130,10 @@ main (int argc, char *argv[])
   switch (config.brute_mode)
     {
     case BM_ITER:
-      brute_iter (password, &config);
+      brute_iter (password, &config, password_handler, NULL);
       break;
     case BM_RECU:
-      brute_rec_wrapper (password, &config);
+      brute_rec_wrapper (password, &config, password_handler, NULL);
       break;
     }
 
