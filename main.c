@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,51 +17,53 @@ typedef struct config_t
   brute_mode_t brute_mode;
 } config_t;
 
+typedef bool (*password_handler_t) (char *password, void *context);
+
 void
-brute_rec (char *password, char *alph, int length, int pos)
+brute_rec (char *password, config_t *config, int pos)
 {
-  if (pos == length)
+  if (pos == config->length)
     {
       printf ("%s\n", password);
     }
   else
     {
-      for (size_t i = 0; alph[i] != '\0'; ++i)
+      for (size_t i = 0; config->alph[i] != '\0'; ++i)
         {
-          password[pos] = alph[i];
-          brute_rec (password, alph, length, pos + 1);
+          password[pos] = config->alph[i];
+          brute_rec (password, config, pos + 1);
         }
     }
 }
 
 void
-brute_rec_wrapper (char *password, char *alph, int length)
+brute_rec_wrapper (char *password, config_t *config)
 {
-  brute_rec (password, alph, length, 0);
+  brute_rec (password, config, 0);
 }
 
 void
-brute_iter (char *password, char *alph, int length)
+brute_iter (char *password, config_t *config)
 {
-  int alph_size = strlen (alph) - 1;
-  int idx[length];
-  memset (idx, 0, length * sizeof (int));
-  memset (password, alph[0], length);
+  int alph_size = strlen (config->alph) - 1;
+  int idx[config->length];
+  memset (idx, 0, config->length * sizeof (int));
+  memset (password, config->alph[0], config->length);
 
   int pos;
   while (!0)
     {
       printf ("%s\n", password);
-      for (pos = length - 1; pos >= 0 && idx[pos] == alph_size; --pos)
+      for (pos = config->length - 1; pos >= 0 && idx[pos] == alph_size; --pos)
         {
           idx[pos] = 0;
-          password[pos] = alph[idx[pos]];
+          password[pos] = config->alph[idx[pos]];
         }
       if (pos < 0)
         {
           break;
         }
-      password[pos] = alph[++idx[pos]];
+      password[pos] = config->alph[++idx[pos]];
     }
 }
 
@@ -116,10 +119,10 @@ main (int argc, char *argv[])
   switch (config.brute_mode)
     {
     case BM_ITER:
-      brute_iter (password, config.alph, config.length);
+      brute_iter (password, &config);
       break;
     case BM_RECU:
-      brute_rec_wrapper (password, config.alph, config.length);
+      brute_rec_wrapper (password, &config);
       break;
     }
 
