@@ -12,9 +12,10 @@ typedef enum
 
 typedef struct config_t
 {
+  brute_mode_t brute_mode;
   int length;
   char *alph;
-  brute_mode_t brute_mode;
+  char *hash;
 } config_t;
 
 typedef bool (*password_handler_t) (char *password, void *context);
@@ -89,7 +90,7 @@ int
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
-  while ((opt = getopt (argc, argv, "l:a:ir")) != -1)
+  while ((opt = getopt (argc, argv, "l:a:h:ir")) != -1)
     {
       switch (opt)
         {
@@ -103,6 +104,9 @@ parse_params (config_t *config, int argc, char *argv[])
           break;
         case 'a':
           config->alph = optarg;
+          break;
+        case 'h':
+          config->hash = optarg;
           break;
         case 'i':
           config->brute_mode = BM_ITER;
@@ -122,9 +126,10 @@ int
 main (int argc, char *argv[])
 {
   config_t config = {
+    .brute_mode = BM_ITER,
     .length = 3,
     .alph = "abc",
-    .brute_mode = BM_ITER,
+    .hash = "abc",
   };
   if (parse_params (&config, argc, argv) == -1)
     {
