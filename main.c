@@ -140,14 +140,25 @@ main (int argc, char *argv[])
   char password[config.length + 1];
   password[config.length] = '\0';
 
+  bool is_found;
   switch (config.brute_mode)
     {
     case BM_ITER:
-      brute_iter (password, &config, password_handler, config.hash);
+      is_found = brute_iter (password, &config, password_handler, config.hash);
       break;
     case BM_RECU:
-      brute_rec_wrapper (password, &config, password_handler, config.hash);
+      is_found = brute_rec_wrapper (password, &config, password_handler,
+                                    config.hash);
       break;
+    }
+
+  if (is_found)
+    {
+      printf ("Password found: %s\n", password);
+    }
+  else
+    {
+      printf ("Password not found\n");
     }
 
   return EXIT_SUCCESS;
