@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,56 +12,78 @@ typedef enum
 
 typedef struct config_t
 {
+  brute_mode_t brute_mode;
   int length;
   char *alph;
-  brute_mode_t brute_mode;
+  char *hash;
 } config_t;
 
-void
-brute_rec (char *password, char *alph, int length, int pos)
+typedef bool (*password_handler_t) (char *password, void *context);
+
+bool
+password_handler (char *password, void *context)
 {
-  if (pos == length)
+  char *hash = (char *)context;
+  char *hashed_password = crypt (password, hash);
+
+  return strcmp (hash, hashed_password) == 0;
+}
+
+bool
+brute_rec (char *password, config_t *config,
+           password_handler_t password_handler, void *context, int pos)
+{
+  if (pos == config->length)
     {
-      printf ("%s\n", password);
+      return password_handler (password, context);
     }
   else
     {
-      for (size_t i = 0; alph[i] != '\0'; ++i)
+      for (size_t i = 0; config->alph[i] != '\0'; ++i)
         {
-          password[pos] = alph[i];
-          brute_rec (password, alph, length, pos + 1);
+          password[pos] = config->alph[i];
+          if (brute_rec (password, config, password_handler, context, pos + 1))
+            {
+              return true;
+            }
         }
     }
+  return false;
 }
 
-void
-brute_rec_wrapper (char *password, char *alph, int length)
+bool
+brute_rec_wrapper (char *password, config_t *config,
+                   password_handler_t password_handler, void *context)
 {
-  brute_rec (password, alph, length, 0);
+  return brute_rec (password, config, password_handler, context, 0);
 }
 
-void
-brute_iter (char *password, char *alph, int length)
+bool
+brute_iter (char *password, config_t *config,
+            password_handler_t password_handler, void *context)
 {
-  int alph_size = strlen (alph) - 1;
-  int idx[length];
-  memset (idx, 0, length * sizeof (int));
-  memset (password, alph[0], length);
+  int alph_size = strlen (config->alph) - 1;
+  int idx[config->length];
+  memset (idx, 0, config->length * sizeof (int));
+  memset (password, config->alph[0], config->length);
 
   int pos;
-  while (!0)
+  while (true)
     {
-      printf ("%s\n", password);
-      for (pos = length - 1; pos >= 0 && idx[pos] == alph_size; --pos)
+      if (password_handler (password, context))
+        {
+          return true;
+        }
+      for (pos = config->length - 1; pos >= 0 && idx[pos] == alph_size; --pos)
         {
           idx[pos] = 0;
-          password[pos] = alph[idx[pos]];
+          password[pos] = config->alph[idx[pos]];
         }
       if (pos < 0)
         {
-          break;
+          return false;
         }
-      password[pos] = alph[++idx[pos]];
+      password[pos] = config->alph[++idx[pos]];
     }
 }
 
@@ -68,15 +91,23 @@ int
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
-  while ((opt = getopt (argc, argv, "l:a:ir")) != -1)
+  while ((opt = getopt (argc, argv, "l:a:h:ir")) != -1)
     {
       switch (opt)
         {
         case 'l':
           config->length = atoi (optarg);
+          if (config->length == 0)
+            {
+              printf ("Password's length must be a number greater than 0\n");
+              return -1;
+            }
           break;
         case 'a':
           config->alph = optarg;
+          break;
+        case 'h':
+          config->hash = optarg;
           break;
         case 'i':
           config->brute_mode = BM_ITER;
@@ -96,9 +127,10 @@ int
 main (int argc, char *argv[])
 {
   config_t config = {
+    .brute_mode = BM_ITER,
     .length = 3,
     .alph = "abc",
-    .brute_mode = BM_ITER,
+    .hash = "abFZSxKKdq5s6", /* crypt ("abc", "abc"); */
   };
   if (parse_params (&config, argc, argv) == -1)
     {
@@ -108,14 +140,25 @@ main (int argc, char *argv[])
   char password[config.length + 1];
   password[config.length] = '\0';
 
+  bool is_found;
   switch (config.brute_mode)
     {
     case BM_ITER:
-      brute_iter (password, config.alph, config.length);
+      is_found = brute_iter (password, &config, password_handler, config.hash);
       break;
     case BM_RECU:
-      brute_rec_wrapper (password, config.alph, config.length);
+      is_found = brute_rec_wrapper (password, &config, password_handler,
+                                    config.hash);
       break;
+    }
+
+  if (is_found)
+    {
+      printf ("Password found: %s\n", password);
+    }
+  else
+    {
+      printf ("Password not found\n");
     }
 
   return EXIT_SUCCESS;
