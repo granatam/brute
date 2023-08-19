@@ -23,9 +23,10 @@ typedef bool (*password_handler_t) (char *password, void *context);
 bool
 password_handler (char *password, void *context)
 {
-  (void)context; /* just to temporary suppress "unused parameter" warning*/
-  printf ("%s\n", password);
-  return false;
+  char *hash = (char *)context;
+  char *hashed_password = crypt (password, hash);
+
+  return strcmp (hash, hashed_password) == 0;
 }
 
 bool
@@ -129,7 +130,7 @@ main (int argc, char *argv[])
     .brute_mode = BM_ITER,
     .length = 3,
     .alph = "abc",
-    .hash = "abc",
+    .hash = "abFZSxKKdq5s6", /* crypt ("abc", "abc"); */
   };
   if (parse_params (&config, argc, argv) == -1)
     {
@@ -142,10 +143,10 @@ main (int argc, char *argv[])
   switch (config.brute_mode)
     {
     case BM_ITER:
-      brute_iter (password, &config, password_handler, NULL);
+      brute_iter (password, &config, password_handler, config.hash);
       break;
     case BM_RECU:
-      brute_rec_wrapper (password, &config, password_handler, NULL);
+      brute_rec_wrapper (password, &config, password_handler, config.hash);
       break;
     }
 
