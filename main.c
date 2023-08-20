@@ -1,8 +1,15 @@
+#include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+typedef enum
+{
+  RM_SINGLE,
+  RM_MULTI,
+} run_mode_t;
 
 typedef enum
 {
@@ -12,6 +19,7 @@ typedef enum
 
 typedef struct config_t
 {
+  run_mode_t run_mode;
   brute_mode_t brute_mode;
   int length;
   char *alph;
@@ -87,11 +95,24 @@ brute_iter (char *password, config_t *config,
     }
 }
 
+bool
+run_single (char *password, config_t *config)
+{
+  switch (config->brute_mode)
+    {
+    case BM_ITER:
+      return brute_iter (password, config, password_handler, config->hash);
+    case BM_RECU:
+      return brute_rec_wrapper (password, config, password_handler,
+                                config->hash);
+    }
+}
+
 int
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
-  while ((opt = getopt (argc, argv, "l:a:h:ir")) != -1)
+  while ((opt = getopt (argc, argv, "l:a:h:smir")) != -1)
     {
       switch (opt)
         {
@@ -108,6 +129,12 @@ parse_params (config_t *config, int argc, char *argv[])
           break;
         case 'h':
           config->hash = optarg;
+          break;
+        case 's':
+          config->run_mode = RM_SINGLE;
+          break;
+        case 'm':
+          config->run_mode = RM_MULTI;
           break;
         case 'i':
           config->brute_mode = BM_ITER;
@@ -127,6 +154,7 @@ int
 main (int argc, char *argv[])
 {
   config_t config = {
+    .run_mode = RM_SINGLE,
     .brute_mode = BM_ITER,
     .length = 3,
     .alph = "abc",
@@ -141,15 +169,13 @@ main (int argc, char *argv[])
   password[config.length] = '\0';
 
   bool is_found;
-  switch (config.brute_mode)
+  switch (config.run_mode)
     {
-    case BM_ITER:
-      is_found = brute_iter (password, &config, password_handler, config.hash);
+    case RM_SINGLE:
+      is_found = run_single (password, &config);
       break;
-    case BM_RECU:
-      is_found = brute_rec_wrapper (password, &config, password_handler,
-                                    config.hash);
-      break;
+    case RM_MULTI:
+      assert (false && "Not implemented yet");
     }
 
   if (is_found)
