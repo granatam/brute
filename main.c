@@ -1,6 +1,6 @@
 #include <assert.h>
 #include <pthread.h>
-#include <semaphore.h>
+#include <semaphore.h> /* sem_init () is deprecated on MacOS */
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,8 +47,19 @@ typedef struct queue_t
   pthread_mutex_t head_mutex, tail_mutex;
 } queue_t;
 
-void queue_init (queue_t *queue);
+void
+queue_init (queue_t *queue)
+{
+  queue->head = queue->tail = 0;
+  /* need to read more about the third argument of sem_init () */
+  sem_init (&queue->full, 0, 0);
+  sem_init (&queue->empty, 0, 0);
+  pthread_mutex_init (&queue->head_mutex, NULL);
+  pthread_mutex_init (&queue->tail_mutex, NULL);
+}
+
 void queue_push (queue_t *queue, task_t *task);
+
 void queue_pop (queue_t *queue, task_t *task);
 
 bool
