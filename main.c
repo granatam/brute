@@ -11,6 +11,7 @@
 #define QUEUE_SIZE (8)
 
 typedef char password_t[MAX_PASSWORD_LENGTH + 1];
+
 typedef bool (*password_handler_t) (char *password, void *context);
 
 typedef enum
@@ -50,15 +51,27 @@ typedef struct queue_t
 void
 queue_init (queue_t *queue)
 {
-  queue->head = queue->tail = 0;
+  queue->head = queue->tail = -1;
   /* need to read more about the third argument of sem_init () */
   sem_init (&queue->full, 0, 0);
   sem_init (&queue->empty, 0, 0);
+
   pthread_mutex_init (&queue->head_mutex, NULL);
   pthread_mutex_init (&queue->tail_mutex, NULL);
 }
 
-void queue_push (queue_t *queue, task_t *task);
+void
+queue_push (queue_t *queue, task_t *task)
+{
+  queue->tail = (queue->tail + 1) % QUEUE_SIZE;
+  /* where is better codestyle?
+  if (++queue->tail >= QUEUE_SIZE)
+    {
+      queue->tail = 0;
+    }
+  */
+  queue->queue[queue->tail] = *task;
+}
 
 void queue_pop (queue_t *queue, task_t *task);
 
@@ -206,6 +219,9 @@ main (int argc, char *argv[])
     {
       return EXIT_FAILURE;
     }
+
+  queue_t queue;
+  queue_init (&queue);
 
   char password[config.length + 1];
   password[config.length] = '\0';
