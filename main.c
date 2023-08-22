@@ -108,6 +108,12 @@ run_single (char *password, config_t *config)
     }
 }
 
+bool
+run_multi (char *password, config_t *config)
+{
+  assert (false && "Not implemented yet");
+}
+
 int
 parse_params (config_t *config, int argc, char *argv[])
 {
@@ -175,7 +181,8 @@ main (int argc, char *argv[])
       is_found = run_single (password, &config);
       break;
     case RM_MULTI:
-      assert (false && "Not implemented yet");
+      is_found = run_multi (password, &config);
+      break;
     }
 
   if (is_found)
