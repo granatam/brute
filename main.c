@@ -1,9 +1,17 @@
 #include <assert.h>
+#include <pthread.h>
+#include <semaphore.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#define MAX_PASSWORD_LENGTH (7)
+#define QUEUE_SIZE (8)
+
+typedef char password_t[MAX_PASSWORD_LENGTH + 1];
+typedef bool (*password_handler_t) (char *password, void *context);
 
 typedef enum
 {
@@ -26,7 +34,22 @@ typedef struct config_t
   char *hash;
 } config_t;
 
-typedef bool (*password_handler_t) (char *password, void *context);
+typedef struct task_t
+{
+  password_t password;
+} task_t;
+
+typedef struct queue_t
+{
+  task_t queue[QUEUE_SIZE];
+  int head, tail;
+  sem_t full, empty;
+  pthread_mutex_t head_mutex, tail_mutex;
+} queue_t;
+
+void queue_init (queue_t *queue);
+void queue_push (queue_t *queue, task_t *task);
+void queue_pop (queue_t *queue, task_t *task);
 
 bool
 password_handler (char *password, void *context)
@@ -111,6 +134,8 @@ run_single (char *password, config_t *config)
 bool
 run_multi (char *password, config_t *config)
 {
+  (void)password; /* to suppress "unused parameter" warning */
+  (void)config;   /* to suppress "unused parameter" warning */
   assert (false && "Not implemented yet");
 }
 
