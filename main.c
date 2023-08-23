@@ -51,7 +51,7 @@ typedef struct queue_t
 void
 queue_init (queue_t *queue)
 {
-  queue->head = queue->tail = -1;
+  queue->head = queue->tail = 0;
 
   sem_init (&queue->full, 0, 0);
   sem_init (&queue->empty, 0, QUEUE_SIZE);
@@ -65,15 +65,22 @@ queue_push (queue_t *queue, task_t *task)
 {
   sem_wait (&queue->empty);
   pthread_mutex_lock (&queue->tail_mutex);
-
-  queue->tail = (queue->tail + 1) % QUEUE_SIZE;
   queue->queue[queue->tail] = *task;
-
+  queue->tail = (queue->tail + 1) % QUEUE_SIZE;
   pthread_mutex_unlock (&queue->tail_mutex);
   sem_post (&queue->full);
 }
 
-void queue_pop (queue_t *queue, task_t *task);
+void
+queue_pop (queue_t *queue, task_t *task)
+{
+  sem_wait (&queue->full);
+  pthread_mutex_lock (&queue->head_mutex);
+  *task = queue->queue[queue->head];
+  queue->head = (queue->head + 1) % QUEUE_SIZE;
+  pthread_mutex_unlock (&queue->head_mutex);
+  sem_post (&queue->empty);
+}
 
 bool
 password_handler (char *password, void *context)
