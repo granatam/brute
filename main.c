@@ -52,9 +52,9 @@ void
 queue_init (queue_t *queue)
 {
   queue->head = queue->tail = -1;
-  /* need to read more about the third argument of sem_init () */
+
   sem_init (&queue->full, 0, 0);
-  sem_init (&queue->empty, 0, 0);
+  sem_init (&queue->empty, 0, QUEUE_SIZE);
 
   pthread_mutex_init (&queue->head_mutex, NULL);
   pthread_mutex_init (&queue->tail_mutex, NULL);
@@ -63,8 +63,14 @@ queue_init (queue_t *queue)
 void
 queue_push (queue_t *queue, task_t *task)
 {
+  sem_wait (&queue->empty);
+  pthread_mutex_lock (&queue->tail_mutex);
+
   queue->tail = (queue->tail + 1) % QUEUE_SIZE;
   queue->queue[queue->tail] = *task;
+
+  pthread_mutex_unlock (&queue->tail_mutex);
+  sem_post (&queue->full);
 }
 
 void queue_pop (queue_t *queue, task_t *task);
