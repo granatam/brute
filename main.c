@@ -64,12 +64,6 @@ void
 queue_push (queue_t *queue, task_t *task)
 {
   queue->tail = (queue->tail + 1) % QUEUE_SIZE;
-  /* where is better codestyle?
-  if (++queue->tail >= QUEUE_SIZE)
-    {
-      queue->tail = 0;
-    }
-  */
   queue->queue[queue->tail] = *task;
 }
 
