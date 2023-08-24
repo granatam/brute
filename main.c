@@ -40,6 +40,25 @@ typedef struct task_t
   password_t password;
 } task_t;
 
+typedef struct my_sem_t
+{
+  pthread_cond_t cond_sem;
+  pthread_mutex_t mutex;
+  int counter;
+} my_sem_t;
+
+void
+my_sem_init (my_sem_t *sem, int, unsigned int)
+{
+  sem->counter = 0;
+
+  pthread_cond_init (&sem->cond_sem, NULL);
+  pthread_mutex_init (&sem->mutex, NULL);
+}
+
+void my_sem_post (my_sem_t *sem);
+void my_sem_push (my_sem_t *sem);
+
 typedef struct queue_t
 {
   task_t queue[QUEUE_SIZE];
