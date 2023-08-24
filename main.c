@@ -180,9 +180,10 @@ parse_params (config_t *config, int argc, char *argv[])
         {
         case 'l':
           config->length = atoi (optarg);
-          if (config->length == 0)
+          if (config->length <= 0 || config->length > MAX_PASSWORD_LENGTH)
             {
-              printf ("Password's length must be a number greater than 0\n");
+              printf ("Password's length must be a number between 0 and %d\n",
+                      MAX_PASSWORD_LENGTH);
               return -1;
             }
           break;
