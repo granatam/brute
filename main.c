@@ -48,16 +48,28 @@ typedef struct my_sem_t
 } my_sem_t;
 
 void
-my_sem_init (my_sem_t *sem, int, unsigned int)
+my_sem_init (my_sem_t *sem, int, unsigned int value)
 {
-  sem->counter = 0;
-
+  sem->counter = value;
   pthread_cond_init (&sem->cond_sem, NULL);
   pthread_mutex_init (&sem->mutex, NULL);
 }
 
-void my_sem_post (my_sem_t *sem);
-void my_sem_push (my_sem_t *sem);
+void
+my_sem_post (my_sem_t *sem)
+{
+  pthread_mutex_lock (&sem->mutex);
+
+  pthread_mutex_unclock (&sem->mutex);
+}
+
+void
+my_sem_wait (my_sem_t *sem)
+{
+  pthread_mutex_lock (&sem->mutex);
+
+  pthread_mutex_unlock (&sem->mutex);
+}
 
 typedef struct queue_t
 {
