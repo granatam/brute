@@ -1,6 +1,6 @@
 #include <assert.h>
 #include <pthread.h>
-#include <semaphore.h> /* sem_init () is deprecated on MacOS */
+/* #include <semaphore.h> - sem_init () is deprecated on MacOS */
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,8 +48,9 @@ typedef struct my_sem_t
 } my_sem_t;
 
 void
-my_sem_init (my_sem_t *sem, int, unsigned int value)
+my_sem_init (my_sem_t *sem, int pshared, unsigned int value)
 {
+  (void)pshared; /* to suppress the "unused parameter" warning */
   sem->counter = value;
   pthread_cond_init (&sem->cond_sem, NULL);
   pthread_mutex_init (&sem->mutex, NULL);
@@ -59,15 +60,20 @@ void
 my_sem_post (my_sem_t *sem)
 {
   pthread_mutex_lock (&sem->mutex);
-
-  pthread_mutex_unclock (&sem->mutex);
+  ++sem->counter;
+  pthread_cond_signal (&sem->cond_sem);
+  pthread_mutex_unlock (&sem->mutex);
 }
 
 void
 my_sem_wait (my_sem_t *sem)
 {
   pthread_mutex_lock (&sem->mutex);
-
+  while (sem->counter == 0)
+    {
+      pthread_cond_wait (&sem->cond_sem, &sem->mutex);
+    }
+  --sem->counter;
   pthread_mutex_unlock (&sem->mutex);
 }
 
@@ -75,7 +81,7 @@ typedef struct queue_t
 {
   task_t queue[QUEUE_SIZE];
   int head, tail;
-  sem_t full, empty;
+  my_sem_t full, empty;
   pthread_mutex_t head_mutex, tail_mutex;
 } queue_t;
 
@@ -84,8 +90,8 @@ queue_init (queue_t *queue)
 {
   queue->head = queue->tail = 0;
 
-  sem_init (&queue->full, 0, 0);
-  sem_init (&queue->empty, 0, QUEUE_SIZE);
+  my_sem_init (&queue->full, 0, 0);
+  my_sem_init (&queue->empty, 0, QUEUE_SIZE);
 
   pthread_mutex_init (&queue->head_mutex, NULL);
   pthread_mutex_init (&queue->tail_mutex, NULL);
@@ -94,23 +100,23 @@ queue_init (queue_t *queue)
 void
 queue_push (queue_t *queue, task_t *task)
 {
-  sem_wait (&queue->empty);
+  my_sem_wait (&queue->empty);
   pthread_mutex_lock (&queue->tail_mutex);
   queue->queue[queue->tail] = *task;
   queue->tail = (queue->tail + 1) % QUEUE_SIZE;
   pthread_mutex_unlock (&queue->tail_mutex);
-  sem_post (&queue->full);
+  my_sem_post (&queue->full);
 }
 
 void
 queue_pop (queue_t *queue, task_t *task)
 {
-  sem_wait (&queue->full);
+  my_sem_wait (&queue->full);
   pthread_mutex_lock (&queue->head_mutex);
   *task = queue->queue[queue->head];
   queue->head = (queue->head + 1) % QUEUE_SIZE;
   pthread_mutex_unlock (&queue->head_mutex);
-  sem_post (&queue->empty);
+  my_sem_post (&queue->empty);
 }
 
 bool
