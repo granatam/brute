@@ -63,6 +63,8 @@ my_sem_init (my_sem_t *sem, int pshared, unsigned int value)
     {
       return -1;
     }
+
+  return 0;
 }
 
 int
@@ -83,6 +85,8 @@ my_sem_post (my_sem_t *sem)
     {
       return -1;
     }
+
+  return 0;
 }
 
 int
@@ -101,6 +105,8 @@ my_sem_wait (my_sem_t *sem)
     }
   --sem->counter;
   pthread_mutex_unlock (&sem->mutex);
+
+  return 0;
 }
 
 typedef struct queue_t
@@ -133,6 +139,8 @@ queue_init (queue_t *queue)
     {
       return -1;
     }
+
+  return 0;
 }
 
 int
@@ -156,6 +164,8 @@ queue_push (queue_t *queue, task_t *task)
     {
       return -1;
     }
+
+  return 0;
 }
 
 int
@@ -179,6 +189,8 @@ queue_pop (queue_t *queue, task_t *task)
     {
       return -1;
     }
+
+  return 0;
 }
 
 bool
@@ -330,6 +342,11 @@ main (int argc, char *argv[])
       return EXIT_FAILURE;
     }
 
+  my_sem_t sem;
+  my_sem_init (&sem, 0, 0);
+  my_sem_post (&sem);
+  my_sem_post (&sem);
+  my_sem_post (&sem);
   char password[config.length + 1];
   password[config.length] = '\0';
 
