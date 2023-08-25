@@ -1,8 +1,24 @@
+#include <assert.h>
+#include <pthread.h>
+/* #include <semaphore.h> - sem_init () is deprecated on MacOS */
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#define MAX_PASSWORD_LENGTH (7)
+#define QUEUE_SIZE (8)
+
+typedef char password_t[MAX_PASSWORD_LENGTH + 1];
+
+typedef bool (*password_handler_t) (char *password, void *context);
+
+typedef enum
+{
+  RM_SINGLE,
+  RM_MULTI,
+} run_mode_t;
 
 typedef enum
 {
@@ -12,13 +28,173 @@ typedef enum
 
 typedef struct config_t
 {
+  run_mode_t run_mode;
   brute_mode_t brute_mode;
   int length;
   char *alph;
   char *hash;
 } config_t;
 
-typedef bool (*password_handler_t) (char *password, void *context);
+typedef struct task_t
+{
+  password_t password;
+} task_t;
+
+typedef struct my_sem_t
+{
+  pthread_cond_t cond_sem;
+  pthread_mutex_t mutex;
+  int counter;
+} my_sem_t;
+
+/* TODO: Change int to status_t enum in all functions that return error code */
+/* TODO: Add human readable messages to queue methods if necessary */
+int
+my_sem_init (my_sem_t *sem, int pshared, unsigned int value)
+{
+  (void)pshared; /* to suppress the "unused parameter" warning */
+  sem->counter = value;
+  if (pthread_cond_init (&sem->cond_sem, NULL) != 0)
+    {
+      return -1;
+    }
+
+  if (pthread_mutex_init (&sem->mutex, NULL) != 0)
+    {
+      return -1;
+    }
+
+  return 0;
+}
+
+int
+my_sem_post (my_sem_t *sem)
+{
+  if (pthread_mutex_lock (&sem->mutex) != 0)
+    {
+      return -1;
+    }
+  if (sem->counter++ == 0)
+    {
+      if (pthread_cond_signal (&sem->cond_sem) != 0)
+        {
+          return -1;
+        }
+    }
+  if (pthread_mutex_unlock (&sem->mutex) != 0)
+    {
+      return -1;
+    }
+
+  return 0;
+}
+
+int
+my_sem_wait (my_sem_t *sem)
+{
+  if (pthread_mutex_lock (&sem->mutex) != 0)
+    {
+      return -1;
+    }
+  while (sem->counter == 0)
+    {
+      if (pthread_cond_wait (&sem->cond_sem, &sem->mutex) != 0)
+        {
+          return -1;
+        }
+    }
+  --sem->counter;
+  if (pthread_mutex_unlock (&sem->mutex) != 0)
+    {
+      return -1;
+    }
+
+  return 0;
+}
+
+typedef struct queue_t
+{
+  task_t queue[QUEUE_SIZE];
+  int head, tail;
+  my_sem_t full, empty;
+  pthread_mutex_t head_mutex, tail_mutex;
+} queue_t;
+
+int
+queue_init (queue_t *queue)
+{
+  queue->head = queue->tail = 0;
+
+  if (my_sem_init (&queue->full, 0, 0) != 0)
+    {
+      return -1;
+    }
+  if (my_sem_init (&queue->empty, 0, QUEUE_SIZE) != 0)
+    {
+      return -1;
+    }
+
+  if (pthread_mutex_init (&queue->head_mutex, NULL) != 0)
+    {
+      return -1;
+    }
+  if (pthread_mutex_init (&queue->tail_mutex, NULL) != 0)
+    {
+      return -1;
+    }
+
+  return 0;
+}
+
+int
+queue_push (queue_t *queue, task_t *task)
+{
+  if (my_sem_wait (&queue->empty) != 0)
+    {
+      return -1;
+    }
+  if (pthread_mutex_lock (&queue->tail_mutex) != 0)
+    {
+      return -1;
+    }
+  queue->queue[queue->tail] = *task;
+  queue->tail = (queue->tail + 1) % QUEUE_SIZE;
+  if (pthread_mutex_unlock (&queue->tail_mutex) != 0)
+    {
+      return -1;
+    }
+  if (my_sem_post (&queue->full) != 0)
+    {
+      return -1;
+    }
+
+  return 0;
+}
+
+int
+queue_pop (queue_t *queue, task_t *task)
+{
+  if (my_sem_wait (&queue->full) != 0)
+    {
+      return -1;
+    }
+  if (pthread_mutex_lock (&queue->head_mutex) != 0)
+    {
+      return -1;
+    }
+  *task = queue->queue[queue->head];
+  queue->head = (queue->head + 1) % QUEUE_SIZE;
+  if (pthread_mutex_unlock (&queue->head_mutex) != 0)
+    {
+      return -1;
+    }
+  if (my_sem_post (&queue->empty) != 0)
+    {
+      return -1;
+    }
+
+  return 0;
+}
 
 bool
 password_handler (char *password, void *context)
@@ -87,19 +263,44 @@ brute_iter (char *password, config_t *config,
     }
 }
 
+bool
+run_single (char *password, config_t *config)
+{
+  switch (config->brute_mode)
+    {
+    case BM_ITER:
+      return brute_iter (password, config, password_handler, config->hash);
+    case BM_RECU:
+      return brute_rec_wrapper (password, config, password_handler,
+                                config->hash);
+    }
+}
+
+bool
+run_multi (char *password, config_t *config)
+{
+  queue_t queue;
+  queue_init (&queue);
+
+  (void)password; /* to suppress "unused parameter" warning */
+  (void)config;   /* to suppress "unused parameter" warning */
+  assert (false && "Not implemented yet");
+}
+
 int
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
-  while ((opt = getopt (argc, argv, "l:a:h:ir")) != -1)
+  while ((opt = getopt (argc, argv, "l:a:h:smir")) != -1)
     {
       switch (opt)
         {
         case 'l':
           config->length = atoi (optarg);
-          if (config->length == 0)
+          if (config->length <= 0 || config->length > MAX_PASSWORD_LENGTH)
             {
-              printf ("Password's length must be a number greater than 0\n");
+              printf ("Password's length must be a number between 0 and %d\n",
+                      MAX_PASSWORD_LENGTH);
               return -1;
             }
           break;
@@ -108,6 +309,12 @@ parse_params (config_t *config, int argc, char *argv[])
           break;
         case 'h':
           config->hash = optarg;
+          break;
+        case 's':
+          config->run_mode = RM_SINGLE;
+          break;
+        case 'm':
+          config->run_mode = RM_MULTI;
           break;
         case 'i':
           config->brute_mode = BM_ITER;
@@ -127,6 +334,7 @@ int
 main (int argc, char *argv[])
 {
   config_t config = {
+    .run_mode = RM_SINGLE,
     .brute_mode = BM_ITER,
     .length = 3,
     .alph = "abc",
@@ -141,14 +349,13 @@ main (int argc, char *argv[])
   password[config.length] = '\0';
 
   bool is_found;
-  switch (config.brute_mode)
+  switch (config.run_mode)
     {
-    case BM_ITER:
-      is_found = brute_iter (password, &config, password_handler, config.hash);
+    case RM_SINGLE:
+      is_found = run_single (password, &config);
       break;
-    case BM_RECU:
-      is_found = brute_rec_wrapper (password, &config, password_handler,
-                                    config.hash);
+    case RM_MULTI:
+      is_found = run_multi (password, &config);
       break;
     }
 
