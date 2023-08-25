@@ -142,7 +142,7 @@ queue_push (queue_t *queue, task_t *task)
     {
       return -1;
     }
-  if (pthread_mutex_lock (&queue->tail_mutex))
+  if (pthread_mutex_lock (&queue->tail_mutex) != 0)
     {
       return -1;
     }
