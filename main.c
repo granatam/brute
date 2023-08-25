@@ -104,7 +104,10 @@ my_sem_wait (my_sem_t *sem)
         }
     }
   --sem->counter;
-  pthread_mutex_unlock (&sem->mutex);
+  if (pthread_mutex_unlock (&sem->mutex) != 0)
+    {
+      return -1;
+    }
 
   return 0;
 }
