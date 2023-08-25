@@ -47,31 +47,57 @@ typedef struct my_sem_t
   int counter;
 } my_sem_t;
 
-void
+/* TODO: Change int to status_t enum in all functions that return error code */
+/* TODO: Add human readable messages to queue methods if necessary */
+int
 my_sem_init (my_sem_t *sem, int pshared, unsigned int value)
 {
   (void)pshared; /* to suppress the "unused parameter" warning */
   sem->counter = value;
-  pthread_cond_init (&sem->cond_sem, NULL);
-  pthread_mutex_init (&sem->mutex, NULL);
+  if (pthread_cond_init (&sem->cond_sem, NULL) != 0)
+    {
+      return -1;
+    }
+
+  if (pthread_mutex_init (&sem->mutex, NULL) != 0)
+    {
+      return -1;
+    }
 }
 
-void
+int
 my_sem_post (my_sem_t *sem)
 {
-  pthread_mutex_lock (&sem->mutex);
-  ++sem->counter;
-  pthread_cond_signal (&sem->cond_sem);
-  pthread_mutex_unlock (&sem->mutex);
+  if (pthread_mutex_lock (&sem->mutex) != 0)
+    {
+      return -1;
+    }
+  if (sem->counter++ == 0)
+    {
+      if (pthread_cond_signal (&sem->cond_sem) != 0)
+        {
+          return -1;
+        }
+    }
+  if (pthread_mutex_unlock (&sem->mutex) != 0)
+    {
+      return -1;
+    }
 }
 
-void
+int
 my_sem_wait (my_sem_t *sem)
 {
-  pthread_mutex_lock (&sem->mutex);
+  if (pthread_mutex_lock (&sem->mutex) != 0)
+    {
+      return -1;
+    }
   while (sem->counter == 0)
     {
-      pthread_cond_wait (&sem->cond_sem, &sem->mutex);
+      if (pthread_cond_wait (&sem->cond_sem, &sem->mutex) != 0)
+        {
+          return -1;
+        }
     }
   --sem->counter;
   pthread_mutex_unlock (&sem->mutex);
@@ -85,38 +111,74 @@ typedef struct queue_t
   pthread_mutex_t head_mutex, tail_mutex;
 } queue_t;
 
-void
+int
 queue_init (queue_t *queue)
 {
   queue->head = queue->tail = 0;
 
-  my_sem_init (&queue->full, 0, 0);
-  my_sem_init (&queue->empty, 0, QUEUE_SIZE);
+  if (my_sem_init (&queue->full, 0, 0) != 0)
+    {
+      return -1;
+    }
+  if (my_sem_init (&queue->empty, 0, QUEUE_SIZE) != 0)
+    {
+      return -1;
+    }
 
-  pthread_mutex_init (&queue->head_mutex, NULL);
-  pthread_mutex_init (&queue->tail_mutex, NULL);
+  if (pthread_mutex_init (&queue->head_mutex, NULL) != 0)
+    {
+      return -1;
+    }
+  if (pthread_mutex_init (&queue->tail_mutex, NULL) != 0)
+    {
+      return -1;
+    }
 }
 
-void
+int
 queue_push (queue_t *queue, task_t *task)
 {
-  my_sem_wait (&queue->empty);
-  pthread_mutex_lock (&queue->tail_mutex);
+  if (my_sem_wait (&queue->empty) != 0)
+    {
+      return -1;
+    }
+  if (pthread_mutex_lock (&queue->tail_mutex))
+    {
+      return -1;
+    }
   queue->queue[queue->tail] = *task;
   queue->tail = (queue->tail + 1) % QUEUE_SIZE;
-  pthread_mutex_unlock (&queue->tail_mutex);
-  my_sem_post (&queue->full);
+  if (pthread_mutex_unlock (&queue->tail_mutex) != 0)
+    {
+      return -1;
+    }
+  if (my_sem_post (&queue->full) != 0)
+    {
+      return -1;
+    }
 }
 
-void
+int
 queue_pop (queue_t *queue, task_t *task)
 {
-  my_sem_wait (&queue->full);
-  pthread_mutex_lock (&queue->head_mutex);
+  if (my_sem_wait (&queue->full) != 0)
+    {
+      return -1;
+    }
+  if (pthread_mutex_lock (&queue->head_mutex) != 0)
+    {
+      return -1;
+    }
   *task = queue->queue[queue->head];
   queue->head = (queue->head + 1) % QUEUE_SIZE;
-  pthread_mutex_unlock (&queue->head_mutex);
-  my_sem_post (&queue->empty);
+  if (pthread_mutex_unlock (&queue->head_mutex) != 0)
+    {
+      return -1;
+    }
+  if (my_sem_post (&queue->empty) != 0)
+    {
+      return -1;
+    }
 }
 
 bool
@@ -202,6 +264,9 @@ run_single (char *password, config_t *config)
 bool
 run_multi (char *password, config_t *config)
 {
+  queue_t queue;
+  queue_init (&queue);
+
   (void)password; /* to suppress "unused parameter" warning */
   (void)config;   /* to suppress "unused parameter" warning */
   assert (false && "Not implemented yet");
@@ -264,9 +329,6 @@ main (int argc, char *argv[])
     {
       return EXIT_FAILURE;
     }
-
-  queue_t queue;
-  queue_init (&queue);
 
   char password[config.length + 1];
   password[config.length] = '\0';
