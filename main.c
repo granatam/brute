@@ -342,11 +342,6 @@ main (int argc, char *argv[])
       return EXIT_FAILURE;
     }
 
-  my_sem_t sem;
-  my_sem_init (&sem, 0, 0);
-  my_sem_post (&sem);
-  my_sem_post (&sem);
-  my_sem_post (&sem);
   char password[config.length + 1];
   password[config.length] = '\0';
 
