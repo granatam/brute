@@ -1,6 +1,6 @@
 .PHONY: clean
 CFLAGS=-O2 -Wall -Wpedantic -Wextra
-OBJ=brute.o main.o multi.o queue.o single.o
+OBJ=brute.o common.o main.o multi.o queue.o single.o
 TARGET=main
 
 all: ${TARGET}

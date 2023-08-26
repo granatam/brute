@@ -16,8 +16,10 @@ typedef struct task_t
 
 typedef enum status_t
 {
-    S_SUCCESS,
-    S_FAILURE,
+  S_SUCCESS,
+  S_FAILURE,
 } status_t;
+
+status_t print_error (const char *msg, ...);
 
 #endif // COMMON_H

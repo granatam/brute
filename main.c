@@ -22,8 +22,9 @@ parse_params (config_t *config, int argc, char *argv[])
           config->length = atoi (optarg);
           if (config->length <= 0 || config->length > MAX_PASSWORD_LENGTH)
             {
-              printf ("Password's length must be a number between 0 and %d\n",
-                      MAX_PASSWORD_LENGTH);
+              print_error (
+                  "Password's length must be a number between 0 and %d\n",
+                  MAX_PASSWORD_LENGTH);
               return S_FAILURE;
             }
           break;
