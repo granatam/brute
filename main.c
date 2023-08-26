@@ -1,11 +1,15 @@
 #include <assert.h>
 #include <pthread.h>
-/* #include <semaphore.h> - sem_init () is deprecated on MacOS */
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#ifdef __APPLE__
+#include "semaphore.h"
+#else
+#include <semaphore.h>
+#endif
 
 #define MAX_PASSWORD_LENGTH (7)
 #define QUEUE_SIZE (8)
@@ -40,83 +44,11 @@ typedef struct task_t
   password_t password;
 } task_t;
 
-typedef struct my_sem_t
-{
-  pthread_cond_t cond_sem;
-  pthread_mutex_t mutex;
-  int counter;
-} my_sem_t;
-
-/* TODO: Change int to status_t enum in all functions that return error code */
-/* TODO: Add human readable messages to queue methods if necessary */
-int
-my_sem_init (my_sem_t *sem, int pshared, unsigned int value)
-{
-  (void)pshared; /* to suppress the "unused parameter" warning */
-  sem->counter = value;
-  if (pthread_cond_init (&sem->cond_sem, NULL) != 0)
-    {
-      return -1;
-    }
-
-  if (pthread_mutex_init (&sem->mutex, NULL) != 0)
-    {
-      return -1;
-    }
-
-  return 0;
-}
-
-int
-my_sem_post (my_sem_t *sem)
-{
-  if (pthread_mutex_lock (&sem->mutex) != 0)
-    {
-      return -1;
-    }
-  if (sem->counter++ == 0)
-    {
-      if (pthread_cond_signal (&sem->cond_sem) != 0)
-        {
-          return -1;
-        }
-    }
-  if (pthread_mutex_unlock (&sem->mutex) != 0)
-    {
-      return -1;
-    }
-
-  return 0;
-}
-
-int
-my_sem_wait (my_sem_t *sem)
-{
-  if (pthread_mutex_lock (&sem->mutex) != 0)
-    {
-      return -1;
-    }
-  while (sem->counter == 0)
-    {
-      if (pthread_cond_wait (&sem->cond_sem, &sem->mutex) != 0)
-        {
-          return -1;
-        }
-    }
-  --sem->counter;
-  if (pthread_mutex_unlock (&sem->mutex) != 0)
-    {
-      return -1;
-    }
-
-  return 0;
-}
-
 typedef struct queue_t
 {
   task_t queue[QUEUE_SIZE];
   int head, tail;
-  my_sem_t full, empty;
+  sem_t full, empty;
   pthread_mutex_t head_mutex, tail_mutex;
 } queue_t;
 
@@ -125,11 +57,11 @@ queue_init (queue_t *queue)
 {
   queue->head = queue->tail = 0;
 
-  if (my_sem_init (&queue->full, 0, 0) != 0)
+  if (sem_init (&queue->full, 0, 0) != 0)
     {
       return -1;
     }
-  if (my_sem_init (&queue->empty, 0, QUEUE_SIZE) != 0)
+  if (sem_init (&queue->empty, 0, QUEUE_SIZE) != 0)
     {
       return -1;
     }
@@ -149,7 +81,7 @@ queue_init (queue_t *queue)
 int
 queue_push (queue_t *queue, task_t *task)
 {
-  if (my_sem_wait (&queue->empty) != 0)
+  if (sem_wait (&queue->empty) != 0)
     {
       return -1;
     }
@@ -163,7 +95,7 @@ queue_push (queue_t *queue, task_t *task)
     {
       return -1;
     }
-  if (my_sem_post (&queue->full) != 0)
+  if (sem_post (&queue->full) != 0)
     {
       return -1;
     }
@@ -174,7 +106,7 @@ queue_push (queue_t *queue, task_t *task)
 int
 queue_pop (queue_t *queue, task_t *task)
 {
-  if (my_sem_wait (&queue->full) != 0)
+  if (sem_wait (&queue->full) != 0)
     {
       return -1;
     }
@@ -188,7 +120,7 @@ queue_pop (queue_t *queue, task_t *task)
     {
       return -1;
     }
-  if (my_sem_post (&queue->empty) != 0)
+  if (sem_post (&queue->empty) != 0)
     {
       return -1;
     }
