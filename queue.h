@@ -19,8 +19,8 @@ typedef struct queue_t
   pthread_mutex_t head_mutex, tail_mutex;
 } queue_t;
 
-int queue_init (queue_t *queue);
-int queue_push (queue_t *queue, task_t *task);
-int queue_pop (queue_t *queue, task_t *task);
+status_t queue_init (queue_t *queue);
+status_t queue_push (queue_t *queue, task_t *task);
+status_t queue_pop (queue_t *queue, task_t *task);
 
 #endif // QUEUE_H

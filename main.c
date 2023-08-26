@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-int
+status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
@@ -24,7 +24,7 @@ parse_params (config_t *config, int argc, char *argv[])
             {
               printf ("Password's length must be a number between 0 and %d\n",
                       MAX_PASSWORD_LENGTH);
-              return -1;
+              return S_FAILURE;
             }
           break;
         case 'a':
@@ -46,11 +46,11 @@ parse_params (config_t *config, int argc, char *argv[])
           config->brute_mode = BM_RECU;
           break;
         default:
-          return -1;
+          return S_FAILURE;
         }
     }
 
-  return 0;
+  return S_SUCCESS;
 }
 
 int
@@ -63,7 +63,7 @@ main (int argc, char *argv[])
     .alph = "abc",
     .hash = "abFZSxKKdq5s6", /* crypt ("abc", "abc"); */
   };
-  if (parse_params (&config, argc, argv) == -1)
+  if (parse_params (&config, argc, argv) == S_FAILURE)
     {
       return EXIT_FAILURE;
     }

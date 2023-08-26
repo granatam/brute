@@ -14,4 +14,10 @@ typedef struct task_t
   password_t password;
 } task_t;
 
-#endif
+typedef enum status_t
+{
+    S_SUCCESS,
+    S_FAILURE,
+} status_t;
+
+#endif // COMMON_H

@@ -12,4 +12,4 @@ bool brute_rec_wrapper (char *password, config_t *config,
 bool brute_iter (char *password, config_t *config,
                  password_handler_t password_handler, void *context);
 
-#endif
+#endif // BRUTE_H
