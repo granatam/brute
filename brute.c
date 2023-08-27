@@ -4,7 +4,7 @@
 #include <string.h>
 
 bool
-brute_rec (char *password, config_t *config,
+brute_rec (password_t password, config_t *config,
            password_handler_t password_handler, void *context, int pos)
 {
   if (pos == config->length)
@@ -26,14 +26,14 @@ brute_rec (char *password, config_t *config,
 }
 
 bool
-brute_rec_wrapper (char *password, config_t *config,
+brute_rec_wrapper (password_t password, config_t *config,
                    password_handler_t password_handler, void *context)
 {
   return brute_rec (password, config, password_handler, context, 0);
 }
 
 bool
-brute_iter (char *password, config_t *config,
+brute_iter (password_t password, config_t *config,
             password_handler_t password_handler, void *context)
 {
   int alph_size = strlen (config->alph) - 1;

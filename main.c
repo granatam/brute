@@ -69,7 +69,7 @@ main (int argc, char *argv[])
       return EXIT_FAILURE;
     }
 
-  char password[config.length + 1];
+  password_t password;
   password[config.length] = '\0';
 
   bool is_found;

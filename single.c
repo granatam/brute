@@ -9,7 +9,7 @@
 #endif
 
 bool
-password_handler (char *password, void *context)
+password_handler (password_t password, void *context)
 {
   char *hash = (char *)context;
   char *hashed_password = crypt (password, hash);
@@ -18,7 +18,7 @@ password_handler (char *password, void *context)
 }
 
 bool
-run_single (char *password, config_t *config)
+run_single (password_t password, config_t *config)
 {
   switch (config->brute_mode)
     {

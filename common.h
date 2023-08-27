@@ -7,7 +7,7 @@
 
 typedef char password_t[MAX_PASSWORD_LENGTH + 1];
 
-typedef bool (*password_handler_t) (char *password, void *context);
+typedef bool (*password_handler_t) (password_t password, void *context);
 
 typedef struct task_t
 {

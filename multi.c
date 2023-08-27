@@ -4,7 +4,7 @@
 #include <assert.h>
 
 bool
-run_multi (char *password, config_t *config)
+run_multi (password_t password, config_t *config)
 {
   queue_t queue;
   queue_init (&queue);
