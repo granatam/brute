@@ -69,23 +69,23 @@ main (int argc, char *argv[])
       return EXIT_FAILURE;
     }
 
-  password_t password;
-  password[config.length] = '\0';
+  task_t task;
+  task.password[config.length] = '\0';
 
   bool is_found;
   switch (config.run_mode)
     {
     case RM_SINGLE:
-      is_found = run_single (password, &config);
+      is_found = run_single (&task, &config);
       break;
     case RM_MULTI:
-      is_found = run_multi (password, &config);
+      is_found = run_multi (&task, &config);
       break;
     }
 
   if (is_found)
     {
-      printf ("Password found: %s\n", password);
+      printf ("Password found: %s\n", task.password);
     }
   else
     {

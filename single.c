@@ -9,23 +9,23 @@
 #endif
 
 bool
-st_password_handler (password_t password, void *context)
+st_password_handler (task_t *task, void *context)
 {
   char *hash = (char *)context;
-  char *hashed_password = crypt (password, hash);
+  char *hashed_password = crypt (task->password, hash);
 
   return strcmp (hash, hashed_password) == 0;
 }
 
 bool
-run_single (password_t password, config_t *config)
+run_single (task_t *task, config_t *config)
 {
   switch (config->brute_mode)
     {
     case BM_ITER:
-      return brute_iter (password, config, st_password_handler, config->hash);
+      return brute_iter (task, config, st_password_handler, config->hash);
     case BM_RECU:
-      return brute_rec_wrapper (password, config, st_password_handler,
+      return brute_rec_wrapper (task, config, st_password_handler,
                                 config->hash);
     }
 }

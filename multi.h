@@ -12,7 +12,7 @@ typedef struct mt_context_t
   password_t result;
 } mt_context_t;
 
-bool mt_password_handler(password_t password, void *context);
-bool run_multi (password_t password, config_t *config);
+bool mt_password_handler (task_t *task, void *context);
+bool run_multi (task_t *task, config_t *config);
 
 #endif // MULTI_H
