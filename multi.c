@@ -52,9 +52,11 @@ run_multi (task_t *task, config_t *config)
     {
     case BM_ITER:
       is_found = brute_iter (task, config, mt_password_handler, &context);
+      break;
     case BM_RECU:
       is_found
           = brute_rec_wrapper (task, config, mt_password_handler, &context);
+      break;
     }
 
   for (int i = 0; i < number_of_cpus; ++i)

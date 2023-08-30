@@ -72,7 +72,7 @@ main (int argc, char *argv[])
   task_t task;
   task.password[config.length] = '\0';
 
-  bool is_found;
+  bool is_found = false;
   switch (config.run_mode)
     {
     case RM_SINGLE:

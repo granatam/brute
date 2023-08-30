@@ -20,12 +20,17 @@ st_password_handler (task_t *task, void *context)
 bool
 run_single (task_t *task, config_t *config)
 {
+  bool is_found = false;
   switch (config->brute_mode)
     {
     case BM_ITER:
-      return brute_iter (task, config, st_password_handler, config->hash);
+      is_found = brute_iter (task, config, st_password_handler, config->hash);
+      break;
     case BM_RECU:
-      return brute_rec_wrapper (task, config, st_password_handler,
-                                config->hash);
+      is_found = brute_rec_wrapper (task, config, st_password_handler,
+                                    config->hash);
+      break;
     }
+
+  return is_found;
 }
