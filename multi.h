@@ -12,7 +12,8 @@ typedef struct mt_context_t
   password_t result;
 } mt_context_t;
 
-bool mt_password_handler (task_t *task, void *context);
+void *mt_password_check (void *context);
+bool queue_push_wrapper (task_t *task, void *context);
 bool run_multi (task_t *task, config_t *config);
 
 #endif // MULTI_H

@@ -5,7 +5,7 @@
 #include <string.h>
 
 bool
-st_password_handler (task_t *task, void *context)
+st_password_check (task_t *task, void *context)
 {
   st_context_t *st_context = (st_context_t *)context;
   char *hashed_password
@@ -28,11 +28,11 @@ run_single (task_t *task, config_t *config)
   switch (config->brute_mode)
     {
     case BM_ITER:
-      is_found = brute_iter (task, config, st_password_handler, &st_context);
+      is_found = brute_iter (task, config, st_password_check, &st_context);
       break;
     case BM_RECU:
       is_found
-          = brute_rec_wrapper (task, config, st_password_handler, &st_context);
+          = brute_rec_wrapper (task, config, st_password_check, &st_context);
       break;
     }
 
