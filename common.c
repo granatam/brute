@@ -3,7 +3,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-status_t
+__attribute__ ((format (printf, 1, 2))) status_t
 print_error (const char *msg, ...)
 {
   va_list args;
