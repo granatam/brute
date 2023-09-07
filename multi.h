@@ -10,6 +10,9 @@ typedef struct mt_context_t
   queue_t queue;
   config_t *config;
   password_t password;
+  int passwords_remaining;
+  pthread_mutex_t mutex;
+  pthread_cond_t cond_sem;
 } mt_context_t;
 
 void *mt_password_check (void *context);
