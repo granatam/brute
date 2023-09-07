@@ -21,10 +21,14 @@ mt_password_check (void *context)
 
   while (true)
     {
-      queue_pop (&mt_context->queue, &task);
+      // don't understand why we need status check here
+      if (queue_pop (&mt_context->queue, &task) == S_FAILURE)
+        {
+          return NULL;
+        }
       if (st_password_check (&task, &st_context))
         {
-          memcpy (mt_context->result, task.password, sizeof (task.password));
+          memcpy (mt_context->password, task.password, sizeof (task.password));
         }
     }
   return NULL;
@@ -34,9 +38,12 @@ bool
 queue_push_wrapper (task_t *task, void *context)
 {
   mt_context_t *mt_context = (mt_context_t *)context;
-  queue_push (&mt_context->queue, task);
+  if (queue_push (&mt_context->queue, task) == S_FAILURE)
+    {
+      return false;
+    }
 
-  return task->password[0] != 0;
+  return mt_context->password[0] != 0;
 }
 
 bool
@@ -67,7 +74,7 @@ run_multi (task_t *task, config_t *config)
     }
 
   queue_cancel (&context.queue);
-  
+
   for (int i = 0; i < number_of_cpus; ++i)
     {
       pthread_join (threads[i], NULL);

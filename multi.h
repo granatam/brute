@@ -9,7 +9,7 @@ typedef struct mt_context_t
 {
   queue_t queue;
   config_t *config;
-  password_t result;
+  password_t password;
 } mt_context_t;
 
 void *mt_password_check (void *context);
