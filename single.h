@@ -4,11 +4,12 @@
 #include "common.h"
 #include "config.h"
 #include <stdbool.h>
+#include <crypt.h>
 
 typedef struct st_context_t
 {
   char *hash;
-  struct crypt_data *data;
+  struct crypt_data data;
 } st_context_t;
 
 bool st_password_check (task_t *task, void *context);

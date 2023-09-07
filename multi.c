@@ -9,13 +9,12 @@
 #include <string.h>
 #include <unistd.h>
 
-/* TODO: Need a better function name */
 void *
 mt_password_check (void *context)
 {
   mt_context_t *mt_context = (mt_context_t *)context;
   task_t task;
-  /* while (true)? signal semaphore? */
+  
   while (true)
     {
       queue_pop (&mt_context->queue, &task);

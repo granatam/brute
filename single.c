@@ -1,7 +1,6 @@
 #include "single.h"
 
 #include "brute.h"
-#include <crypt.h>
 #include <string.h>
 
 bool
@@ -9,7 +8,7 @@ st_password_check (task_t *task, void *context)
 {
   st_context_t *st_context = (st_context_t *)context;
   char *hashed_password
-      = crypt_r (task->password, st_context->hash, st_context->data);
+      = crypt_r (task->password, st_context->hash, &st_context->data);
 
   return strcmp (st_context->hash, hashed_password) == 0;
 }
@@ -21,7 +20,7 @@ run_single (task_t *task, config_t *config)
   data.initialized = 0;
   st_context_t st_context = {
     .hash = config->hash,
-    .data = &data,
+    .data = data,
   };
 
   bool is_found = false;
