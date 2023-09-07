@@ -72,6 +72,8 @@ main (int argc, char *argv[])
   task_t task;
   task.password[config.length] = '\0';
 
+  // TODO: Get rid of is_found and return password => need to
+  // change return type of run_* and brute_* for void
   bool is_found = false;
   switch (config.run_mode)
     {

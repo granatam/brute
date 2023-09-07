@@ -4,6 +4,7 @@ status_t
 queue_init (queue_t *queue)
 {
   queue->head = queue->tail = 0;
+  queue->active = true;
 
   if (sem_init (&queue->full, 0, 0) != 0)
     {
@@ -58,6 +59,11 @@ queue_pop (queue_t *queue, task_t *task)
     {
       return S_FAILURE;
     }
+  if (!queue->active)
+    {
+      sem_post (&queue->full);
+      return S_FAILURE;
+    }
   if (pthread_mutex_lock (&queue->head_mutex) != 0)
     {
       return S_FAILURE;
@@ -69,6 +75,18 @@ queue_pop (queue_t *queue, task_t *task)
       return S_FAILURE;
     }
   if (sem_post (&queue->empty) != 0)
+    {
+      return S_FAILURE;
+    }
+
+  return S_SUCCESS;
+}
+
+status_t
+queue_cancel (queue_t *queue)
+{
+  queue->active = false;
+  if (sem_post (&queue->full) != 0)
     {
       return S_FAILURE;
     }

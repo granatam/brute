@@ -18,6 +18,7 @@ mt_password_check (void *context)
   while (true)
     {
       queue_pop (&mt_context->queue, &task);
+      // Segmentation fault here, need to fix
       if (st_password_check (&task, &mt_context->config->hash))
         {
           memcpy (mt_context->result, task.password, sizeof (task.password));
@@ -49,6 +50,9 @@ run_multi (task_t *task, config_t *config)
       pthread_create (&threads[i], NULL, mt_password_check, (void *)&context);
     }
 
+  queue_cancel (&context.queue);
+
+  // TODO: Get rid of is_found
   bool is_found = false;
   switch (config->brute_mode)
     {

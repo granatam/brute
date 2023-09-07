@@ -16,13 +16,12 @@ st_password_check (task_t *task, void *context)
 bool
 run_single (task_t *task, config_t *config)
 {
-  struct crypt_data data;
-  data.initialized = 0;
   st_context_t st_context = {
     .hash = config->hash,
-    .data = data,
+    .data = { .initialized = 0 },
   };
 
+  // TODO: Get rid of is_found
   bool is_found = false;
   switch (config->brute_mode)
     {
