@@ -14,12 +14,15 @@ mt_password_check (void *context)
 {
   mt_context_t *mt_context = (mt_context_t *)context;
   task_t task;
-  
+  st_context_t st_context = {
+    .hash = mt_context->config->hash,
+    .data = { .initialized = 0 },
+  };
+
   while (true)
     {
       queue_pop (&mt_context->queue, &task);
-      // Segmentation fault here, need to fix
-      if (st_password_check (&task, &mt_context->config->hash))
+      if (st_password_check (&task, &st_context))
         {
           memcpy (mt_context->result, task.password, sizeof (task.password));
         }
@@ -50,8 +53,6 @@ run_multi (task_t *task, config_t *config)
       pthread_create (&threads[i], NULL, mt_password_check, (void *)&context);
     }
 
-  queue_cancel (&context.queue);
-
   // TODO: Get rid of is_found
   bool is_found = false;
   switch (config->brute_mode)
@@ -65,6 +66,8 @@ run_multi (task_t *task, config_t *config)
       break;
     }
 
+  queue_cancel (&context.queue);
+  
   for (int i = 0; i < number_of_cpus; ++i)
     {
       pthread_join (threads[i], NULL);
