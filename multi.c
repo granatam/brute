@@ -27,11 +27,6 @@ mt_password_check (void *context)
         }
       if (st_password_check (&task, &st_context))
         {
-          /* Interesting situation here: this printf () call prints the right
-          answer but printf () in main function prints the next password in a
-          row. Need to fix it.
-          */
-          printf ("Password found: %s\n", task.password);
           memcpy (mt_context->password, task.password, sizeof (task.password));
         }
 
@@ -130,6 +125,11 @@ run_multi (task_t *task, config_t *config)
   for (int i = 0; i < number_of_cpus; ++i)
     {
       pthread_join (threads[i], NULL);
+    }
+
+  if (context.password[0] != 0)
+    {
+      memcpy (task->password, context.password, sizeof (context.password));
     }
 
   return context.password[0] != 0;
