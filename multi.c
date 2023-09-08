@@ -21,7 +21,6 @@ mt_password_check (void *context)
 
   while (true)
     {
-      /* don't understand why we need status check here */
       if (queue_pop (&mt_context->queue, &task) == S_FAILURE)
         {
           return NULL;
@@ -38,7 +37,6 @@ mt_password_check (void *context)
           return NULL;
         }
       --mt_context->passwords_remaining;
-      /* printf("-- %d\n", mt_context->passwords_remaining); */
       if (mt_context->passwords_remaining == 0)
         {
           if (pthread_cond_signal (&mt_context->cond_sem) != 0)
@@ -58,11 +56,6 @@ bool
 queue_push_wrapper (task_t *task, void *context)
 {
   mt_context_t *mt_context = (mt_context_t *)context;
-  if (queue_push (&mt_context->queue, task) == S_FAILURE)
-    {
-      return false;
-    }
-
   if (pthread_mutex_lock (&mt_context->mutex) != 0)
     {
       return false;
@@ -72,15 +65,19 @@ queue_push_wrapper (task_t *task, void *context)
     {
       return false;
     }
-  /* printf("++ %d\n", mt_context->passwords_remaining); */
+
+  if (queue_push (&mt_context->queue, task) == S_FAILURE)
+    {
+      return false;
+    }
 
   return mt_context->password[0] != 0;
 }
 
 // TODO: Find memory leak and fix it
-// TODO: Change functions return type to status_t to check for errors? Also deal
-// with `return NULL;` in `mt_password_check ()` because its not possible now to
-// check for errors
+// TODO: Change functions return type to status_t to check for errors? Also
+// deal with `return NULL;` in `mt_password_check ()` because its not possible
+// now to check for errors
 bool
 run_multi (task_t *task, config_t *config)
 {
@@ -118,8 +115,6 @@ run_multi (task_t *task, config_t *config)
       break;
     }
 
-  queue_cancel (&context.queue);
-
   if (pthread_mutex_lock (&context.mutex) != 0)
     {
       return false;
@@ -135,6 +130,8 @@ run_multi (task_t *task, config_t *config)
     {
       return false;
     }
+
+  queue_cancel (&context.queue);
 
   for (int i = 0; i < number_of_cpus; ++i)
     {
