@@ -27,8 +27,11 @@ mt_password_check (void *context)
         }
       if (st_password_check (&task, &st_context))
         {
-          /* This is printing but loop doesn't break */
-          /* printf ("Password found: %s\n", task.password); */
+          /* Interesting situation here: this printf () call prints the right
+          answer but printf () in main function prints the next password in a
+          row. Need to fix it.
+          */
+          printf ("Password found: %s\n", task.password);
           memcpy (mt_context->password, task.password, sizeof (task.password));
         }
 
@@ -102,8 +105,9 @@ run_multi (task_t *task, config_t *config)
       pthread_create (&threads[i], NULL, mt_password_check, (void *)&context);
     }
 
-  // TODO: Get rid of is_found
-  bool is_found = brute (task, config, queue_push_wrapper, &context);
+  // TODO: I think I need to do some checks with this function but didn't
+  // realized what checks yet
+  brute (task, config, queue_push_wrapper, &context);
 
   if (pthread_mutex_lock (&context.mutex) != 0)
     {
@@ -128,5 +132,5 @@ run_multi (task_t *task, config_t *config)
       pthread_join (threads[i], NULL);
     }
 
-  return is_found;
+  return context.password[0] != 0;
 }
