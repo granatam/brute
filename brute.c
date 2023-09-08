@@ -60,3 +60,21 @@ brute_iter (task_t *task, config_t *config,
       task->password[pos] = config->alph[++idx[pos]];
     }
 }
+
+bool
+brute (task_t *task, config_t *config, password_handler_t password_handler,
+       void *context)
+{
+  bool is_found = false;
+  switch (config->brute_mode)
+    {
+    case BM_ITER:
+      is_found = brute_iter (task, config, password_handler, context);
+      break;
+    case BM_RECU:
+      is_found = brute_rec_wrapper (task, config, password_handler, context);
+      break;
+    }
+
+  return is_found;
+}

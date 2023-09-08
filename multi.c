@@ -103,17 +103,7 @@ run_multi (task_t *task, config_t *config)
     }
 
   // TODO: Get rid of is_found
-  bool is_found = false;
-  switch (config->brute_mode)
-    {
-    case BM_ITER:
-      is_found = brute_iter (task, config, queue_push_wrapper, &context);
-      break;
-    case BM_RECU:
-      is_found
-          = brute_rec_wrapper (task, config, queue_push_wrapper, &context);
-      break;
-    }
+  bool is_found = brute (task, config, queue_push_wrapper, &context);
 
   if (pthread_mutex_lock (&context.mutex) != 0)
     {

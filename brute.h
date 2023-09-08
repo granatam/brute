@@ -11,5 +11,7 @@ bool brute_rec_wrapper (task_t *task, config_t *config,
                         password_handler_t password_handler, void *context);
 bool brute_iter (task_t *task, config_t *config,
                  password_handler_t password_handler, void *context);
+bool brute (task_t *task, config_t *config,
+            password_handler_t password_handler, void *context);
 
 #endif // BRUTE_H
