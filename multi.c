@@ -72,7 +72,7 @@ queue_push_wrapper (task_t *task, void *context)
   return mt_context->password[0] != 0;
 }
 
-// TODO: Find memory leak and fix it
+
 // TODO: Change functions return type to status_t to check for errors? Also
 // deal with `return NULL;` in `mt_password_check ()` because its not possible
 // now to check for errors
