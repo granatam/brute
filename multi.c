@@ -34,6 +34,7 @@ mt_password_check (void *context)
         {
           return NULL;
         }
+      pthread_cleanup_push (cleanup_mutex_unlock, &mt_context->mutex);
       --mt_context->passwords_remaining;
       if (mt_context->passwords_remaining == 0)
         {
@@ -42,10 +43,7 @@ mt_password_check (void *context)
               return NULL;
             }
         }
-      if (pthread_mutex_unlock (&mt_context->mutex) != 0)
-        {
-          return NULL;
-        }
+      pthread_cleanup_pop (!0);
     }
   return NULL;
 }
@@ -72,7 +70,6 @@ queue_push_wrapper (task_t *task, void *context)
   return mt_context->password[0] != 0;
 }
 
-
 // TODO: Change functions return type to status_t to check for errors? Also
 // deal with `return NULL;` in `mt_password_check ()` because its not possible
 // now to check for errors
@@ -97,7 +94,12 @@ run_multi (task_t *task, config_t *config)
   pthread_t threads[number_of_cpus];
   for (int i = 0; i < number_of_cpus; ++i)
     {
-      pthread_create (&threads[i], NULL, mt_password_check, (void *)&context);
+      if (pthread_create (&threads[i], NULL, mt_password_check,
+                          (void *)&context)
+          != 0)
+        {
+          return false;
+        }
     }
 
   // TODO: I think I need to do some checks with this function but didn't
@@ -108,6 +110,7 @@ run_multi (task_t *task, config_t *config)
     {
       return false;
     }
+  pthread_cleanup_push (cleanup_mutex_unlock, &context.mutex);
   while (context.passwords_remaining != 0)
     {
       if (pthread_cond_wait (&context.cond_sem, &context.mutex) != 0)
@@ -115,10 +118,7 @@ run_multi (task_t *task, config_t *config)
           return false;
         }
     }
-  if (pthread_mutex_unlock (&context.mutex) != 0)
-    {
-      return false;
-    }
+  pthread_cleanup_pop (!0);
 
   queue_cancel (&context.queue);
 

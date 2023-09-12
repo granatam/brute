@@ -1,6 +1,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+#include <pthread.h>
 #include <stdbool.h>
 
 #define MAX_PASSWORD_LENGTH (7)
@@ -21,5 +22,6 @@ typedef enum status_t
 } status_t;
 
 status_t print_error (const char *msg, ...);
+void cleanup_mutex_unlock (void *mutex);
 
 #endif // COMMON_H
