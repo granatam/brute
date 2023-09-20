@@ -36,7 +36,7 @@ mt_password_check (void *context)
         }
       pthread_cleanup_push (cleanup_mutex_unlock, &mt_context->mutex);
       --mt_context->passwords_remaining;
-      if (mt_context->passwords_remaining == 0)
+      if (mt_context->passwords_remaining == 0 || mt_context->password[0] != 0)
         {
           if (pthread_cond_signal (&mt_context->cond_sem) != 0)
             {
@@ -92,16 +92,22 @@ run_multi (task_t *task, config_t *config)
 
   int number_of_cpus = sysconf (_SC_NPROCESSORS_ONLN);
   pthread_t threads[number_of_cpus];
+  int active_threads = 0;
   for (int i = 0; i < number_of_cpus; ++i)
     {
       if (pthread_create (&threads[i], NULL, mt_password_check,
                           (void *)&context)
-          != 0)
+          == 0)
         {
-          return false;
+          ++active_threads;
         }
     }
 
+  if (active_threads == 0)
+    {
+      print_error ("Error: 0 active threads\n");
+      return false;
+    }
   // TODO: I think I need to do some checks with this function but didn't
   // realized what checks yet
   brute (task, config, queue_push_wrapper, &context);
@@ -111,7 +117,7 @@ run_multi (task_t *task, config_t *config)
       return false;
     }
   pthread_cleanup_push (cleanup_mutex_unlock, &context.mutex);
-  while (context.passwords_remaining != 0)
+  while (context.passwords_remaining != 0 && context.password[0] == 0)
     {
       if (pthread_cond_wait (&context.cond_sem, &context.mutex) != 0)
         {
@@ -122,7 +128,7 @@ run_multi (task_t *task, config_t *config)
 
   queue_cancel (&context.queue);
 
-  for (int i = 0; i < number_of_cpus; ++i)
+  for (int i = 0; i < active_threads; ++i)
     {
       pthread_join (threads[i], NULL);
     }
