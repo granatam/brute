@@ -64,16 +64,13 @@ main (int argc, char *argv[])
     .alph = "abc",
     .hash = "abFZSxKKdq5s6", /* crypt ("abc", "abc"); */
   };
+
   if (parse_params (&config, argc, argv) == S_FAILURE)
-    {
-      return EXIT_FAILURE;
-    }
+    return EXIT_FAILURE;
 
   task_t task;
   task.password[config.length] = '\0';
 
-  // TODO: Get rid of is_found and return password => need to
-  // change return type of run_* and brute_* for void
   bool is_found = false;
   switch (config.run_mode)
     {
@@ -86,13 +83,9 @@ main (int argc, char *argv[])
     }
 
   if (is_found)
-    {
-      printf ("Password found: %s\n", task.password);
-    }
+    printf ("Password found: %s\n", task.password);
   else
-    {
-      printf ("Password not found\n");
-    }
+    printf ("Password not found\n");
 
   return EXIT_SUCCESS;
 }
