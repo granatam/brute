@@ -10,10 +10,7 @@ queue_init (queue_t *queue)
     goto fail;
 
   if (sem_init (&queue->empty, 0, QUEUE_SIZE) != 0)
-    {
-      queue->active = false;
-      return S_FAILURE;
-    }
+    goto fail;
 
   if (pthread_mutex_init (&queue->head_mutex, NULL) != 0)
     goto fail;
