@@ -23,7 +23,7 @@ sem_post (sem_t *sem)
   pthread_cleanup_push (cleanup_mutex_unlock, &sem->mutex);
 
   ++sem->counter;
-  if (pthread_cond_signal(&sem->cond_sem) != 0)
+  if (pthread_cond_signal (&sem->cond_sem) != 0)
     return S_FAILURE;
 
   pthread_cleanup_pop (!0);
@@ -46,4 +46,22 @@ sem_wait (sem_t *sem)
   pthread_cleanup_pop (!0);
 
   return S_SUCCESS;
+}
+
+status_t
+sem_destroy (sem_t *sem)
+{
+  if (pthread_mutex_destroy (&sem->mutex) != 0)
+    goto fail;
+
+  if (pthread_cond_destroy (&sem->cond_sem) != 0)
+    goto fail;
+
+  sem->counter = 0;
+
+  return S_SUCCESS;
+
+fail:
+  sem->counter = 0;
+  return S_FAILURE;
 }

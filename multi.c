@@ -147,5 +147,23 @@ run_multi (task_t *task, config_t *config)
   if (context.password[0] != 0)
     memcpy (task->password, context.password, sizeof (context.password));
 
+  if (queue_destroy (&context.queue) == S_FAILURE)
+    {
+      print_error ("Could not destroy a queue\n");
+      return false;
+    }
+
+  if (pthread_cond_destroy (&context.cond_sem) != 0)
+    {
+      print_error ("Could not destroy a condition variable\n");
+      return false;
+    }
+
+  if (pthread_mutex_destroy (&context.mutex) != 0)
+    {
+      print_error ("Could not destroy a mutex\n");
+      return false;
+    }
+
   return context.password[0] != 0;
 }
