@@ -22,9 +22,8 @@ sem_post (sem_t *sem)
     return S_FAILURE;
   pthread_cleanup_push (cleanup_mutex_unlock, &sem->mutex);
 
-  if (sem->counter++ == 0)
-    if (pthread_cond_signal (&sem->cond_sem) != 0)
-      return S_FAILURE;
+  ++sem->counter;
+  pthread_cond_signal(&sem->cond_sem);
 
   pthread_cleanup_pop (!0);
 
@@ -43,7 +42,6 @@ sem_wait (sem_t *sem)
       return S_FAILURE;
 
   --sem->counter;
-
   pthread_cleanup_pop (!0);
 
   return S_SUCCESS;
