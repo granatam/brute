@@ -15,8 +15,13 @@ endif
 
 all: ${TARGET}
 
-${TARGET}: ${OBJ}
+${TARGET}: ${OBJ} ${LIBS}
 	${CC} ${CFLAGS} ${OBJ} ${LIBS} -o ${TARGET}
+
+crypt/libcrypt.a: 
+	${MAKE} -C crypt
 
 clean:
 	${RM} main *.o
+	${MAKE} -C crypt clean
+
