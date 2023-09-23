@@ -1,6 +1,6 @@
 .PHONY: clean
 CFLAGS=-O2 -Wall -Wpedantic -Wextra -pthread -ggdb3
-OBJ=brute.o common.o main.o multi.o queue.o single.o semaphore.o
+OBJ=brute.o common.o main.o multi.o queue.o single.o
 TARGET=main
 
 ifeq ($(shell uname), Linux)
@@ -10,6 +10,7 @@ endif
 ifeq ($(shell uname -s), Darwin)
 	LIBS+=crypt/libcrypt.a
 	CFLAGS+=-I./crypt
+	OBJ+=semaphore.o
 endif
 
 all: ${TARGET}
