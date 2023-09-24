@@ -14,7 +14,7 @@ st_password_check (task_t *task, void *context)
   char *hashed_password
       = crypt_r (task->password, st_context->hash, &st_context->data);
 
-  return strcmp (st_context->hash, hashed_password) == 0;
+  return (strcmp (st_context->hash, hashed_password) == 0);
 }
 
 bool
@@ -25,5 +25,5 @@ run_single (task_t *task, config_t *config)
     .data = { .initialized = 0 },
   };
 
-  return brute (task, config, st_password_check, &context);
+  return (brute (task, config, st_password_check, &context));
 }

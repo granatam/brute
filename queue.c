@@ -18,11 +18,11 @@ queue_init (queue_t *queue)
   if (pthread_mutex_init (&queue->tail_mutex, NULL) != 0)
     goto fail;
 
-  return S_SUCCESS;
+  return (S_SUCCESS);
 
 fail:
   queue->active = false;
-  return S_FAILURE;
+  return (S_FAILURE);
 }
 
 status_t
@@ -43,11 +43,11 @@ queue_push (queue_t *queue, task_t *task)
   if (sem_post (&queue->full) != 0)
     goto fail;
 
-  return S_SUCCESS;
+  return (S_SUCCESS);
 
 fail:
   queue->active = false;
-  return S_FAILURE;
+  return (S_FAILURE);
 }
 
 status_t
@@ -59,7 +59,7 @@ queue_pop (queue_t *queue, task_t *task)
   if (!queue->active)
     {
       sem_post (&queue->full);
-      return S_FAILURE;
+      return (S_FAILURE);
     }
 
   if (pthread_mutex_lock (&queue->head_mutex) != 0)
@@ -74,11 +74,11 @@ queue_pop (queue_t *queue, task_t *task)
   if (sem_post (&queue->empty) != 0)
     goto fail;
 
-  return S_SUCCESS;
+  return (S_SUCCESS);
 
 fail:
   queue->active = false;
-  return S_FAILURE;
+  return (S_FAILURE);
 }
 
 status_t
@@ -87,9 +87,9 @@ queue_cancel (queue_t *queue)
   queue->active = false;
 
   if (sem_post (&queue->full) != 0)
-    return S_FAILURE;
+    return (S_FAILURE);
 
-  return S_SUCCESS;
+  return (S_SUCCESS);
 }
 
 status_t
@@ -110,9 +110,9 @@ queue_destroy (queue_t *queue)
   queue->head = queue->tail = 0;
   queue->active = false;
 
-  return S_SUCCESS;
+  return (S_SUCCESS);
 
 fail:
   queue->active = false;
-  return S_FAILURE;
+  return (S_FAILURE);
 }

@@ -22,7 +22,7 @@ mt_password_check (void *context)
   while (true)
     {
       if (queue_pop (&mt_context->queue, &task) == S_FAILURE)
-        return NULL;
+        return (NULL);
 
       if (st_password_check (&task, &st_context))
         memcpy (mt_context->password, task.password, sizeof (task.password));
@@ -30,7 +30,7 @@ mt_password_check (void *context)
       if (pthread_mutex_lock (&mt_context->mutex) != 0)
         {
           print_error ("Could not lock a mutex\n");
-          return NULL;
+          return (NULL);
         }
       pthread_cleanup_push (cleanup_mutex_unlock, &mt_context->mutex);
 
@@ -39,12 +39,12 @@ mt_password_check (void *context)
         if (pthread_cond_signal (&mt_context->cond_sem) != 0)
           {
             print_error ("Could not signal a condition\n");
-            return NULL;
+            return (NULL);
           }
 
       pthread_cleanup_pop (!0);
     }
-  return NULL;
+  return (NULL);
 }
 
 bool
@@ -55,7 +55,7 @@ queue_push_wrapper (task_t *task, void *context)
   if (pthread_mutex_lock (&mt_context->mutex) != 0)
     {
       print_error ("Could not lock a mutex\n");
-      return false;
+      return (false);
     }
 
   ++mt_context->passwords_remaining;
@@ -63,16 +63,16 @@ queue_push_wrapper (task_t *task, void *context)
   if (pthread_mutex_unlock (&mt_context->mutex) != 0)
     {
       print_error ("Could not unlock a mutex\n");
-      return false;
+      return (false);
     }
 
   if (queue_push (&mt_context->queue, task) == S_FAILURE)
     {
       print_error ("Could not push to a queue\n");
-      return false;
+      return (false);
     }
 
-  return mt_context->password[0] != 0;
+  return (mt_context->password[0] != 0);
 }
 
 bool
@@ -83,19 +83,19 @@ run_multi (task_t *task, config_t *config)
   if (pthread_mutex_init (&context.mutex, NULL) != 0)
     {
       print_error ("Could not initialize a mutex\n");
-      return false;
+      return (false);
     }
 
   if (pthread_cond_init (&context.cond_sem, NULL) != 0)
     {
       print_error ("Could not initialize a condition variable\n");
-      return false;
+      return (false);
     }
 
   if (queue_init (&context.queue) == S_FAILURE)
     {
       print_error ("Could not initialize a queue\n");
-      return false;
+      return (false);
     }
 
   context.config = config;
@@ -114,7 +114,7 @@ run_multi (task_t *task, config_t *config)
   if (active_threads == 0)
     {
       print_error ("Could not create a single thread\n");
-      return false;
+      return (false);
     }
 
   brute (task, config, queue_push_wrapper, &context);
@@ -122,7 +122,7 @@ run_multi (task_t *task, config_t *config)
   if (pthread_mutex_lock (&context.mutex) != 0)
     {
       print_error ("Could not lock a mutex\n");
-      return false;
+      return (false);
     }
   pthread_cleanup_push (cleanup_mutex_unlock, &context.mutex);
 
@@ -130,7 +130,7 @@ run_multi (task_t *task, config_t *config)
     if (pthread_cond_wait (&context.cond_sem, &context.mutex) != 0)
       {
         print_error ("Could not wait on a condition\n");
-        return false;
+        return (false);
       }
 
   pthread_cleanup_pop (!0);
@@ -138,7 +138,7 @@ run_multi (task_t *task, config_t *config)
   if (queue_cancel (&context.queue) == S_FAILURE)
     {
       print_error ("Could not cancel a queue\n");
-      return false;
+      return (false);
     }
 
   for (int i = 0; i < active_threads; ++i)
@@ -150,20 +150,20 @@ run_multi (task_t *task, config_t *config)
   if (queue_destroy (&context.queue) == S_FAILURE)
     {
       print_error ("Could not destroy a queue\n");
-      return false;
+      return (false);
     }
 
   if (pthread_cond_destroy (&context.cond_sem) != 0)
     {
       print_error ("Could not destroy a condition variable\n");
-      return false;
+      return (false);
     }
 
   if (pthread_mutex_destroy (&context.mutex) != 0)
     {
       print_error ("Could not destroy a mutex\n");
-      return false;
+      return (false);
     }
 
-  return context.password[0] != 0;
+  return (context.password[0] != 0);
 }

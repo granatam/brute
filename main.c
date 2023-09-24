@@ -25,7 +25,7 @@ parse_params (config_t *config, int argc, char *argv[])
               print_error (
                   "Password's length must be a number between 0 and %d\n",
                   MAX_PASSWORD_LENGTH);
-              return S_FAILURE;
+              return (S_FAILURE);
             }
           break;
         case 'a':
@@ -47,11 +47,11 @@ parse_params (config_t *config, int argc, char *argv[])
           config->brute_mode = BM_RECU;
           break;
         default:
-          return S_FAILURE;
+          return (S_FAILURE);
         }
     }
 
-  return S_SUCCESS;
+  return (S_SUCCESS);
 }
 
 int
@@ -66,7 +66,7 @@ main (int argc, char *argv[])
   };
 
   if (parse_params (&config, argc, argv) == S_FAILURE)
-    return EXIT_FAILURE;
+    return (EXIT_FAILURE);
 
   task_t task;
   task.password[config.length] = '\0';
@@ -87,5 +87,5 @@ main (int argc, char *argv[])
   else
     printf ("Password not found\n");
 
-  return EXIT_SUCCESS;
+  return (EXIT_SUCCESS);
 }
