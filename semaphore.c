@@ -51,17 +51,13 @@ sem_wait (sem_t *sem)
 status_t
 sem_destroy (sem_t *sem)
 {
+  sem->counter = 0;
+
   if (pthread_mutex_destroy (&sem->mutex) != 0)
-    goto fail;
+    return (S_FAILURE);
 
   if (pthread_cond_destroy (&sem->cond_sem) != 0)
-    goto fail;
-
-  sem->counter = 0;
+    return (S_FAILURE);
 
   return (S_SUCCESS);
-
-fail:
-  sem->counter = 0;
-  return (S_FAILURE);
 }

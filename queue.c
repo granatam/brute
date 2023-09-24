@@ -95,24 +95,21 @@ queue_cancel (queue_t *queue)
 status_t
 queue_destroy (queue_t *queue)
 {
+  queue->active = false;
+  queue->head = queue->tail = 0;
+
   if (sem_destroy (&queue->full) != 0)
-    goto fail;
+    return (S_FAILURE);
 
   if (sem_destroy (&queue->empty) != 0)
-    goto fail;
+    return (S_FAILURE);
 
   if (pthread_mutex_destroy (&queue->head_mutex) != 0)
-    goto fail;
+    return (S_FAILURE);
 
   if (pthread_mutex_destroy (&queue->tail_mutex) != 0)
-    goto fail;
+    return (S_FAILURE);
 
-  queue->head = queue->tail = 0;
-  queue->active = false;
 
   return (S_SUCCESS);
-
-fail:
-  queue->active = false;
-  return (S_FAILURE);
 }
