@@ -110,6 +110,5 @@ queue_destroy (queue_t *queue)
   if (pthread_mutex_destroy (&queue->tail_mutex) != 0)
     return (S_FAILURE);
 
-
   return (S_SUCCESS);
 }
