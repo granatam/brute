@@ -23,5 +23,8 @@ run_single (task_t *task, config_t *config)
     .data = { .initialized = 0 },
   };
 
+  task->from = 0;
+  task->to = config->length;
+
   return (brute (task, config, st_password_check, &context));
 }

@@ -9,6 +9,8 @@
 #include <string.h>
 #include <unistd.h>
 
+// TODO: Refactor it using task->from and task->to params. Smth like task.to = task.from && task.from = 0
+
 void *
 mt_password_check (void *context)
 {

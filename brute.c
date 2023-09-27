@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+// TODO: Refactor it using task->to and task->from params
 bool
 brute_rec (task_t *task, config_t *config, password_handler_t password_handler,
            void *context, int pos)
@@ -34,7 +35,7 @@ brute_iter (task_t *task, config_t *config,
             password_handler_t password_handler, void *context)
 {
   int alph_size = strlen (config->alph) - 1;
-  int idx[config->length];
+  int idx[task->to];
   memset (idx, 0, config->length * sizeof (int));
   memset (task->password, config->alph[0], config->length);
 
@@ -44,13 +45,13 @@ brute_iter (task_t *task, config_t *config,
       if (password_handler (task, context))
         return (true);
 
-      for (pos = config->length - 1; pos >= 0 && idx[pos] == alph_size; --pos)
+      for (pos = task->to - 1; pos >= task->from && idx[pos] == alph_size; --pos)
         {
           idx[pos] = 0;
           task->password[pos] = config->alph[idx[pos]];
         }
 
-      if (pos < 0)
+      if (pos < task->from)
         return (false);
 
       task->password[pos] = config->alph[++idx[pos]];
