@@ -11,12 +11,17 @@ endif
 all: ${TARGET}
 
 ${TARGET}: ${OBJ} ${LIBS}
-	${CC} ${CFLAGS} ${OBJ} ${LIBS} -o ${TARGET}
+	@${CC} ${CFLAGS} ${OBJ} ${LIBS} -o ${TARGET}
 
 crypt/libcrypt.a: 
-	${MAKE} -C crypt
+	@${MAKE} -C crypt
 
 clean:
-	${RM} main *.o
-	${MAKE} -C crypt clean
+	@${RM} main *.o
+	@${MAKE} -C crypt clean
 
+check:
+	@${CC} tests/encrypt.c -o tests/encrypt -I./crypt crypt/libcrypt.a
+	@tests/test1.sh
+	@tests/test2.sh
+	@tests/test3.sh
