@@ -1,15 +1,10 @@
 .PHONY: clean
-CFLAGS=-O2 -Wall -Wpedantic -Wextra -pthread -ggdb3
+CFLAGS=-O2 -Wall -Wpedantic -Wextra -pthread -ggdb3 -I./crypt
 OBJ=brute.o common.o main.o multi.o queue.o single.o
 TARGET=main
-
-ifeq ($(shell uname), Linux)
-	LIBS+=-lcrypt
-endif
+LIBS+=crypt/libcrypt.a
 
 ifeq ($(shell uname -s), Darwin)
-	LIBS+=crypt/libcrypt.a
-	CFLAGS+=-I./crypt
 	OBJ+=semaphore.o
 endif
 

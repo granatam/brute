@@ -3,9 +3,7 @@
 #include "brute.h"
 #include <string.h>
 
-#ifdef __APPLE__
 #define crypt_r __crypt_r
-#endif
 
 bool
 st_password_check (task_t *task, void *context)
