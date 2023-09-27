@@ -34,6 +34,13 @@ shuffle_sb (long32 *k, ufc_long saltbits)
 }
 #endif
 
+#ifdef __GNU_LIBRARY__
+#include "libc-lock.h"
+
+__libc_lock_define_initialized (static, _ufc_tables_lock)
+#endif
+
+
 #ifdef _UFC_64_
 STATIC void
 shuffle_sb (long64 *k, ufc_long saltbits)
