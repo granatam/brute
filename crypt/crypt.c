@@ -22,7 +22,7 @@
 #include <errno.h>
 
 char *
-__crypt_r (const char *key, const char *salt,
+crypt_r (const char *key, const char *salt,
 	   struct crypt_data * __restrict data)
 {
   ufc_long res[4];

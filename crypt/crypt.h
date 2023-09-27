@@ -65,7 +65,7 @@ void explicit_bzero(void *s, size_t len);
 void _ufc_doit_r(ufc_long itr, struct crypt_data *__restrict __data,
                  ufc_long *res);
 
-extern char *__crypt_r(const char *__phrase, const char *__salt,
+extern char *crypt_r(const char *__phrase, const char *__salt,
                      struct crypt_data *__restrict __data);
 
 #endif /* CRYPT_H */

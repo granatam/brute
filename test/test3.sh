@@ -1,4 +1,4 @@
-hash=$(tests/encrypt -p 1234567)
+hash=$(test/encrypt -p 1234567)
 cmd="./main -h $hash -l 7 -a 1234567"
 output_single=$($cmd)
 output_multi=$($cmd -m)

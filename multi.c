@@ -9,8 +9,6 @@
 #include <string.h>
 #include <unistd.h>
 
-// TODO: Refactor it using task->from and task->to params. Smth like task.to = task.from && task.from = 0
-
 void *
 mt_password_check (void *context)
 {
@@ -26,7 +24,10 @@ mt_password_check (void *context)
       if (queue_pop (&mt_context->queue, &task) == S_FAILURE)
         return (NULL);
 
-      if (st_password_check (&task, &st_context))
+      task.to = task.from;
+      task.from = 0;
+
+      if (brute (&task, mt_context->config, st_password_check, &st_context))
         memcpy (mt_context->password, task.password, sizeof (task.password));
 
       if (pthread_mutex_lock (&mt_context->mutex) != 0)
@@ -117,6 +118,10 @@ run_multi (task_t *task, config_t *config)
       print_error ("Could not create a single thread\n");
       return (false);
     }
+
+  // Need to test what is the best task->from value
+  task->from = 2; 
+  task->to = config->length;
 
   brute (task, config, queue_push_wrapper, &context);
 

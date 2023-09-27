@@ -3,8 +3,6 @@
 #include "brute.h"
 #include <string.h>
 
-#define crypt_r __crypt_r
-
 bool
 st_password_check (task_t *task, void *context)
 {

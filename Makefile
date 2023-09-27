@@ -21,7 +21,7 @@ clean:
 	@${MAKE} -C crypt clean
 
 check:
-	@${CC} tests/encrypt.c -o tests/encrypt -I./crypt crypt/libcrypt.a
-	@tests/test1.sh
-	@tests/test2.sh
-	@tests/test3.sh
+	@${CC} test/encrypt.c -o test/encrypt -I./crypt crypt/libcrypt.a
+	@test/test1.sh
+	@test/test2.sh
+	@test/test3.sh

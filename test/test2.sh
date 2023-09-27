@@ -1,4 +1,4 @@
-hash=$(tests/encrypt -p artemiy)
+hash=$(test/encrypt -p artemiy)
 cmd="./main -h $hash -l 7 -a artimey"
 output_single=$($cmd)
 output_multi=$($cmd -m)
