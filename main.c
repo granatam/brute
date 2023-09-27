@@ -14,7 +14,7 @@ status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
-  while ((opt = getopt (argc, argv, "l:a:h:smir")) != -1)
+  while ((opt = getopt (argc, argv, "l:a:h:t:smir")) != -1)
     {
       switch (opt)
         {
@@ -34,6 +34,20 @@ parse_params (config_t *config, int argc, char *argv[])
         case 'h':
           config->hash = optarg;
           break;
+        case 't':
+          {
+            int number_of_cpus = sysconf (_SC_NPROCESSORS_ONLN);
+            config->number_of_threads = atoi (optarg);
+            if (config->number_of_threads <= 1
+                || config->number_of_threads > number_of_cpus)
+              {
+                print_error (
+                    "Number of threads must be a number between 1 and %d",
+                    number_of_cpus);
+                return (S_FAILURE);
+              }
+            break;
+          }
         case 's':
           config->run_mode = RM_SINGLE;
           break;
@@ -61,6 +75,7 @@ main (int argc, char *argv[])
     .run_mode = RM_SINGLE,
     .brute_mode = BM_ITER,
     .length = 3,
+    .number_of_threads = sysconf (_SC_NPROCESSORS_ONLN),
     .alph = "abc",
     .hash = "abFZSxKKdq5s6", /* crypt ("abc", "abc"); */
   };

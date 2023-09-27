@@ -102,11 +102,10 @@ run_multi (task_t *task, config_t *config)
   context.passwords_remaining = 0;
   context.password[0] = 0;
 
-  int number_of_cpus = sysconf (_SC_NPROCESSORS_ONLN);
-  pthread_t threads[number_of_cpus];
+  pthread_t threads[config->number_of_threads];
   int active_threads = 0;
 
-  for (int i = 0; i < number_of_cpus; ++i)
+  for (int i = 0; i < config->number_of_threads; ++i)
     if (pthread_create (&threads[i], NULL, mt_password_check, (void *)&context)
         == 0)
       ++active_threads;
