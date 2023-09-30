@@ -4,7 +4,6 @@
 #include "common.h"
 #include "config.h"
 
-// TODO: Check struct size with different variable order 
 typedef struct iter_state_t
 {
   char *alph;
