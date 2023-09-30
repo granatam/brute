@@ -17,6 +17,7 @@ typedef struct config_t
 {
   run_mode_t run_mode;
   brute_mode_t brute_mode;
+  int number_of_threads;
   int length;
   char *alph;
   char *hash;
