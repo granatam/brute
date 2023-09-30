@@ -1,6 +1,7 @@
 #include "brute.h"
 #include "common.h"
 #include "config.h"
+#include "gen.h"
 #include "multi.h"
 #include "queue.h"
 #include "single.h"
@@ -14,7 +15,7 @@ status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
-  while ((opt = getopt (argc, argv, "l:a:h:t:smir")) != -1)
+  while ((opt = getopt (argc, argv, "l:a:h:t:smgir")) != -1)
     {
       switch (opt)
         {
@@ -53,6 +54,9 @@ parse_params (config_t *config, int argc, char *argv[])
           break;
         case 'm':
           config->run_mode = RM_MULTI;
+          break;
+        case 'g':
+          config->run_mode = RM_GENERATOR;
           break;
         case 'i':
           config->brute_mode = BM_ITER;
@@ -94,6 +98,9 @@ main (int argc, char *argv[])
       break;
     case RM_MULTI:
       is_found = run_multi (&task, &config);
+      break;
+    case RM_GENERATOR:
+      is_found = run_generator (&task, &config);
       break;
     }
 
