@@ -31,8 +31,6 @@ gen_worker (void *context)
 {
   gen_context_t *gen_context = (gen_context_t *)context;
 
-  task_t *task = gen_context->state.task; /* to reduce the amount of code */
-
   st_context_t st_context = {
     .hash = gen_context->config->hash,
     .data = { .initialized = 0 },
@@ -46,8 +44,8 @@ gen_worker (void *context)
           return (NULL);
         }
 
-      task_t current_task;
-      memcpy (current_task.password, task->password, sizeof (task->password));
+      task_t current_task = *gen_context->state.task;
+
       if (!gen_context->cancelled)
         gen_context->cancelled = !iter_state_next (&gen_context->state);
 
@@ -58,6 +56,7 @@ gen_worker (void *context)
         }
 
       pthread_mutex_lock (&gen_context->mutex);
+      printf ("%s\n", current_task.password);
       if (st_password_check (&current_task, &st_context))
         {
           memcpy (gen_context->password, current_task.password,
