@@ -1,8 +1,8 @@
 #ifndef GEN_H
 #define GEN_H
 
-#include "iter.h"
 #include "config.h"
+#include "iter.h"
 #include <pthread.h>
 
 typedef struct gen_context_t

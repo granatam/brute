@@ -45,11 +45,14 @@ generator (void *context)
           print_error ("Could not lock a mutex\n");
           return (NULL);
         }
-      pthread_cleanup_push (cleanup_mutex_unlock, &gen_context->mutex);
 
       gen_context->cancelled = !iter_state_next (&gen_context->state);
 
-      pthread_cleanup_pop (!0);
+      if (pthread_mutex_unlock (&gen_context->mutex) != 0)
+        {
+          print_error ("Could not unlock a mutex\n");
+          return (NULL);
+        }
 
       task->to = task->from;
       task->from = 0;
