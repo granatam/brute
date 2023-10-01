@@ -139,18 +139,10 @@ run_multi (task_t *task, config_t *config)
     return (false);
 
   pthread_t threads[config->number_of_threads];
-  int active_threads = 0;
-
-  for (int i = 0; i < config->number_of_threads; ++i)
-    if (pthread_create (&threads[i], NULL, mt_password_check, (void *)&context)
-        == 0)
-      ++active_threads;
-
+  int active_threads = create_threads (threads, config->number_of_threads,
+                                       mt_password_check, &context);
   if (active_threads == 0)
-    {
-      print_error ("Could not create a single thread\n");
-      return (false);
-    }
+    return (false);
 
   // Need to test what is the best task->from value
   task->from = 2;

@@ -71,19 +71,10 @@ run_generator (task_t *task, config_t *config)
   context.state.task->to = config->length;
 
   pthread_t threads[config->number_of_threads];
-  int active_threads = 0;
-
-  for (int i = 0; i < config->number_of_threads; ++i)
-    if (pthread_create (&threads[i], NULL, generator,
-                        (void *)&context)
-        == 0)
-      ++active_threads;
-
+  int active_threads = create_threads (threads, config->number_of_threads,
+                                       generator, &context);
   if (active_threads == 0)
-    {
-      print_error ("Could not create a single thread\n");
-      return (false);
-    }
+    return (false);
 
   for (int i = 0; i < active_threads; ++i)
     pthread_join (threads[i], NULL);
