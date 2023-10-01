@@ -2,7 +2,6 @@
 
 #include "brute.h"
 #include "single.h"
-#include <stdio.h>
 #include <string.h>
 
 status_t
@@ -14,6 +13,9 @@ gen_context_init (gen_context_t *context, config_t *config, task_t *task)
       return (S_FAILURE);
     }
 
+  task->from = 0;
+  task->to = config->length;
+
   iter_state_init (&context->state, config->alph, task);
 
   context->config = config;
@@ -24,14 +26,11 @@ gen_context_init (gen_context_t *context, config_t *config, task_t *task)
 }
 
 void *
-generator (void *context)
+gen_worker (void *context)
 {
   gen_context_t *gen_context = (gen_context_t *)context;
 
   task_t *task = gen_context->state.task; /* to reduce the amount of code */
-
-  task->from = 0;
-  task->to = gen_context->config->length;
 
   st_context_t st_context = {
     .hash = gen_context->config->hash,
@@ -46,7 +45,10 @@ generator (void *context)
           return (NULL);
         }
 
-      gen_context->cancelled = !iter_state_next (&gen_context->state);
+      task_t current_task;
+      memcpy (current_task.password, task->password, sizeof (task->password));
+      if (!gen_context->cancelled)
+        gen_context->cancelled = !iter_state_next (&gen_context->state);
 
       if (pthread_mutex_unlock (&gen_context->mutex) != 0)
         {
@@ -54,12 +56,12 @@ generator (void *context)
           return (NULL);
         }
 
-      task->to = task->from;
-      task->from = 0;
-
-      if (brute (task, gen_context->config, st_password_check, &st_context))
-        memcpy (gen_context->password, task->password,
-                sizeof (task->password));
+      if (st_password_check (&current_task, &st_context))
+        {
+          memcpy (gen_context->password, current_task.password,
+                  sizeof (current_task.password));
+          gen_context->cancelled = true;
+        }
     }
   return (NULL);
 }
@@ -72,14 +74,13 @@ run_generator (task_t *task, config_t *config)
   if (gen_context_init (&context, config, task) == S_FAILURE)
     return (false);
 
-  context.state.task->from = 2;
-  context.state.task->to = config->length;
-
-  pthread_t threads[config->number_of_threads];
-  int active_threads = create_threads (threads, config->number_of_threads,
-                                       generator, &context);
+  pthread_t threads[config->number_of_threads - 1];
+  int active_threads = create_threads (threads, config->number_of_threads - 1,
+                                       gen_worker, &context);
   if (active_threads == 0)
     return (false);
+
+  gen_worker (&context);
 
   for (int i = 0; i < active_threads; ++i)
     pthread_join (threads[i], NULL);
