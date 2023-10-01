@@ -2,6 +2,7 @@
 
 #include "brute.h"
 #include "single.h"
+#include <stdio.h>
 #include <string.h>
 
 status_t
@@ -26,8 +27,11 @@ void *
 generator (void *context)
 {
   gen_context_t *gen_context = (gen_context_t *)context;
-  gen_context->state.task->from = 0;
-  gen_context->state.task->to = gen_context->config->length;
+
+  task_t *task = gen_context->state.task; /* to reduce the amount of code */
+
+  task->from = 0;
+  task->to = gen_context->config->length;
 
   st_context_t st_context = {
     .hash = gen_context->config->hash,
@@ -47,14 +51,12 @@ generator (void *context)
 
       pthread_cleanup_pop (!0);
 
-      gen_context->state.task->to = gen_context->state.task->from;
-      gen_context->state.task->from = 0;
-      if (brute (gen_context->state.task, gen_context->config,
-                 st_password_check, &st_context))
-        {
-          memcpy (gen_context->password, gen_context->state.task->password,
-                  sizeof (gen_context->state.task->password));
-        }
+      task->to = task->from;
+      task->from = 0;
+
+      if (brute (task, gen_context->config, st_password_check, &st_context))
+        memcpy (gen_context->password, task->password,
+                sizeof (task->password));
     }
   return (NULL);
 }

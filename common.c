@@ -33,7 +33,7 @@ create_threads (pthread_t *threads, int number_of_threads, void *func (void *),
       ++active_threads;
 
   if (active_threads == 0)
-    print_error ("Could not create a single thread\n"); 
+    print_error ("Could not create a single thread\n");
 
   return active_threads;
 }
