@@ -2,8 +2,8 @@
 
 #include "brute.h"
 #include "single.h"
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 
 status_t
 gen_context_init (gen_context_t *context, config_t *config, task_t *task)
@@ -46,15 +46,16 @@ gen_worker (void *context)
 
       task_t current_task = *gen_context->state.task;
 
-      if (!gen_context->cancelled)
+      if (!gen_context->cancelled || gen_context->password[0] == 0)
         gen_context->cancelled = !iter_state_next (&gen_context->state);
 
       if (pthread_mutex_unlock (&gen_context->mutex) != 0)
         {
           print_error ("Could not unlock a mutex\n");
-
         }
 
+      if (gen_context->cancelled || gen_context->password[0] != 0)
+        break;
       pthread_mutex_lock (&gen_context->mutex);
       printf ("%s\n", current_task.password);
       if (st_password_check (&current_task, &st_context))
