@@ -56,15 +56,24 @@ gen_worker (void *context)
 
       if (gen_context->cancelled || gen_context->password[0] != 0)
         break;
-      pthread_mutex_lock (&gen_context->mutex);
-      printf ("%s\n", current_task.password);
+
+      if (pthread_mutex_lock (&gen_context->mutex) != 0)
+        {
+          print_error ("Could not lock a mutex\n");
+          return (NULL);
+        }
+
       if (st_password_check (&current_task, &st_context))
         {
           memcpy (gen_context->password, current_task.password,
                   sizeof (current_task.password));
           gen_context->cancelled = true;
         }
-      pthread_mutex_unlock (&gen_context->mutex);
+
+      if (pthread_mutex_unlock (&gen_context->mutex) != 0)
+        {
+          print_error ("Could not unlock a mutex\n");
+        }
     }
   return (NULL);
 }
