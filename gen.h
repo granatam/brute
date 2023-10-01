@@ -10,6 +10,7 @@ typedef struct gen_context_t
   iter_state_t state;
   pthread_mutex_t mutex;
   config_t *config;
+  password_t password;
   bool cancelled;
 } gen_context_t;
 
