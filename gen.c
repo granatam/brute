@@ -46,7 +46,7 @@ gen_worker (void *context)
 
       task_t current_task = *gen_context->state.task;
 
-      if (!gen_context->cancelled || gen_context->password[0] == 0)
+      if (!gen_context->cancelled && gen_context->password[0] == 0)
         gen_context->cancelled = !iter_state_next (&gen_context->state);
 
       if (pthread_mutex_unlock (&gen_context->mutex) != 0)
