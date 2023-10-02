@@ -39,7 +39,7 @@ parse_params (config_t *config, int argc, char *argv[])
           {
             int number_of_cpus = sysconf (_SC_NPROCESSORS_ONLN);
             config->number_of_threads = atoi (optarg);
-            if (config->number_of_threads <= 1
+            if (config->number_of_threads < 1
                 || config->number_of_threads > number_of_cpus)
               {
                 print_error (

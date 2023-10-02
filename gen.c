@@ -2,7 +2,6 @@
 
 #include "brute.h"
 #include "single.h"
-#include <stdio.h>
 #include <string.h>
 
 status_t
@@ -75,9 +74,12 @@ run_generator (task_t *task, config_t *config)
   if (gen_context_init (&context, config, task) == S_FAILURE)
     return (false);
 
-  pthread_t threads[config->number_of_threads - 1];
-  int active_threads = create_threads (threads, config->number_of_threads - 1,
-                                       gen_worker, &context);
+  int number_of_threads
+      = (config->number_of_threads == 1) ? 1 : config->number_of_threads - 1;
+  pthread_t threads[number_of_threads];
+
+  int active_threads
+      = create_threads (threads, number_of_threads, gen_worker, &context);
   if (active_threads == 0)
     return (false);
 
