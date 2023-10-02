@@ -9,6 +9,58 @@
 #include <string.h>
 #include <unistd.h>
 
+status_t
+mt_context_init (mt_context_t *context, config_t *config)
+{
+  if (pthread_mutex_init (&context->mutex, NULL) != 0)
+    {
+      print_error ("Could not initialize a mutex\n");
+      return (S_FAILURE);
+    }
+
+  if (pthread_cond_init (&context->cond_sem, NULL) != 0)
+    {
+      print_error ("Could not initialize a condition variable\n");
+      return (S_FAILURE);
+    }
+
+  if (queue_init (&context->queue) == S_FAILURE)
+    {
+      print_error ("Could not initialize a queue\n");
+      return (S_FAILURE);
+    }
+
+  context->config = config;
+  context->passwords_remaining = 0;
+  context->password[0] = 0;
+
+  return (S_SUCCESS);
+}
+
+status_t
+mt_context_destroy (mt_context_t *context)
+{
+  if (queue_destroy (&context->queue) == S_FAILURE)
+    {
+      print_error ("Could not destroy a queue\n");
+      return (S_FAILURE);
+    }
+
+  if (pthread_cond_destroy (&context->cond_sem) != 0)
+    {
+      print_error ("Could not destroy a condition variable\n");
+      return (S_FAILURE);
+    }
+
+  if (pthread_mutex_destroy (&context->mutex) != 0)
+    {
+      print_error ("Could not destroy a mutex\n");
+      return (S_FAILURE);
+    }
+
+  return (S_SUCCESS);
+}
+
 void *
 mt_password_check (void *context)
 {
@@ -83,44 +135,17 @@ run_multi (task_t *task, config_t *config)
 {
   mt_context_t context;
 
-  if (pthread_mutex_init (&context.mutex, NULL) != 0)
-    {
-      print_error ("Could not initialize a mutex\n");
-      return (false);
-    }
-
-  if (pthread_cond_init (&context.cond_sem, NULL) != 0)
-    {
-      print_error ("Could not initialize a condition variable\n");
-      return (false);
-    }
-
-  if (queue_init (&context.queue) == S_FAILURE)
-    {
-      print_error ("Could not initialize a queue\n");
-      return (false);
-    }
-
-  context.config = config;
-  context.passwords_remaining = 0;
-  context.password[0] = 0;
+  if (mt_context_init (&context, config) == S_FAILURE)
+    return (false);
 
   pthread_t threads[config->number_of_threads];
-  int active_threads = 0;
-
-  for (int i = 0; i < config->number_of_threads; ++i)
-    if (pthread_create (&threads[i], NULL, mt_password_check, (void *)&context)
-        == 0)
-      ++active_threads;
-
+  int active_threads = create_threads (threads, config->number_of_threads,
+                                       mt_password_check, &context);
   if (active_threads == 0)
-    {
-      print_error ("Could not create a single thread\n");
-      return (false);
-    }
+    return (false);
 
   // Need to test what is the best task->from value
-  task->from = 2; 
+  task->from = 2;
   task->to = config->length;
 
   brute (task, config, queue_push_wrapper, &context);
@@ -153,23 +178,8 @@ run_multi (task_t *task, config_t *config)
   if (context.password[0] != 0)
     memcpy (task->password, context.password, sizeof (context.password));
 
-  if (queue_destroy (&context.queue) == S_FAILURE)
-    {
-      print_error ("Could not destroy a queue\n");
-      return (false);
-    }
-
-  if (pthread_cond_destroy (&context.cond_sem) != 0)
-    {
-      print_error ("Could not destroy a condition variable\n");
-      return (false);
-    }
-
-  if (pthread_mutex_destroy (&context.mutex) != 0)
-    {
-      print_error ("Could not destroy a mutex\n");
-      return (false);
-    }
+  if (mt_context_destroy (&context) == S_FAILURE)
+    return (false);
 
   return (context.password[0] != 0);
 }

@@ -3,8 +3,8 @@
 
 #include "common.h"
 #include "config.h"
-#include <stdbool.h>
 #include <crypt.h>
+#include <stdbool.h>
 
 typedef struct st_context_t
 {

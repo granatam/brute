@@ -25,5 +25,7 @@ typedef enum status_t
 
 status_t print_error (const char *msg, ...);
 void cleanup_mutex_unlock (void *mutex);
+int create_threads (pthread_t *threads, int number_of_threads,
+                    void *func (void *), void *context);
 
 #endif // COMMON_H

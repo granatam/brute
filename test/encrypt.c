@@ -3,8 +3,6 @@
 #include <crypt.h>
 #include <unistd.h>
 
-#define crypt_r __crypt_r
-
 int main(int argc, char **argv) 
 {
   char *password = "abc";
