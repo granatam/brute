@@ -145,7 +145,7 @@ run_multi (task_t *task, config_t *config)
     return (false);
 
   // Need to test what is the best task->from value
-  task->from = 1;
+  task->from = (config->length < 3) ? 1 : 2;
   task->to = config->length;
 
   brute (task, config, queue_push_wrapper, &context);

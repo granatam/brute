@@ -2,12 +2,8 @@
 #define QUEUE_H
 
 #include "common.h"
-#include <pthread.h>
-#ifdef __APPLE__
 #include "semaphore.h"
-#else
-#include <semaphore.h>
-#endif
+#include <pthread.h>
 
 #define QUEUE_SIZE (8)
 
