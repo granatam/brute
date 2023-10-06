@@ -2,9 +2,14 @@
 CFLAGS=-O2 -Wall -Wpedantic -Wextra -pthread -ggdb3 -I./crypt
 OBJ=brute.o iter.o rec.o common.o main.o multi.o queue.o single.o gen.o
 TARGET=main
-LIBS+=crypt/libcrypt.a
+
+ifeq ($(shell uname), Linux)
+	LIBS+=-lcrypt
+endif
 
 ifeq ($(shell uname -s), Darwin)
+	LIBS+=crypt/libcrypt.a
+	CFLAGS+=-I./crypt
 	OBJ+=semaphore.o
 endif
 
@@ -21,7 +26,4 @@ clean:
 	@${MAKE} -C crypt clean
 
 check:
-	@${CC} test/encrypt.c -o test/encrypt -I./crypt crypt/libcrypt.a
-	@test/test1.sh
-	@test/test2.sh
-	@test/test3.sh
+	@pytest test/test.py
