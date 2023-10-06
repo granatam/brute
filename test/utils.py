@@ -26,9 +26,8 @@ def gen_password_from_alph(size, alph):
     return ''.join(random.choice(alph) for _ in range(size))
 
 
-def run_brute(passwd, alph):
+def run_brute(passwd, alph, run_mode, brute_mode):
     hash = crypt(passwd, passwd)
-    brute = './main -h {} -l {} -a {} {}'
-    single = get_output(brute.format(hash, len(str(passwd)), alph, '-s'))
-    multi = get_output(brute.format(hash, len(str(passwd)), alph, '-m'))
-    return (single, multi)
+    brute = './main -h {} -l {} -a {} -{} -{}'
+
+    return get_output(brute.format(hash, len(str(passwd)), alph, run_mode, brute_mode))
