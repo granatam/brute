@@ -1,7 +1,7 @@
 from datetime import timedelta
 import string
 from hypothesis import given, strategies as st, settings
-from utils import shuffle_password, gen_alph, gen_password_from_alph, run_brute
+from utils import shuffle_password, gen_str, run_brute
 
 
 # Password size is from 2 to 7, alphabet is just a shuffled password
@@ -19,7 +19,7 @@ def test_password_found(passwd, run_mode, brute_mode):
 @given(st.text(min_size=1, max_size=1, alphabet='smg'), st.text(min_size=1, max_size=1, alphabet='ir'))
 @settings(deadline=timedelta(seconds=5))
 def test_corner_cases(run_mode, brute_mode):
-    long_alph = gen_alph(15)
-    short_password = gen_password_from_alph(5, long_alph)
+    long_alph = gen_str(5)
+    short_password = gen_str(5, long_alph)
 
     assert run_brute(short_password, long_alph, run_mode, brute_mode) == 'Password found: {}\n'.format(short_password)
