@@ -1,21 +1,35 @@
-on:
-    push:
-      branches: [ '*' ]
-    pull_request:
-      branches: [ '*' ]
+on: [ 'push', 'pull_request' ]
   
 jobs:
-  build:
+  ubuntu:
     runs-on: ubuntu-latest
+    name: x86 Ubuntu
+    strategy:
+      matrix:
+        include:
+          - cc: gcc
+          - cc: clang
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v2
       - name: install pytest and hypothesis
         run: pip install pytest hypothesis
+      - name: update ubuntu packages
+        run: sudo apt-get update -y
       - name: install valgrind
-        run: |
-          sudo apt-get update
-          sudo apt-get install valgrind -y
+        run: sudo apt-get install valgrind -y
+      - name: make
+        run: CC=${{matrix.cc}} make 
+      - name: make check
+        run: CC=${{matrix.cc}} make check
+  macos:
+    runs-on: macos-latest
+    name: MacOS (clang)
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v2
+      - name: install pytest and hypothesis
+        run: pip install pytest hypothesis
       - name: make
         run: make
       - name: make check
