@@ -56,7 +56,9 @@ gen_worker (void *context)
       if (gen_context->cancelled || gen_context->password[0] != 0)
         break;
 
-      if (st_password_check (&current_task, &st_context))
+      current_task.to = current_task.from;
+      current_task.from = 0;
+      if (brute (&current_task, gen_context->config, st_password_check, &st_context))
         {
           memcpy (gen_context->password, current_task.password,
                   sizeof (current_task.password));
@@ -71,6 +73,8 @@ run_generator (task_t *task, config_t *config)
 {
   gen_context_t context;
 
+  task->from = (config->length < 3) ? 1 : 2;
+  task->to = config->length;
   if (gen_context_init (&context, config, task) == S_FAILURE)
     return (false);
 
