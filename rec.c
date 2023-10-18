@@ -1,12 +1,13 @@
 #include "rec.h"
 
+#ifndef __APPLE__
 bool
 brute_rec_gen_handler (task_t *task, void *context)
 {
   (void)task; // to suppress "unused parameter" warning
   rec_state_t *state = (rec_state_t *)context;
   swapcontext (&state->contexts[1], &state->contexts[0]);
-  
+
   return (false);
 }
 
@@ -56,6 +57,7 @@ brute_rec_gen (task_t *task, config_t *config,
         return (false);
     }
 }
+#endif // ifndef __APPLE__
 
 bool
 brute_rec (task_t *task, config_t *config, password_handler_t password_handler,
