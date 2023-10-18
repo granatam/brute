@@ -12,6 +12,7 @@ typedef enum
 {
   BM_ITER,
   BM_RECU,
+  BM_REC_GEN,
 } brute_mode_t;
 
 typedef struct config_t

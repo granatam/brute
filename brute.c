@@ -16,6 +16,9 @@ brute (task_t *task, config_t *config, password_handler_t password_handler,
     case BM_RECU:
       is_found = brute_rec_wrapper (task, config, password_handler, context);
       break;
+    case BM_REC_GEN:
+      is_found = brute_rec_gen (task, config, password_handler, context);
+      break;
     }
 
   return (is_found);

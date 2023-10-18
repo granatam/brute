@@ -2,11 +2,13 @@
 
 #include "brute.h"
 #include <string.h>
+#include <stdio.h>
 
 bool
 st_password_check (task_t *task, void *context)
 {
   st_context_t *st_context = (st_context_t *)context;
+  printf ("%s\n", task->password);
   char *hashed_password
       = crypt_r (task->password, st_context->hash, &st_context->data);
 
