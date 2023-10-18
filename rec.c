@@ -3,9 +3,10 @@
 bool
 brute_rec_gen_handler (task_t *task, void *context)
 {
-  (void)task;
+  (void)task; // to suppress "unused parameter" warning
   rec_state_t *state = (rec_state_t *)context;
   swapcontext (&state->contexts[1], &state->contexts[0]);
+  
   return (false);
 }
 
@@ -48,7 +49,7 @@ brute_rec_gen (task_t *task, config_t *config,
   rec_state_init (&state, task, config);
   while (true)
     {
-      if (password_handler (context, state.task))
+      if (password_handler (state.task, context))
         return (true);
       if (!rec_state_next (&state))
         return (false);
