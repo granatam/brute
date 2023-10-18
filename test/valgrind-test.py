@@ -4,7 +4,7 @@ from hypothesis import given, strategies as st, settings
 from utils import gen_str, run_valgrind
 
 
-@given(st.text(min_size=1, max_size=1, alphabet='smg'), st.text(min_size=1, max_size=1, alphabet='ir'))
+@given(st.text(min_size=1, max_size=1, alphabet='smg'), st.text(min_size=1, max_size=1, alphabet='iry'))
 @settings(deadline=None)
 def test_valgrind(run_mode, brute_mode):
     alph = gen_str(5)

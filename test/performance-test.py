@@ -2,7 +2,7 @@ from timeit import timeit
 from hypothesis import given, strategies as st, settings
 from utils import gen_str, brute_cmd, CPU_COUNT
 
-@given(st.text(min_size=1, max_size=1, alphabet='ir'))
+@given(st.text(min_size=1, max_size=1, alphabet='iry'))
 @settings(deadline=None)
 def test_performance_gen(brute_mode):
     alph = gen_str(12)
@@ -17,7 +17,7 @@ def test_performance_gen(brute_mode):
 
     assert single_time / gen_time >= CPU_COUNT - 0.4
 
-@given(st.text(min_size=1, max_size=1, alphabet='ir'))
+@given(st.text(min_size=1, max_size=1, alphabet='iry'))
 @settings(deadline=None)
 def test_performance_multi(brute_mode):
     alph = gen_str(12)

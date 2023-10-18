@@ -7,7 +7,7 @@ from utils import shuffle_password, gen_str, run_brute
 # Password size is from 2 to 7, alphabet is just a shuffled password
 @given(st.text(min_size=2, alphabet=string.ascii_letters,
                max_size=6), st.text(min_size=1, max_size=1, alphabet='smg'),
-               st.text(min_size=1, max_size=1, alphabet='ir'))
+               st.text(min_size=1, max_size=1, alphabet='iry'))
 @settings(deadline=timedelta(seconds=3))
 def test_password_found(passwd, run_mode, brute_mode):
     alph = shuffle_password(passwd)
@@ -16,7 +16,7 @@ def test_password_found(passwd, run_mode, brute_mode):
 
 
 # Test for long alphabet and short password
-@given(st.text(min_size=1, max_size=1, alphabet='smg'), st.text(min_size=1, max_size=1, alphabet='ir'))
+@given(st.text(min_size=1, max_size=1, alphabet='smg'), st.text(min_size=1, max_size=1, alphabet='iry'))
 @settings(deadline=timedelta(seconds=5))
 def test_corner_cases(run_mode, brute_mode):
     long_alph = gen_str(5)
