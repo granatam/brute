@@ -64,9 +64,9 @@ parse_params (config_t *config, int argc, char *argv[])
         case 'r':
           config->brute_mode = BM_RECU;
           break;
-    	case 'y':
-	      config->brute_mode = BM_REC_GEN;
-	      break;
+        case 'y':
+          config->brute_mode = BM_REC_GEN;
+          break;
         default:
           return (S_FAILURE);
         }

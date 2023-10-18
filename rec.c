@@ -37,7 +37,8 @@ rec_state_init (rec_state_t *state, task_t *task, config_t *config)
 bool
 rec_state_next (rec_state_t *state)
 {
-  swapcontext (&state->contexts[0], &state->contexts[1]);
+  if (!state->cancelled)
+    swapcontext (&state->contexts[0], &state->contexts[1]);
   return (!state->cancelled);
 }
 
