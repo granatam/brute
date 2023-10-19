@@ -14,8 +14,9 @@ def test_performance_gen(brute_mode):
 
     single_time = timeit(stmt = f"subprocess.check_output('{single_brute}', shell=True)", setup = "import subprocess", number = 1)
     gen_time = timeit(stmt = f"subprocess.check_output('{gen_brute}', shell=True)", setup = "import subprocess", number = 1)
+    ratio = single_time / gen_time
 
-    assert single_time / gen_time >= CPU_COUNT * 0.7
+    assert ratio >= CPU_COUNT * 0.7
 
 @given(st.text(min_size=1, max_size=1, alphabet='iry'))
 @settings(deadline=None)
@@ -29,5 +30,6 @@ def test_performance_multi(brute_mode):
 
     single_time = timeit(stmt = f"subprocess.check_output('{single_brute}', shell=True)", setup = "import subprocess", number = 1)
     multi_time = timeit(stmt = f"subprocess.check_output('{multi_brute}', shell=True)", setup = "import subprocess", number = 1)
+    ratio = single_time / multi_time
 
-    assert single_time / multi_time >= CPU_COUNT * 0.7
+    assert ratio >= CPU_COUNT * 0.7
