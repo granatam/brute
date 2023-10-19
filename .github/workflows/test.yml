@@ -5,6 +5,7 @@ jobs:
     runs-on: ubuntu-latest
     name: x86 Ubuntu
     strategy:
+      fail-fast: false
       matrix:
         include:
           - cc: gcc
