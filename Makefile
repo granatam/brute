@@ -1,5 +1,5 @@
 .PHONY: clean
-CFLAGS=-O2 -Wall -Wpedantic -Wextra -pthread -ggdb3
+CFLAGS=-O2 -Wall -Wpedantic -Wextra -pthread -gdwarf-4
 OBJ=brute.o iter.o rec.o common.o main.o multi.o queue.o single.o gen.o semaphore.o
 TARGET=main
 LIBS+=crypt/libcrypt.a
