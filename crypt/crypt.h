@@ -1,9 +1,7 @@
 #ifndef _CRYPT_H
 #define _CRYPT_H
 
-#ifdef __APPLE__
 #define hidden __attribute__((__visibility__("hidden")))
-#endif
 
 #ifdef __cplusplus
 extern "C" {
