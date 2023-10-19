@@ -4,14 +4,17 @@ OBJ=brute.o iter.o rec.o common.o main.o multi.o queue.o single.o gen.o semaphor
 TARGET=main
 LIBS+=crypt/libcrypt.a
 CFLAGS+=-I./crypt
- 
+
+TESTS=test/test.py
+WITH_PERF_TEST ?= true
+
 ifeq ($(shell uname), Linux)
-	TESTS=test/*.py
+	# No valgrind on MacOS
+	TESTS+=test/valgrind-test.py
 endif
 
-ifeq ($(shell uname -s), Darwin)
-	# No valgrind on MacOS
-	TESTS=test/performance-test.py test/test.py
+ifeq (${WITH_PERF_TEST}, true)
+	TESTS+=test/performance-test.py
 endif
 
 all: ${TARGET}
