@@ -6,7 +6,12 @@ brute_rec_gen_handler (task_t *task, void *context)
 {
   (void)task; // to suppress "unused parameter" warning
   rec_state_t *state = (rec_state_t *)context;
-  swapcontext (&state->contexts[1], &state->contexts[0]);
+
+  if (swapcontext (&state->contexts[1], &state->contexts[0]) != 0)
+    {
+      print_error ("Could not swap contexts\n");
+      state->cancelled = true;
+    }
 
   return (false);
 }
@@ -24,7 +29,12 @@ rec_state_init (rec_state_t *state, task_t *task, config_t *config)
   state->task = task;
   state->cancelled = false;
 
-  getcontext (&state->contexts[0]);
+  if (getcontext (&state->contexts[0]) != 0)
+    {
+      print_error ("Could not get context\n");
+      state->cancelled = true;
+      return;
+    }
   state->contexts[1] = state->contexts[0];
   state->contexts[1].uc_stack.ss_sp = &state->stack;
   state->contexts[1].uc_stack.ss_size = sizeof (state->stack);
@@ -32,14 +42,22 @@ rec_state_init (rec_state_t *state, task_t *task, config_t *config)
   makecontext (&state->contexts[1], (void (*) (void))brute_rec_gen_helper, 2,
                config, state);
 
-  swapcontext (&state->contexts[0], &state->contexts[1]);
+  if (swapcontext (&state->contexts[0], &state->contexts[1]) != 0)
+    {
+      print_error ("Could not swap contexts\n");
+      state->cancelled = true;
+    }
 }
 
 bool
 rec_state_next (rec_state_t *state)
 {
   if (!state->cancelled)
-    swapcontext (&state->contexts[0], &state->contexts[1]);
+    if (swapcontext (&state->contexts[0], &state->contexts[1]) != 0)
+      {
+        print_error ("Could not swap contexts\n");
+        return (false);
+      }
   return (!state->cancelled);
 }
 
