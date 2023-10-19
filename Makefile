@@ -1,11 +1,20 @@
 .PHONY: clean
-CFLAGS=-O2 -Wall -Wpedantic -Wextra -pthread -ggdb3 -I./crypt
-OBJ=brute.o iter.o rec.o common.o main.o multi.o queue.o single.o gen.o
+CFLAGS=-O2 -Wall -Wpedantic -Wextra -pthread -gdwarf-4
+OBJ=brute.o iter.o rec.o common.o main.o multi.o queue.o single.o gen.o semaphore.o
 TARGET=main
 LIBS+=crypt/libcrypt.a
+CFLAGS+=-I./crypt
 
-ifeq ($(shell uname -s), Darwin)
-	OBJ+=semaphore.o
+TESTS=test/test.py
+WITH_PERF_TEST ?= true
+
+ifeq ($(shell uname), Linux)
+	# No valgrind on MacOS
+	TESTS+=test/valgrind-test.py
+endif
+
+ifeq (${WITH_PERF_TEST}, true)
+	TESTS+=test/performance-test.py
 endif
 
 all: ${TARGET}
@@ -21,7 +30,4 @@ clean:
 	@${MAKE} -C crypt clean
 
 check:
-	@${CC} test/encrypt.c -o test/encrypt -I./crypt crypt/libcrypt.a
-	@test/test1.sh
-	@test/test2.sh
-	@test/test3.sh
+	@pytest ${TESTS}

@@ -1,6 +1,9 @@
+.hypothesis
+.pytest_cache
 .DS_Store
-main
 .vscode
+__pycache__
+main
 *.o
 *.a
 encrypt

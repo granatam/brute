@@ -15,7 +15,7 @@ status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
-  while ((opt = getopt (argc, argv, "l:a:h:t:smgir")) != -1)
+  while ((opt = getopt (argc, argv, "l:a:h:t:smgiry")) != -1)
     {
       switch (opt)
         {
@@ -63,6 +63,9 @@ parse_params (config_t *config, int argc, char *argv[])
           break;
         case 'r':
           config->brute_mode = BM_RECU;
+          break;
+        case 'y':
+          config->brute_mode = BM_REC_GEN;
           break;
         default:
           return (S_FAILURE);
