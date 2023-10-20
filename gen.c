@@ -148,6 +148,7 @@ run_generator (task_t *task, config_t *config)
   return (context.password[0] != 0);
 
 fail:
-  free (context.state);
+  if (context.state)
+    free (context.state);
   return (false);
 }
