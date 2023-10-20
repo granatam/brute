@@ -25,14 +25,14 @@ gen_context_init (gen_context_t *context, config_t *config, task_t *task)
     case BM_REC_GEN:
 #ifndef __APPLE__
       if (!(context->state = malloc (sizeof (rec_state_t))))
-        goto malloc_failure;
+        goto malloc_fail;
       rec_state_init (context->state, task, config);
       context->state_next = (bool (*) (void *))rec_state_next;
       break;
 #endif
     case BM_ITER:
       if (!(context->state = malloc (sizeof (iter_state_t))))
-        goto malloc_failure;
+        goto malloc_fail;
       iter_state_init (context->state, config->alph, task);
       context->state_next = (bool (*) (void *))iter_state_next;
       break;
@@ -44,7 +44,7 @@ gen_context_init (gen_context_t *context, config_t *config, task_t *task)
 
   return (S_SUCCESS);
 
-malloc_failure:
+malloc_fail:
   print_error ("Could not allocate memory for context state\n");
   return (S_FAILURE);
 }
@@ -114,7 +114,11 @@ run_generator (task_t *task, config_t *config)
   task->from = (config->length < 3) ? 1 : 2;
   task->to = config->length;
   if (gen_context_init (&context, config, task) == S_FAILURE)
-    return (false);
+    {
+      if (context.state)
+        free (context.state);
+      return (false);
+    }
 
   int number_of_threads
       = (config->number_of_threads == 1) ? 1 : config->number_of_threads - 1;
@@ -123,7 +127,7 @@ run_generator (task_t *task, config_t *config)
   int active_threads
       = create_threads (threads, number_of_threads, gen_worker, &context);
   if (active_threads == 0)
-    return (false);
+    goto fail;
 
   gen_worker (&context);
 
@@ -133,7 +137,7 @@ run_generator (task_t *task, config_t *config)
   if (pthread_mutex_destroy (&context.mutex) != 0)
     {
       print_error ("Could not destroy a mutex\n");
-      return (false);
+      goto fail;
     }
 
   if (context.password[0] != 0)
@@ -142,4 +146,8 @@ run_generator (task_t *task, config_t *config)
   free (context.state);
 
   return (context.password[0] != 0);
+
+fail:
+  free (context.state);
+  return (false);
 }
