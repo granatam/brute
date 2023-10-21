@@ -16,18 +16,20 @@ iter_state_init (iter_state_t *state, char *alph, task_t *task)
 bool
 iter_state_next (iter_state_t *state)
 {
+  task_t *task = state->base_state.task;
+  
   int pos;
-  for (pos = state->base_state.task->to - 1;
-       pos >= state->base_state.task->from && state->idx[pos] == state->alph_size; --pos)
+  for (pos = task->to - 1;
+       pos >= task->from && state->idx[pos] == state->alph_size; --pos)
     {
       state->idx[pos] = 0;
-      state->base_state.task->password[pos] = state->alph[state->idx[pos]];
+      task->password[pos] = state->alph[state->idx[pos]];
     }
 
-  if (pos < state->base_state.task->from)
+  if (pos < task->from)
     return (false);
 
-  state->base_state.task->password[pos] = state->alph[++state->idx[pos]];
+  task->password[pos] = state->alph[++state->idx[pos]];
 
   return (true);
 }
