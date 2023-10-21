@@ -26,14 +26,14 @@ gen_context_init (gen_context_t *context, config_t *config, task_t *task)
 #ifndef __APPLE__
       if (!(context->state = malloc (sizeof (rec_state_t))))
         goto malloc_fail;
-      rec_state_init (context->state, task, config);
+      rec_state_init ((rec_state_t *)context->state, task, config);
       context->state_next = (bool (*) (void *))rec_state_next;
       break;
 #endif
     case BM_ITER:
       if (!(context->state = malloc (sizeof (iter_state_t))))
         goto malloc_fail;
-      iter_state_init (context->state, config->alph, task);
+      iter_state_init ((iter_state_t *)context->state, config->alph, task);
       context->state_next = (bool (*) (void *))iter_state_next;
       break;
     }
@@ -67,20 +67,7 @@ gen_worker (void *context)
           return (NULL);
         }
 
-      task_t current_task;
-
-      switch (gen_context->config->brute_mode)
-        {
-        case BM_RECU:
-        case BM_REC_GEN:
-#ifndef __APPLE__
-          current_task = *((rec_state_t *)gen_context->state)->task;
-          break;
-#endif
-        case BM_ITER:
-          current_task = *((iter_state_t *)gen_context->state)->task;
-          break;
-        }
+      task_t current_task = *gen_context->state->task;
 
       if (!gen_context->cancelled && gen_context->password[0] == 0)
         gen_context->cancelled = !gen_context->state_next (gen_context->state);

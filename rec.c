@@ -19,14 +19,14 @@ brute_rec_gen_handler (task_t *task, void *context)
 void
 brute_rec_gen_helper (config_t *config, rec_state_t *state)
 {
-  brute_rec_wrapper (state->task, config, brute_rec_gen_handler, state);
+  brute_rec_wrapper (state->base_state.task, config, brute_rec_gen_handler, state);
   state->cancelled = true;
 }
 
 void
 rec_state_init (rec_state_t *state, task_t *task, config_t *config)
 {
-  state->task = task;
+  state->base_state.task = task;
   state->cancelled = false;
 
   if (getcontext (&state->contexts[0]) != 0)
@@ -69,7 +69,7 @@ brute_rec_gen (task_t *task, config_t *config,
   rec_state_init (&state, task, config);
   while (true)
     {
-      if (password_handler (state.task, context))
+      if (password_handler (state.base_state.task, context))
         return (true);
       if (!rec_state_next (&state))
         return (false);
