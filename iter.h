@@ -6,10 +6,10 @@
 
 typedef struct iter_state_t
 {
+  base_state_t base_state;
   char *alph;
   int alph_size;
   int idx[MAX_PASSWORD_LENGTH];
-  task_t *task;
 } iter_state_t;
 
 void iter_state_init (iter_state_t *state, char *alph, task_t *task);

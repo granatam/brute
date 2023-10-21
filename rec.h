@@ -12,9 +12,9 @@
 
 typedef struct rec_state_t
 {
+  base_state_t base_state;
   ucontext_t contexts[2];
   char stack[STACK_SIZE];
-  task_t *task;
   bool cancelled;
 } rec_state_t;
 

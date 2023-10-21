@@ -1,7 +1,11 @@
 #include "gen.h"
 
 #include "brute.h"
+#include "common.h"
+#include "iter.h"
+#include "rec.h"
 #include "single.h"
+#include <stdlib.h>
 #include <string.h>
 
 status_t
@@ -16,13 +20,34 @@ gen_context_init (gen_context_t *context, config_t *config, task_t *task)
   task->from = 0;
   task->to = config->length;
 
-  iter_state_init (&context->state, config->alph, task);
+  switch (config->brute_mode)
+    {
+    case BM_RECU:
+    case BM_REC_GEN:
+#ifndef __APPLE__
+      if (!(context->state = malloc (sizeof (rec_state_t))))
+        goto malloc_fail;
+      rec_state_init ((rec_state_t *)context->state, task, config);
+      context->state_next = (bool (*) (base_state_t *))rec_state_next;
+      break;
+#endif
+    case BM_ITER:
+      if (!(context->state = malloc (sizeof (iter_state_t))))
+        goto malloc_fail;
+      iter_state_init ((iter_state_t *)context->state, config->alph, task);
+      context->state_next = (bool (*) (base_state_t *))iter_state_next;
+      break;
+    }
 
   context->config = config;
   context->cancelled = false;
   context->password[0] = 0;
 
   return (S_SUCCESS);
+
+malloc_fail:
+  print_error ("Could not allocate memory for context state\n");
+  return (S_FAILURE);
 }
 
 void *
@@ -43,10 +68,10 @@ gen_worker (void *context)
           return (NULL);
         }
 
-      task_t current_task = *gen_context->state.task;
+      task_t current_task = *gen_context->state->task;
 
       if (!gen_context->cancelled && gen_context->password[0] == 0)
-        gen_context->cancelled = !iter_state_next (&gen_context->state);
+        gen_context->cancelled = !gen_context->state_next (gen_context->state);
 
       if (pthread_mutex_unlock (&gen_context->mutex) != 0)
         {
@@ -58,7 +83,8 @@ gen_worker (void *context)
 
       current_task.to = current_task.from;
       current_task.from = 0;
-      if (brute (&current_task, gen_context->config, st_password_check, &st_context))
+      if (brute (&current_task, gen_context->config, st_password_check,
+                 &st_context))
         {
           memcpy (gen_context->password, current_task.password,
                   sizeof (current_task.password));
@@ -76,7 +102,11 @@ run_generator (task_t *task, config_t *config)
   task->from = (config->length < 3) ? 1 : 2;
   task->to = config->length;
   if (gen_context_init (&context, config, task) == S_FAILURE)
-    return (false);
+    {
+      if (context.state)
+        free (context.state);
+      return (false);
+    }
 
   int number_of_threads
       = (config->number_of_threads == 1) ? 1 : config->number_of_threads - 1;
@@ -85,7 +115,7 @@ run_generator (task_t *task, config_t *config)
   int active_threads
       = create_threads (threads, number_of_threads, gen_worker, &context);
   if (active_threads == 0)
-    return (false);
+    goto fail;
 
   gen_worker (&context);
 
@@ -95,11 +125,18 @@ run_generator (task_t *task, config_t *config)
   if (pthread_mutex_destroy (&context.mutex) != 0)
     {
       print_error ("Could not destroy a mutex\n");
-      return (false);
+      goto fail;
     }
 
   if (context.password[0] != 0)
     memcpy (task->password, context.password, sizeof (context.password));
 
+  free (context.state);
+
   return (context.password[0] != 0);
+
+fail:
+  if (context.state)
+    free (context.state);
+  return (false);
 }
