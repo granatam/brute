@@ -29,11 +29,11 @@ create_threads (pthread_t *threads, int number_of_threads, void *func (void *),
 {
   int active_threads = 0;
   for (int i = 0; i < number_of_threads; ++i)
-    if (pthread_create (&threads[i], NULL, func, context) == 0)
+    if (pthread_create (&threads[active_threads], NULL, func, context) == 0)
       ++active_threads;
 
   if (active_threads == 0)
     print_error ("Could not create a single thread\n");
 
-  return active_threads;
+  return (active_threads);
 }

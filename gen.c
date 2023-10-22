@@ -5,6 +5,7 @@
 #include "iter.h"
 #include "rec.h"
 #include "single.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -48,6 +49,23 @@ gen_context_init (gen_context_t *context, config_t *config, task_t *task)
 malloc_fail:
   print_error ("Could not allocate memory for context state\n");
   return (S_FAILURE);
+}
+
+status_t
+gen_context_destroy (gen_context_t *context)
+{
+  context->cancelled = true;
+
+  if (pthread_mutex_destroy (&context->mutex) != 0)
+    {
+      print_error ("Could not destroy a mutex\n");
+      return (S_FAILURE);
+    }
+
+  if (context->state)
+    free (context->state);
+
+  return (S_SUCCESS);
 }
 
 void *
@@ -103,8 +121,7 @@ run_generator (task_t *task, config_t *config)
   task->to = config->length;
   if (gen_context_init (&context, config, task) == S_FAILURE)
     {
-      if (context.state)
-        free (context.state);
+      gen_context_destroy (&context);
       return (false);
     }
 
@@ -131,12 +148,11 @@ run_generator (task_t *task, config_t *config)
   if (context.password[0] != 0)
     memcpy (task->password, context.password, sizeof (context.password));
 
-  free (context.state);
+  gen_context_destroy (&context);
 
   return (context.password[0] != 0);
 
 fail:
-  if (context.state)
-    free (context.state);
+  gen_context_destroy (&context);
   return (false);
 }

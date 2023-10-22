@@ -23,7 +23,7 @@ typedef enum status_t
   S_FAILURE,
 } status_t;
 
-typedef struct base_state_t 
+typedef struct base_state_t
 {
   task_t *task;
 } base_state_t;

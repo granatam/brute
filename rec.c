@@ -19,7 +19,8 @@ brute_rec_gen_handler (task_t *task, void *context)
 void
 brute_rec_gen_helper (config_t *config, rec_state_t *state)
 {
-  brute_rec_wrapper (state->base_state.task, config, brute_rec_gen_handler, state);
+  brute_rec_wrapper (state->base_state.task, config, brute_rec_gen_handler,
+                     state);
   state->cancelled = true;
 }
 
