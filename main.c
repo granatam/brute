@@ -17,7 +17,7 @@ status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
-  while ((opt = getopt (argc, argv, "l:a:h:t:dmgcsiry")) != -1)
+  while ((opt = getopt (argc, argv, "l:a:h:t:p:b:dmgcsiry")) != -1)
     {
       switch (opt)
         {
@@ -51,6 +51,18 @@ parse_params (config_t *config, int argc, char *argv[])
               }
             break;
           }
+        case 'p':
+          config->port = atoi (optarg);
+          if (config->length <= 0 || config->length > MAX_TCP_PORT)
+            {
+              print_error ("Port must be a number between 0 and %d\n",
+                           MAX_TCP_PORT);
+              return (S_FAILURE);
+            }
+          break;
+        case 'b':
+          config->addr = optarg;
+          break;
         case 'd': /* default mode */
           config->run_mode = RM_SINGLE;
           break;
@@ -93,6 +105,8 @@ main (int argc, char *argv[])
     .number_of_threads = sysconf (_SC_NPROCESSORS_ONLN),
     .alph = "abc",
     .hash = "abFZSxKKdq5s6", /* crypt ("abc", "abc"); */
+    .port = 9000,
+    .addr = "127.0.0.1",
   };
 
   if (parse_params (&config, argc, argv) == S_FAILURE)

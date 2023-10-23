@@ -4,6 +4,7 @@
 #include "common.h"
 #include "single.h"
 
+#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <sys/socket.h>
@@ -21,8 +22,8 @@ run_client (task_t *task, config_t *config)
 
   struct sockaddr_in addr;
   addr.sin_family = AF_INET;
-  addr.sin_addr.s_addr = INADDR_ANY;
-  addr.sin_port = htons (9000);
+  addr.sin_addr.s_addr = inet_addr (config->addr);
+  addr.sin_port = htons (config->port);
 
   if (connect (socket_fd, (struct sockaddr *)&addr, sizeof (addr)) == -1)
     {
@@ -30,8 +31,23 @@ run_client (task_t *task, config_t *config)
       return (false);
     }
 
+  int hash_size;
+  if (recv_wrapper (socket_fd, &hash_size, sizeof (int), 0) == S_FAILURE)
+    {
+      print_error ("Could not receive hash size from server\n");
+      close (socket_fd);
+      return (false);
+    }
+
+  char hash[hash_size];
+  if (recv_wrapper (socket_fd, hash, hash_size, 0) == S_FAILURE)
+    {
+      print_error ("Could not receive hash from server\n");
+      goto fail;
+    }
+
   st_context_t st_context = {
-    .hash = config->hash,
+    .hash = hash,
     .data = { .initialized = 0 },
   };
 
@@ -70,6 +86,7 @@ run_client (task_t *task, config_t *config)
           goto fail;
         }
     }
+
 fail:
   close (socket_fd);
   return (false);

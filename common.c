@@ -67,7 +67,7 @@ recv_wrapper (int socket_fd, void *buf, int len, int flags)
       bytes += bytes_read;
     }
 
-  return 0;
+  return S_SUCCESS;
 }
 
 status_t
@@ -84,5 +84,5 @@ send_wrapper (int socket_fd, void *buf, int len, int flags)
       bytes += bytes_written;
     }
 
-  return 0;
+  return S_SUCCESS;
 }

@@ -4,6 +4,7 @@
 #include "common.h"
 #include "multi.h"
 
+#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -11,11 +12,29 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+// TODO: Implement delegate_task
+// status_t delegate_task (int socket_fd, task_t *task, password_t password);
+
 void *
 handle_client (void *arg)
 {
   cl_context_t *cl_context = (cl_context_t *)arg;
   serv_context_t *context = cl_context->context;
+
+  char *hash = context->context.config->hash;
+  int hash_size = strlen (hash);
+  if (send_wrapper (cl_context->socket_fd, &hash_size, sizeof (int), 0)
+      == S_FAILURE)
+    {
+      print_error ("Could not send hash size to client\n");
+      return (NULL);
+    }
+
+  if (send_wrapper (cl_context->socket_fd, hash, hash_size, 0) == S_FAILURE)
+    {
+      print_error ("Could not send hash to client\n");
+      return (NULL);
+    }
 
   while (true)
     {
@@ -26,6 +45,7 @@ handle_client (void *arg)
       task.to = task.from;
       task.from = 0;
 
+      // delegate_task
       if (send_wrapper (cl_context->socket_fd, &task, sizeof (task), 0)
           == S_FAILURE)
         {
@@ -126,8 +146,8 @@ run_server (task_t *task, config_t *config)
 
   struct sockaddr_in serv_addr;
   serv_addr.sin_family = AF_INET;
-  serv_addr.sin_addr.s_addr = INADDR_ANY;
-  serv_addr.sin_port = htons (9000);
+  serv_addr.sin_addr.s_addr = inet_addr (config->addr);
+  serv_addr.sin_port = htons (config->port);
 
   if (bind (context.socket_fd, (struct sockaddr *)&serv_addr,
             sizeof (serv_addr))
