@@ -9,7 +9,7 @@ def test_performance_gen(brute_mode):
     passwd = gen_str(5, alph)
 
 
-    single_brute = brute_cmd(passwd, alph, 's', brute_mode)
+    single_brute = brute_cmd(passwd, alph, 'd', brute_mode)
     gen_brute = brute_cmd(passwd, alph, 'g', brute_mode)
 
     single_time = timeit(stmt = f"subprocess.check_output('{single_brute}', shell=True)", setup = "import subprocess", number = 1)
@@ -25,7 +25,7 @@ def test_performance_multi(brute_mode):
     passwd = gen_str(5, alph)
 
 
-    single_brute = brute_cmd(passwd, alph, 's', brute_mode)
+    single_brute = brute_cmd(passwd, alph, 'd', brute_mode)
     multi_brute = brute_cmd(passwd, alph, 'm', brute_mode)
 
     single_time = timeit(stmt = f"subprocess.check_output('{single_brute}', shell=True)", setup = "import subprocess", number = 1)
