@@ -32,5 +32,7 @@ status_t print_error (const char *msg, ...);
 void cleanup_mutex_unlock (void *mutex);
 int create_threads (pthread_t *threads, int number_of_threads,
                     void *func (void *), void *context);
+status_t recv_wrapper (int socket_fd, void *buf, int len, int flags);
+status_t send_wrapper (int socket_fd, void *buf, int len, int flags);
 
 #endif // COMMON_H

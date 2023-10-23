@@ -26,14 +26,16 @@ handle_client (void *arg)
       task.to = task.from;
       task.from = 0;
 
-      if (send (cl_context->socket_fd, &task, sizeof (task), 0) == -1)
+      if (send_wrapper (cl_context->socket_fd, &task, sizeof (task), 0)
+          == S_FAILURE)
         {
           print_error ("Could not send data to client\n");
           return (NULL);
         }
 
       int size;
-      if (recv (cl_context->socket_fd, &size, sizeof (int), 0) == -1)
+      if (recv_wrapper (cl_context->socket_fd, &size, sizeof (int), 0)
+          == S_FAILURE)
         {
           print_error ("Could not receive data from client\n");
           return (NULL);
@@ -41,14 +43,13 @@ handle_client (void *arg)
 
       if (size != 0)
         {
-          if (recv (cl_context->socket_fd, task.password,
-                    sizeof (task.password), 0)
-              == -1)
+          if (recv_wrapper (cl_context->socket_fd, task.password,
+                            sizeof (task.password), 0)
+              == S_FAILURE)
             {
               print_error ("Could not receive data from client\n");
               return (NULL);
             }
-
           memcpy (context->context.password, task.password,
                   sizeof (task.password));
         }
@@ -103,8 +104,6 @@ handle_clients (void *arg)
           print_error ("Could not create client thread\n");
           continue;
         }
-
-      pthread_join (client_thread, NULL);
     }
 
   return (NULL);

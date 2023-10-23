@@ -37,7 +37,7 @@ run_client (task_t *task, config_t *config)
 
   while (true)
     {
-      if (recv (socket_fd, task, sizeof (task_t), 0) == -1)
+      if (recv_wrapper (socket_fd, task, sizeof (task_t), 0) == S_FAILURE)
         {
           print_error ("Could not receive data from server\n");
           goto fail;
@@ -46,29 +46,30 @@ run_client (task_t *task, config_t *config)
       if (brute (task, config, st_password_check, &st_context))
         {
           int password_size = sizeof (task->password);
-          if (send (socket_fd, &password_size, sizeof (int), 0) == -1)
+          if (send_wrapper (socket_fd, &password_size, sizeof (int), 0)
+              == S_FAILURE)
             {
               print_error ("Could not send data to server\n");
               goto fail;
             }
 
-          if (send (socket_fd, task->password, password_size, 0) == -1)
+          if (send_wrapper (socket_fd, task->password, password_size, 0)
+              == S_FAILURE)
             {
               print_error ("Could not send data to server\n");
               goto fail;
             }
-
           return (true);
         }
 
       int wrong_password = 0;
-      if (send (socket_fd, &wrong_password, sizeof (int), 0) == -1)
+      if (send_wrapper (socket_fd, &wrong_password, sizeof (int), 0)
+          == S_FAILURE)
         {
           print_error ("Could not send data to server\n");
           goto fail;
         }
     }
-
 fail:
   close (socket_fd);
   return (false);
