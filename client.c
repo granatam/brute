@@ -35,57 +35,58 @@ run_client (task_t *task, config_t *config)
   if (recv_wrapper (socket_fd, &hash_size, sizeof (int), 0) == S_FAILURE)
     {
       print_error ("Could not receive hash size from server\n");
-      close (socket_fd);
-      return (false);
-    }
-
-  char hash[hash_size];
-  if (recv_wrapper (socket_fd, hash, hash_size, 0) == S_FAILURE)
-    {
-      print_error ("Could not receive hash from server\n");
       goto fail;
     }
 
-  st_context_t st_context = {
-    .hash = hash,
-    .data = { .initialized = 0 },
-  };
+  {
+    char hash[hash_size];
+    if (recv_wrapper (socket_fd, hash, hash_size, 0) == S_FAILURE)
+      {
+        print_error ("Could not receive hash from server\n");
+        goto fail;
+      }
 
-  while (true)
-    {
-      if (recv_wrapper (socket_fd, task, sizeof (task_t), 0) == S_FAILURE)
-        {
-          print_error ("Could not receive data from server\n");
-          goto fail;
-        }
+    st_context_t st_context = {
+      .hash = hash,
+      .data = { .initialized = 0 },
+    };
 
-      if (brute (task, config, st_password_check, &st_context))
-        {
-          int password_size = sizeof (task->password);
-          if (send_wrapper (socket_fd, &password_size, sizeof (int), 0)
-              == S_FAILURE)
-            {
-              print_error ("Could not send data to server\n");
-              goto fail;
-            }
+    while (true)
+      {
+        if (recv_wrapper (socket_fd, task, sizeof (task_t), 0) == S_FAILURE)
+          {
+            print_error ("Could not receive data from server\n");
+            goto fail;
+          }
 
-          if (send_wrapper (socket_fd, task->password, password_size, 0)
-              == S_FAILURE)
-            {
-              print_error ("Could not send data to server\n");
-              goto fail;
-            }
-          return (true);
-        }
+        if (brute (task, config, st_password_check, &st_context))
+          {
+            int password_size = sizeof (task->password);
+            if (send_wrapper (socket_fd, &password_size, sizeof (int), 0)
+                == S_FAILURE)
+              {
+                print_error ("Could not send data to server\n");
+                goto fail;
+              }
 
-      int wrong_password = 0;
-      if (send_wrapper (socket_fd, &wrong_password, sizeof (int), 0)
-          == S_FAILURE)
-        {
-          print_error ("Could not send data to server\n");
-          goto fail;
-        }
-    }
+            if (send_wrapper (socket_fd, task->password, password_size, 0)
+                == S_FAILURE)
+              {
+                print_error ("Could not send data to server\n");
+                goto fail;
+              }
+            return (true);
+          }
+
+        int wrong_password = 0;
+        if (send_wrapper (socket_fd, &wrong_password, sizeof (int), 0)
+            == S_FAILURE)
+          {
+            print_error ("Could not send data to server\n");
+            goto fail;
+          }
+      }
+  }
 
 fail:
   close (socket_fd);
