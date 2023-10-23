@@ -12,8 +12,34 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-// TODO: Implement delegate_task
-// status_t delegate_task (int socket_fd, task_t *task, password_t password);
+status_t
+delegate_task (int socket_fd, task_t *task, password_t password)
+{
+  if (send_wrapper (socket_fd, task, sizeof (task_t), 0) == S_FAILURE)
+    {
+      print_error ("Could not send data to client\n");
+      return (S_FAILURE);
+    }
+
+  int size;
+  if (recv_wrapper (socket_fd, &size, sizeof (int), 0) == S_FAILURE)
+    {
+      print_error ("Could not receive data from client\n");
+      return (S_FAILURE);
+    }
+
+  if (size != 0)
+    {
+      if (recv_wrapper (socket_fd, password, sizeof (password_t), 0)
+          == S_FAILURE)
+        {
+          print_error ("Could not receive data from client\n");
+          return (S_FAILURE);
+        }
+    }
+
+  return (S_SUCCESS);
+}
 
 void *
 handle_client (void *arg)
@@ -45,33 +71,13 @@ handle_client (void *arg)
       task.to = task.from;
       task.from = 0;
 
-      // delegate_task
-      if (send_wrapper (cl_context->socket_fd, &task, sizeof (task), 0)
+      if (delegate_task (cl_context->socket_fd, &task,
+                         context->context.password)
           == S_FAILURE)
         {
-          print_error ("Could not send data to client\n");
+          if (queue_push (&context->context.queue, &task) == S_FAILURE)
+            print_error ("Could not push to the queue\n");
           return (NULL);
-        }
-
-      int size;
-      if (recv_wrapper (cl_context->socket_fd, &size, sizeof (int), 0)
-          == S_FAILURE)
-        {
-          print_error ("Could not receive data from client\n");
-          return (NULL);
-        }
-
-      if (size != 0)
-        {
-          if (recv_wrapper (cl_context->socket_fd, task.password,
-                            sizeof (task.password), 0)
-              == S_FAILURE)
-            {
-              print_error ("Could not receive data from client\n");
-              return (NULL);
-            }
-          memcpy (context->context.password, task.password,
-                  sizeof (task.password));
         }
 
       if (pthread_mutex_lock (&context->context.mutex) != 0)
