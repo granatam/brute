@@ -45,7 +45,7 @@ run_client (task_t *task, config_t *config)
 
       if (brute (task, config, st_password_check, &st_context))
         {
-          int password_size = (int)sizeof (task->password);
+          int password_size = sizeof (task->password);
           if (send (socket_fd, &password_size, sizeof (int), 0) == -1)
             {
               print_error ("Could not send data to server\n");

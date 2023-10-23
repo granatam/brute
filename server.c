@@ -26,8 +26,7 @@ handle_client (void *arg)
       task.to = task.from;
       task.from = 0;
 
-      if (send (cl_context->socket_fd, (char *)&task, sizeof (task_t), 0)
-          == -1)
+      if (send (cl_context->socket_fd, &task, sizeof (task), 0) == -1)
         {
           print_error ("Could not send data to client\n");
           return (NULL);
@@ -104,6 +103,8 @@ handle_clients (void *arg)
           print_error ("Could not create client thread\n");
           continue;
         }
+
+      pthread_join (client_thread, NULL);
     }
 
   return (NULL);
