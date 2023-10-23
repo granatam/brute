@@ -1,6 +1,6 @@
 #include "common.h"
 
-#define _GNU_SOURCE 1
+#define __USE_GNU
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -9,15 +9,13 @@
 
 #ifndef TEMP_FAILURE_RETRY
 #define TEMP_FAILURE_RETRY(expression)                                        \
-  ({                                                                          \
-    __typeof (expression) __result;                                           \
+  (__extension__ ({                                                           \
+    long int __result;                                                        \
     do                                                                        \
-      {                                                                       \
-        __result = (expression);                                              \
-      }                                                                       \
-    while (__result == -1 && errno == EINTR);                                 \
+      __result = (long int)(expression);                                      \
+    while (__result == -1L && errno == EINTR);                                \
     __result;                                                                 \
-  })
+  }))
 #endif
 
 __attribute__ ((format (printf, 1, 2))) status_t
@@ -58,13 +56,15 @@ create_threads (pthread_t *threads, int number_of_threads, void *func (void *),
 status_t
 recv_wrapper (int socket_fd, void *buf, int len, int flags)
 {
+  char *bytes = (char *)buf;
   while (len > 0)
     {
-      int bytes_read = TEMP_FAILURE_RETRY (recv (socket_fd, buf, len, flags));
+      int bytes_read
+          = TEMP_FAILURE_RETRY (recv (socket_fd, bytes, len, flags));
       if (bytes_read == -1)
         return (S_FAILURE);
       len -= bytes_read;
-      buf += bytes_read;
+      bytes += bytes_read;
     }
 
   return 0;
@@ -73,14 +73,15 @@ recv_wrapper (int socket_fd, void *buf, int len, int flags)
 status_t
 send_wrapper (int socket_fd, void *buf, int len, int flags)
 {
+  char *bytes = (char *)buf;
   while (len > 0)
     {
       int bytes_written
-          = TEMP_FAILURE_RETRY (send (socket_fd, buf, len, flags));
+          = TEMP_FAILURE_RETRY (send (socket_fd, bytes, len, flags));
       if (bytes_written == -1)
         return (S_FAILURE);
       len -= bytes_written;
-      buf += bytes_written;
+      bytes += bytes_written;
     }
 
   return 0;
