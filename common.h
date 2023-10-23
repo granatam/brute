@@ -5,6 +5,7 @@
 #include <stdbool.h>
 
 #define MAX_PASSWORD_LENGTH (7)
+#define HASH_LENGTH (13)
 
 typedef char password_t[MAX_PASSWORD_LENGTH + 1];
 

@@ -47,16 +47,9 @@ handle_client (void *arg)
   cl_context_t *cl_context = (cl_context_t *)arg;
   serv_context_t *context = cl_context->context;
 
-  char *hash = context->context.config->hash;
-  int hash_size = strlen (hash);
-  if (send_wrapper (cl_context->socket_fd, &hash_size, sizeof (int), 0)
+  if (send_wrapper (cl_context->socket_fd, context->context.config->hash,
+                    HASH_LENGTH, 0)
       == S_FAILURE)
-    {
-      print_error ("Could not send hash size to client\n");
-      return (NULL);
-    }
-
-  if (send_wrapper (cl_context->socket_fd, hash, hash_size, 0) == S_FAILURE)
     {
       print_error ("Could not send hash to client\n");
       return (NULL);
