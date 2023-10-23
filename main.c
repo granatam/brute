@@ -11,6 +11,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 status_t
@@ -113,7 +114,7 @@ main (int argc, char *argv[])
     return (EXIT_FAILURE);
 
   task_t task;
-  task.password[config.length] = '\0';
+  memset (task.password, 0, sizeof (task.password));
 
   bool is_found = false;
   switch (config.run_mode)
