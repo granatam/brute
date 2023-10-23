@@ -6,6 +6,8 @@ typedef enum
   RM_SINGLE,
   RM_MULTI,
   RM_GENERATOR,
+  RM_CLIENT,
+  RM_SERVER,
 } run_mode_t;
 
 typedef enum

@@ -15,6 +15,9 @@ typedef struct mt_context_t
   pthread_cond_t cond_sem;
 } mt_context_t;
 
+status_t mt_context_init (mt_context_t *context, config_t *config);
+status_t mt_context_destroy (mt_context_t *context);
+
 void *mt_password_check (void *context);
 bool queue_push_wrapper (task_t *task, void *context);
 bool run_multi (task_t *task, config_t *config);

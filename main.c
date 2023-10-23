@@ -1,9 +1,11 @@
 #include "brute.h"
+#include "client.h"
 #include "common.h"
 #include "config.h"
 #include "gen.h"
 #include "multi.h"
 #include "queue.h"
+#include "server.h"
 #include "single.h"
 
 #include <stdbool.h>
@@ -15,7 +17,7 @@ status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
-  while ((opt = getopt (argc, argv, "l:a:h:t:smgiry")) != -1)
+  while ((opt = getopt (argc, argv, "l:a:h:t:dmgcsiry")) != -1)
     {
       switch (opt)
         {
@@ -49,7 +51,7 @@ parse_params (config_t *config, int argc, char *argv[])
               }
             break;
           }
-        case 's':
+        case 'd': /* default mode */
           config->run_mode = RM_SINGLE;
           break;
         case 'm':
@@ -57,6 +59,12 @@ parse_params (config_t *config, int argc, char *argv[])
           break;
         case 'g':
           config->run_mode = RM_GENERATOR;
+          break;
+        case 'c':
+          config->run_mode = RM_CLIENT;
+          break;
+        case 's':
+          config->run_mode = RM_SERVER;
           break;
         case 'i':
           config->brute_mode = BM_ITER;
@@ -104,6 +112,12 @@ main (int argc, char *argv[])
       break;
     case RM_GENERATOR:
       is_found = run_generator (&task, &config);
+      break;
+    case RM_SERVER:
+      is_found = run_server (&task, &config);
+      break;
+    case RM_CLIENT:
+      is_found = run_client (&task, &config);
       break;
     }
 
