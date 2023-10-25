@@ -3,14 +3,40 @@
 #include "brute.h"
 #include "common.h"
 #include "multi.h"
+#include "thread_pool.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+
+status_t
+serv_context_init (serv_context_t *context, config_t *config)
+{
+  if (mt_context_init ((mt_context_t *)context, config) == S_FAILURE)
+    return (S_FAILURE);
+
+  if (thread_pool_init (&context->thread_pool) == S_FAILURE)
+    return (S_FAILURE);
+
+  return (S_SUCCESS);
+}
+
+status_t
+serv_context_destroy (serv_context_t *context)
+{
+  if (mt_context_destroy ((mt_context_t *)context) == S_FAILURE)
+    return (S_FAILURE);
+
+  if (thread_pool_cancel (&context->thread_pool) == S_FAILURE)
+    return (S_FAILURE);
+
+  return (S_SUCCESS);
+}
 
 status_t
 delegate_task (int socket_fd, task_t *task, password_t password)
@@ -93,6 +119,7 @@ handle_client (void *arg)
     }
 
   close (context->socket_fd);
+  thread_pool_remove (&context->thread_pool, pthread_self ());
 
   return (NULL);
 }
@@ -116,13 +143,15 @@ handle_clients (void *arg)
         .socket_fd = client_socket,
       };
 
-      pthread_t client_thread;
-      if (pthread_create (&client_thread, NULL, handle_client, &client_context)
-          != 0)
+      pthread_t *client_thread = (pthread_t *)malloc (sizeof (pthread_t));
+      if (thread_pool_insert (&context->thread_pool, client_thread,
+                              handle_client, &client_context)
+          == S_FAILURE)
         {
           print_error ("Could not create client thread\n");
           continue;
         }
+      print_error ("Thread successfully started\n");
     }
 
   return (NULL);
@@ -132,15 +161,17 @@ bool
 run_server (task_t *task, config_t *config)
 {
   serv_context_t context;
-  mt_context_t *mt_context = (mt_context_t *)&context;
 
-  if (mt_context_init (mt_context, config) == S_FAILURE)
-    return (false);
+  if (serv_context_init (&context, config) == S_FAILURE)
+    {
+      print_error ("Could not initialize server context\n");
+      return (false);
+    }
 
   if ((context.socket_fd = socket (AF_INET, SOCK_STREAM, 0)) == -1)
     {
       print_error ("Could not initialize server socket\n");
-      return (false);
+      goto fail;
     }
 
   struct sockaddr_in serv_addr;
@@ -153,31 +184,33 @@ run_server (task_t *task, config_t *config)
       == -1)
     {
       print_error ("Could not bind socket\n");
-      return (false);
+      goto fail;
     }
 
   if (listen (context.socket_fd, 10) == -1)
     {
       print_error ("Could not start listening connections\n");
-      return (false);
+      goto fail;
     }
 
   pthread_t clients_thread;
   if (pthread_create (&clients_thread, NULL, handle_clients, &context) != 0)
     {
       print_error ("Could not create clients thread\n");
-      return (false);
+      goto fail;
     }
 
   task->from = (config->length < 3) ? 1 : 2;
   task->to = config->length;
+
+  mt_context_t *mt_context = (mt_context_t *)&context;
 
   brute (task, config, queue_push_wrapper, mt_context);
 
   if (pthread_mutex_lock (&mt_context->mutex) != 0)
     {
       print_error ("Could not lock a mutex\n");
-      return (false);
+      goto fail;
     }
   pthread_cleanup_push (cleanup_mutex_unlock, &mt_context->mutex);
 
@@ -186,7 +219,7 @@ run_server (task_t *task, config_t *config)
       if (pthread_cond_wait (&mt_context->cond_sem, &mt_context->mutex) != 0)
         {
           print_error ("Could not wait on a condition\n");
-          return (false);
+          goto fail;
         }
     }
 
@@ -195,7 +228,7 @@ run_server (task_t *task, config_t *config)
   if (queue_cancel (&mt_context->queue) == S_FAILURE)
     {
       print_error ("Could not cancel a queue\n");
-      return (false);
+      goto fail;
     }
 
   pthread_cancel (clients_thread);
@@ -207,8 +240,16 @@ run_server (task_t *task, config_t *config)
     memcpy (task->password, mt_context->password,
             sizeof (mt_context->password));
 
-  if (mt_context_destroy (mt_context) == S_FAILURE)
-    return (false);
+  if (serv_context_destroy (&context) == S_FAILURE)
+    {
+      print_error ("Could not destroy server context\n");
+      return (false);
+    }
 
   return (mt_context->password[0] != 0);
+
+fail:
+  if (serv_context_destroy (&context) == S_FAILURE)
+    print_error ("Could not destroy server context\n");
+  return (false);
 }

@@ -5,12 +5,14 @@
 #include "config.h"
 #include "multi.h"
 #include "queue.h"
+#include "thread_pool.h"
 
 #include <stdbool.h>
 
 typedef struct serv_context_t
 {
   mt_context_t context;
+  thread_pool_t thread_pool;
   int socket_fd;
 } serv_context_t;
 
