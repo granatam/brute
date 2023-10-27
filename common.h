@@ -4,6 +4,8 @@
 #include <pthread.h>
 #include <stdbool.h>
 
+#define print_error(...) print_error_impl (__func__, __LINE__, __VA_ARGS__)
+
 #define MAX_PASSWORD_LENGTH (7)
 #define HASH_LENGTH (13)
 
@@ -28,8 +30,6 @@ typedef struct base_state_t
 {
   task_t *task;
 } base_state_t;
-
-#define print_error(...) print_error_impl (__func__, __LINE__, __VA_ARGS__)
 
 status_t print_error_impl (const char *func_name, int line, const char *msg,
                            ...);

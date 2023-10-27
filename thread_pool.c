@@ -26,7 +26,10 @@ thread_run (void *arg)
   tp_context_t local_context = *context;
 
   if (pthread_mutex_unlock (&context->mutex) != 0)
-    return (NULL);
+    {
+      print_error ("Could not unlock mutex\n");
+      return (NULL);
+    }
 
   local_context.node->thread = pthread_self ();
 
@@ -77,10 +80,16 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg)
       = { .thread_pool = thread_pool, .func = func, .arg = arg };
 
   if (pthread_mutex_init (&context.mutex, NULL) != 0)
-    return (S_FAILURE);
+    {
+      print_error ("Could not create mutex\n");
+      return (S_FAILURE);
+    }
 
   if (pthread_mutex_lock (&context.mutex) != 0)
-    return (S_FAILURE);
+    {
+      print_error ("Could not lock mutex\n");
+      return (S_FAILURE);
+    }
 
   node_t *node = (node_t *)calloc (1, sizeof (*node));
   if (!node)
@@ -91,16 +100,26 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg)
 
   context.node = node;
 
+  if (pthread_mutex_unlock (&context.mutex) != 0)
+    {
+      print_error ("Could not lock mutex\n");
+      return (S_FAILURE);
+    }
+
   pthread_t thread;
   if (pthread_create (&thread, NULL, &thread_run, &context) != 0)
     {
       print_error ("Could not create thread\n");
       free (node);
+
       return (S_FAILURE);
     }
 
   if (pthread_mutex_lock (&context.mutex) != 0)
-    return (S_FAILURE);
+    {
+      print_error ("Could not lock mutex\n");
+      return (S_FAILURE);
+    }
 
   return (S_SUCCESS);
 }
@@ -112,7 +131,10 @@ thread_pool_cancel (thread_pool_t *thread_pool)
   node_t *current = thread_pool->threads.next;
 
   if (pthread_mutex_lock (&thread_pool->mutex) != 0)
-    return (S_FAILURE);
+    {
+      print_error ("Could not lock mutex\n");
+      return (S_FAILURE);
+    }
 
   while (current != &thread_pool->threads)
     {
@@ -123,13 +145,19 @@ thread_pool_cancel (thread_pool_t *thread_pool)
       current = current->next;
 
       if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
-        return (S_FAILURE);
+        {
+          print_error ("Could not unlock mutex\n");
+          return (S_FAILURE);
+        }
 
       pthread_cancel (tmp_node->thread);
       pthread_join (tmp_node->thread, NULL);
 
       if (pthread_mutex_lock (&thread_pool->mutex) != 0)
-        return (S_FAILURE);
+        {
+          print_error ("Could not lock mutex\n");
+          return (S_FAILURE);
+        }
     }
 
   thread_pool->threads.next = &thread_pool->threads;

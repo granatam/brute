@@ -26,14 +26,14 @@ gen_context_init (gen_context_t *context, config_t *config, task_t *task)
     case BM_RECU:
     case BM_REC_GEN:
 #ifndef __APPLE__
-      if (!(context->state = malloc (sizeof (rec_state_t))))
+      if (!(context->state = calloc (1, sizeof (rec_state_t))))
         goto malloc_fail;
       rec_state_init ((rec_state_t *)context->state, task, config);
       context->state_next = (bool (*) (base_state_t *))rec_state_next;
       break;
 #endif
     case BM_ITER:
-      if (!(context->state = malloc (sizeof (iter_state_t))))
+      if (!(context->state = calloc (1, sizeof (iter_state_t))))
         goto malloc_fail;
       iter_state_init ((iter_state_t *)context->state, config->alph, task);
       context->state_next = (bool (*) (base_state_t *))iter_state_next;

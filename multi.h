@@ -4,6 +4,7 @@
 #include "config.h"
 #include "queue.h"
 #include "thread_pool.h"
+
 #include <stdbool.h>
 
 typedef struct mt_context_t

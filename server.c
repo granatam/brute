@@ -65,9 +65,16 @@ static void *
 handle_client (void *arg)
 {
   cl_context_t *cl_context = (cl_context_t *)arg;
-  serv_context_t *context = cl_context->context;
+  cl_context_t local_context = *cl_context;
+  serv_context_t *context = local_context.context;
 
-  if (send_wrapper (cl_context->socket_fd, context->context.config->hash,
+  if (pthread_mutex_unlock (&cl_context->context->context.mutex) != 0)
+    {
+      print_error ("Could not unlock mutex\n");
+      return (NULL);
+    }
+
+  if (send_wrapper (local_context.socket_fd, context->context.config->hash,
                     HASH_LENGTH, 0)
       == S_FAILURE)
     {
@@ -84,7 +91,7 @@ handle_client (void *arg)
       task.to = task.from;
       task.from = 0;
 
-      if (delegate_task (cl_context->socket_fd, &task,
+      if (delegate_task (local_context.socket_fd, &task,
                          context->context.password)
           == S_FAILURE)
         {
@@ -143,7 +150,12 @@ handle_clients (void *arg)
           print_error ("Could not create client thread\n");
           continue;
         }
-      print_error ("Thread successfully started\n");
+
+      if (pthread_mutex_lock (&client_context.context->context.mutex) != 0)
+        {
+          print_error ("Could not lock mutex\n");
+          return (NULL);
+        }
     }
 
   return (NULL);
