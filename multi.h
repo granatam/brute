@@ -3,6 +3,7 @@
 
 #include "config.h"
 #include "queue.h"
+#include "thread_pool.h"
 #include <stdbool.h>
 
 typedef struct mt_context_t
@@ -13,6 +14,7 @@ typedef struct mt_context_t
   int passwords_remaining;
   pthread_mutex_t mutex;
   pthread_cond_t cond_sem;
+  thread_pool_t thread_pool;
 } mt_context_t;
 
 status_t mt_context_init (mt_context_t *context, config_t *config);

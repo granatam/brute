@@ -20,9 +20,6 @@ serv_context_init (serv_context_t *context, config_t *config)
   if (mt_context_init ((mt_context_t *)context, config) == S_FAILURE)
     return (S_FAILURE);
 
-  if (thread_pool_init (&context->thread_pool) == S_FAILURE)
-    return (S_FAILURE);
-
   return (S_SUCCESS);
 }
 
@@ -30,9 +27,6 @@ status_t
 serv_context_destroy (serv_context_t *context)
 {
   if (mt_context_destroy ((mt_context_t *)context) == S_FAILURE)
-    return (S_FAILURE);
-
-  if (thread_pool_cancel (&context->thread_pool) == S_FAILURE)
     return (S_FAILURE);
 
   return (S_SUCCESS);
@@ -142,8 +136,7 @@ handle_clients (void *arg)
         .socket_fd = client_socket,
       };
 
-      pthread_t client_thread;
-      if (thread_create (&context->thread_pool, &client_thread, handle_client,
+      if (thread_create (&context->context.thread_pool, handle_client,
                          &client_context)
           == S_FAILURE)
         {

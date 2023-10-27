@@ -31,6 +31,9 @@ mt_context_init (mt_context_t *context, config_t *config)
       return (S_FAILURE);
     }
 
+  if (thread_pool_init (&context->thread_pool) == S_FAILURE)
+    return (S_FAILURE);
+
   context->config = config;
   context->passwords_remaining = 0;
   context->password[0] = 0;
@@ -58,6 +61,9 @@ mt_context_destroy (mt_context_t *context)
       print_error ("Could not destroy a mutex\n");
       return (S_FAILURE);
     }
+
+  if (thread_pool_cancel (&context->thread_pool) == S_FAILURE)
+    return (S_FAILURE);
 
   return (S_SUCCESS);
 }
@@ -139,11 +145,19 @@ run_multi (task_t *task, config_t *config)
   if (mt_context_init (&context, config) == S_FAILURE)
     return (false);
 
-  pthread_t threads[config->number_of_threads];
-  int active_threads = create_threads (threads, config->number_of_threads,
-                                       mt_password_check, &context);
+  int active_threads = 0;
+  for (int i = 0; i < config->number_of_threads; ++i)
+    {
+      if (thread_create (&context.thread_pool, mt_password_check, &context)
+          == 0)
+        ++active_threads;
+    }
+
   if (active_threads == 0)
-    return (false);
+    {
+      print_error ("Could not create a single thread\n");
+      return (false);
+    }
 
   task->from = (config->length < 3) ? 1 : 2;
   task->to = config->length;
@@ -171,9 +185,6 @@ run_multi (task_t *task, config_t *config)
       print_error ("Could not cancel a queue\n");
       return (false);
     }
-
-  for (int i = 0; i < active_threads; ++i)
-    pthread_join (threads[i], NULL);
 
   if (context.password[0] != 0)
     memcpy (task->password, context.password, sizeof (context.password));

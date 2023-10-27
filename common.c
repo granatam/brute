@@ -18,9 +18,11 @@
   }))
 #endif
 
-__attribute__ ((format (printf, 1, 2))) status_t
-print_error (const char *msg, ...)
+__attribute__ ((format (printf, 3, 4))) status_t
+print_error_impl (const char *func_name, int line, const char *msg, ...)
 {
+  fprintf (stderr, "(%s %d) ", func_name, line);
+
   va_list args;
   va_start (args, msg);
 
