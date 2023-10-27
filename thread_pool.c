@@ -12,20 +12,17 @@ thread_pool_init (thread_pool_t *thread_pool)
       return (S_FAILURE);
     }
 
+  thread_pool->data.prev = &thread_pool->data;
+  thread_pool->data.next = &thread_pool->data;
+
   return (S_SUCCESS);
 }
 
 status_t
-thread_pool_insert (thread_pool_t *thread_pool, pthread_t *thread,
-                    void *(*func) (void *), void *arg)
+thread_create (thread_pool_t *thread_pool, pthread_t *thread,
+               void *(*func) (void *), void *arg)
 {
-  if (pthread_mutex_lock (&thread_pool->mutex) != 0)
-    {
-      print_error ("Could not lock mutex\n");
-      return (S_FAILURE);
-    }
-  pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
-
+  // Should it be after pthread_mutex_lock?
   node_t *node = (node_t *)malloc (sizeof (node_t));
   if (!node)
     {
@@ -33,96 +30,83 @@ thread_pool_insert (thread_pool_t *thread_pool, pthread_t *thread,
       return (S_FAILURE);
     }
 
-  node->thread = thread;
-  node->next = NULL;
-
-  if (!thread_pool->data)
+  if (pthread_mutex_lock (&thread_pool->mutex) != 0)
     {
-      node->prev = NULL;
-      thread_pool->data = node;
-    }
-  else
-    {
-      node_t *tmp_node = thread_pool->data;
-      while (tmp_node->next)
-        tmp_node = tmp_node->next;
-
-      tmp_node->next = node;
-      node->prev = tmp_node;
-    }
-
-  if (pthread_create (node->thread, NULL, func, arg) != 0)
-    {
-      print_error ("Could not create thread %d\n", node->thread);
+      print_error ("Could not lock mutex\n");
       return (S_FAILURE);
     }
+  pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
+
+  node->thread = *thread;
+  node->next = &thread_pool->data;
+  node->prev = thread_pool->data.prev;
+
+  thread_pool->data.prev->next = node;
+  thread_pool->data.prev = node;
 
   pthread_cleanup_pop (!0);
+
+  tp_context_t context = {
+    .thread_pool = thread_pool,
+    .thread = node,
+    .func = func,
+    .arg = arg,
+  };
+
+  if (pthread_create (thread, NULL, &thread_run, &context) != 0)
+    {
+      print_error ("Could not create thread %d\n", *thread);
+      return (S_FAILURE);
+    }
 
   return (S_SUCCESS);
 }
 
-status_t
-thread_pool_remove (thread_pool_t *thread_pool, pthread_t thread)
+void *
+thread_run (void *arg)
 {
-  if (!thread_pool->data)
+  tp_context_t *context = (tp_context_t *)arg;
+
+  context->func (context->arg);
+
+  if (pthread_mutex_lock (&context->thread_pool->mutex) != 0)
     {
-      print_error ("Thread pool is empty\n");
-      return (S_FAILURE);
+      print_error ("Could not lock mutex\n");
+      return (NULL);
     }
+  pthread_cleanup_push (cleanup_mutex_unlock, &context->thread_pool->mutex);
 
-  node_t *tmp_node = thread_pool->data;
-  while (tmp_node->next)
-    {
-      if (*tmp_node->thread == thread)
-        {
-          if (tmp_node->next)
-            tmp_node->next->prev = tmp_node->prev;
+  context->thread->prev->next = context->thread->next;
+  context->thread->next->prev = context->thread->prev;
 
-          if (tmp_node->prev)
-            tmp_node->prev->next = tmp_node->next;
+  pthread_cleanup_pop (!0);
 
-          pthread_cancel (thread);
-          pthread_join (thread, NULL);
+  pthread_cancel (context->thread->thread);
+  pthread_join (context->thread->thread, NULL);
 
-          free (tmp_node->thread);
-          free (tmp_node);
+  free (context->thread);
 
-          return (S_SUCCESS);
-        }
-
-      tmp_node = tmp_node->next;
-    }
-
-  print_error ("Could not find thread in thread pool\n");
-
-  return (S_FAILURE);
+  return (NULL);
 }
 
 status_t
 thread_pool_cancel (thread_pool_t *thread_pool)
 {
-  node_t *node = thread_pool->data;
-  if (!node)
+  node_t *current = thread_pool->data.next;
+
+  while (current != &thread_pool->data)
     {
-      print_error ("Thread pool is empty\n");
-      return (S_FAILURE);
+      node_t *tmp_node = current;
+      current = current->next;
+
+      pthread_cancel (tmp_node->thread);
+      pthread_join (tmp_node->thread, NULL);
+
+      free (tmp_node);
     }
 
-  while (node->next)
-    {
-      pthread_t thread_id = *node->thread;
-
-      pthread_cancel (thread_id);
-      pthread_join (thread_id, NULL);
-
-      free (node->thread);
-
-      node = node->next;
-      free (node->prev);
-    }
-
-  free (node);
+  thread_pool->data.next = &thread_pool->data;
+  thread_pool->data.prev = &thread_pool->data;
 
   return (S_SUCCESS);
 }

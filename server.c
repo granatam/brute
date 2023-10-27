@@ -119,7 +119,6 @@ handle_client (void *arg)
     }
 
   close (context->socket_fd);
-  thread_pool_remove (&context->thread_pool, pthread_self ());
 
   return (NULL);
 }
@@ -143,9 +142,9 @@ handle_clients (void *arg)
         .socket_fd = client_socket,
       };
 
-      pthread_t *client_thread = (pthread_t *)malloc (sizeof (pthread_t));
-      if (thread_pool_insert (&context->thread_pool, client_thread,
-                              handle_client, &client_context)
+      pthread_t client_thread;
+      if (thread_create (&context->thread_pool, &client_thread, handle_client,
+                         &client_context)
           == S_FAILURE)
         {
           print_error ("Could not create client thread\n");
