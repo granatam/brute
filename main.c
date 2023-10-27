@@ -14,7 +14,7 @@
 #include <string.h>
 #include <unistd.h>
 
-status_t
+static status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;

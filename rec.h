@@ -23,8 +23,6 @@ bool rec_state_next (rec_state_t *state);
 
 bool brute_rec_gen (task_t *task, config_t *config,
                     password_handler_t password_handler, void *context);
-bool brute_rec_gen_handler (task_t *task, void *context);
-void brute_rec_gen_helper (config_t *config, rec_state_t *state);
 #endif // ifndef __APPLE__
 
 bool brute_rec (task_t *task, config_t *config,

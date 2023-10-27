@@ -14,7 +14,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-status_t
+static status_t
 serv_context_init (serv_context_t *context, config_t *config)
 {
   if (mt_context_init ((mt_context_t *)context, config) == S_FAILURE)
@@ -23,7 +23,7 @@ serv_context_init (serv_context_t *context, config_t *config)
   return (S_SUCCESS);
 }
 
-status_t
+static status_t
 serv_context_destroy (serv_context_t *context)
 {
   if (mt_context_destroy ((mt_context_t *)context) == S_FAILURE)
@@ -32,7 +32,7 @@ serv_context_destroy (serv_context_t *context)
   return (S_SUCCESS);
 }
 
-status_t
+static status_t
 delegate_task (int socket_fd, task_t *task, password_t password)
 {
   if (send_wrapper (socket_fd, task, sizeof (task_t), 0) == S_FAILURE)
@@ -61,7 +61,7 @@ delegate_task (int socket_fd, task_t *task, password_t password)
   return (S_SUCCESS);
 }
 
-void *
+static void *
 handle_client (void *arg)
 {
   cl_context_t *cl_context = (cl_context_t *)arg;
@@ -117,7 +117,7 @@ handle_client (void *arg)
   return (NULL);
 }
 
-void *
+static void *
 handle_clients (void *arg)
 {
   serv_context_t *context = (serv_context_t *)arg;

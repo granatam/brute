@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-status_t
+static status_t
 gen_context_init (gen_context_t *context, config_t *config, task_t *task)
 {
   if (pthread_mutex_init (&context->mutex, NULL) != 0)
@@ -51,7 +51,7 @@ malloc_fail:
   return (S_FAILURE);
 }
 
-status_t
+static status_t
 gen_context_destroy (gen_context_t *context)
 {
   context->cancelled = true;
@@ -68,7 +68,7 @@ gen_context_destroy (gen_context_t *context)
   return (S_SUCCESS);
 }
 
-void *
+static void *
 gen_worker (void *context)
 {
   gen_context_t *gen_context = (gen_context_t *)context;
