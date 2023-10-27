@@ -46,14 +46,13 @@ thread_create (thread_pool_t *thread_pool, pthread_t *thread,
 
   pthread_cleanup_pop (!0);
 
-  tp_context_t context = {
-    .thread_pool = thread_pool,
-    .thread = node,
-    .func = func,
-    .arg = arg,
-  };
+  tp_context_t *context = (tp_context_t *)malloc (sizeof (*context));
+  context->thread_pool = thread_pool;
+  context->thread = node;
+  context->func = func;
+  context->arg = arg;
 
-  if (pthread_create (thread, NULL, &thread_run, &context) != 0)
+  if (pthread_create (thread, NULL, &thread_run, context) != 0)
     {
       print_error ("Could not create thread %d\n", *thread);
       return (S_FAILURE);
@@ -85,6 +84,7 @@ thread_run (void *arg)
   pthread_join (context->thread->thread, NULL);
 
   free (context->thread);
+  free (context);
 
   return (NULL);
 }
