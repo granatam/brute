@@ -130,7 +130,10 @@ thread_pool_cancel (thread_pool_t *thread_pool)
   while (current != &thread_pool->threads)
     {
       if (current->thread == self_id)
-        continue;
+        {
+          current = current->next;
+          continue;
+        }
 
       pthread_t thread = current->thread;
       current = current->next;

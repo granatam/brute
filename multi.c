@@ -44,6 +44,12 @@ mt_context_init (mt_context_t *context, config_t *config)
 status_t
 mt_context_destroy (mt_context_t *context)
 {
+  if (thread_pool_cancel (&context->thread_pool) != 0)
+    {
+      print_error ("Could not cancel a thread pool\n");
+      return (S_FAILURE);
+    }
+
   if (queue_destroy (&context->queue) == S_FAILURE)
     {
       print_error ("Could not destroy a queue\n");
@@ -62,7 +68,7 @@ mt_context_destroy (mt_context_t *context)
       return (S_FAILURE);
     }
 
-  return (thread_pool_cancel (&context->thread_pool));
+  return (S_SUCCESS);
 }
 
 void *

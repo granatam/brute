@@ -139,12 +139,6 @@ run_generator (task_t *task, config_t *config)
   for (int i = 0; i < active_threads; ++i)
     pthread_join (threads[i], NULL);
 
-  if (pthread_mutex_destroy (&context.mutex) != 0)
-    {
-      print_error ("Could not destroy a mutex\n");
-      goto fail;
-    }
-
   if (context.password[0] != 0)
     memcpy (task->password, context.password, sizeof (context.password));
 
