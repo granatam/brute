@@ -2,6 +2,7 @@
 #include "common.h"
 
 #include <pthread.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 status_t
@@ -25,11 +26,14 @@ thread_run (void *arg)
   tp_context_t *context = (tp_context_t *)arg;
   tp_context_t local_context = *context;
 
-  if (pthread_mutex_unlock (&context->mutex) != 0)
+  int status = pthread_mutex_unlock (&context->mutex);
+  print_error ("%d\n", status);
+  if (status != 0)
     {
       print_error ("Could not unlock mutex\n");
       return (NULL);
     }
+  print_error ("Mutex unlocked\n");
 
   node_t *node = (node_t *)calloc (1, sizeof (*node));
   if (!node)
@@ -92,15 +96,16 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg)
       return (S_FAILURE);
     }
 
+  if (pthread_mutex_lock (&context.mutex) != 0)
+    {
+      print_error ("Could not lock mutex\n");
+      return (S_FAILURE);
+    }
+
   pthread_t thread;
   if (pthread_create (&thread, NULL, &thread_run, &context) != 0)
     {
       print_error ("Could not create thread\n");
-      if (pthread_mutex_unlock (&context.mutex) != 0)
-        {
-          print_error ("Could not lock mutex\n");
-          return (S_FAILURE);
-        }
       return (S_FAILURE);
     }
 
@@ -109,6 +114,7 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg)
       print_error ("Could not lock mutex\n");
       return (S_FAILURE);
     }
+  print_error ("Mutex locked\n");
 
   return (S_SUCCESS);
 }
@@ -148,9 +154,6 @@ thread_pool_cancel (thread_pool_t *thread_pool)
           return (S_FAILURE);
         }
     }
-
-  thread_pool->threads.next = &thread_pool->threads;
-  thread_pool->threads.prev = &thread_pool->threads;
 
   return (S_SUCCESS);
 }
