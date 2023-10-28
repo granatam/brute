@@ -31,7 +31,14 @@ thread_run (void *arg)
       return (NULL);
     }
 
-  local_context.node->thread = pthread_self ();
+  node_t *node = (node_t *)calloc (1, sizeof (*node));
+  if (!node)
+    {
+      print_error ("Could not allocate memory\n");
+      return (NULL);
+    }
+
+  node->thread = pthread_self ();
 
   if (pthread_mutex_lock (&local_context.thread_pool->mutex) != 0)
     {
@@ -39,11 +46,11 @@ thread_run (void *arg)
       return (NULL);
     }
 
-  local_context.node->next = &local_context.thread_pool->threads;
-  local_context.node->prev = local_context.thread_pool->threads.prev;
+  node->next = &local_context.thread_pool->threads;
+  node->prev = local_context.thread_pool->threads.prev;
 
-  local_context.thread_pool->threads.prev->next = local_context.node;
-  local_context.thread_pool->threads.prev = local_context.node;
+  local_context.thread_pool->threads.prev->next = node;
+  local_context.thread_pool->threads.prev = node;
 
   if (pthread_mutex_unlock (&local_context.thread_pool->mutex) != 0)
     {
@@ -59,8 +66,8 @@ thread_run (void *arg)
       return (NULL);
     }
 
-  local_context.node->prev->next = local_context.node->next;
-  local_context.node->next->prev = local_context.node->prev;
+  node->prev->next = node->next;
+  node->next->prev = node->prev;
 
   if (pthread_mutex_unlock (&local_context.thread_pool->mutex) != 0)
     {
@@ -68,7 +75,7 @@ thread_run (void *arg)
       return (NULL);
     }
 
-  free (local_context.node);
+  free (node);
 
   return (NULL);
 }
@@ -85,33 +92,15 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg)
       return (S_FAILURE);
     }
 
-  if (pthread_mutex_lock (&context.mutex) != 0)
-    {
-      print_error ("Could not lock mutex\n");
-      return (S_FAILURE);
-    }
-
-  node_t *node = (node_t *)calloc (1, sizeof (*node));
-  if (!node)
-    {
-      print_error ("Could not allocate memory\n");
-      return (S_FAILURE);
-    }
-
-  context.node = node;
-
-  if (pthread_mutex_unlock (&context.mutex) != 0)
-    {
-      print_error ("Could not lock mutex\n");
-      return (S_FAILURE);
-    }
-
   pthread_t thread;
   if (pthread_create (&thread, NULL, &thread_run, &context) != 0)
     {
       print_error ("Could not create thread\n");
-      free (node);
-
+      if (pthread_mutex_unlock (&context.mutex) != 0)
+        {
+          print_error ("Could not lock mutex\n");
+          return (S_FAILURE);
+        }
       return (S_FAILURE);
     }
 

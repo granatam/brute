@@ -21,7 +21,6 @@ typedef struct thread_pool_t
 typedef struct tp_context_t
 {
   thread_pool_t *thread_pool;
-  node_t *node;
   void *(*func) (void *);
   void *arg;
   pthread_mutex_t mutex;

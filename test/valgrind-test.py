@@ -5,7 +5,7 @@ from utils import gen_str, run_valgrind
 
 
 @given(st.text(min_size=1, max_size=1, alphabet='dmg'), st.text(min_size=1, max_size=1, alphabet='iry'))
-@settings(deadline=None)
+@settings(deadline=timedelta(minutes=2))
 def test_valgrind(run_mode, brute_mode):
     alph = gen_str(5)
     passwd = gen_str(5, alph)

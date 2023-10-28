@@ -148,6 +148,12 @@ handle_clients (void *arg)
           == S_FAILURE)
         {
           print_error ("Could not create client thread\n");
+          if (pthread_mutex_unlock (&client_context.context->context.mutex)
+              != 0)
+            {
+              print_error ("Could not lock mutex\n");
+              return (NULL);
+            }
           continue;
         }
 

@@ -1,9 +1,10 @@
 from timeit import timeit
 from hypothesis import given, strategies as st, settings
 from utils import gen_str, brute_cmd, CPU_COUNT
+from datetime import timedelta
 
 @given(st.text(min_size=1, max_size=1, alphabet='iry'))
-@settings(deadline=None)
+@settings(deadline=timedelta(minutes=2))
 def test_performance_gen(brute_mode):
     alph = gen_str(12)
     passwd = gen_str(5, alph)
@@ -19,7 +20,7 @@ def test_performance_gen(brute_mode):
     assert ratio >= CPU_COUNT * 0.7
 
 @given(st.text(min_size=1, max_size=1, alphabet='iry'))
-@settings(deadline=None)
+@settings(deadline=timedelta(minutes=2))
 def test_performance_multi(brute_mode):
     alph = gen_str(12)
     passwd = gen_str(5, alph)

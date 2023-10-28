@@ -62,10 +62,7 @@ mt_context_destroy (mt_context_t *context)
       return (S_FAILURE);
     }
 
-  if (thread_pool_cancel (&context->thread_pool) == S_FAILURE)
-    return (S_FAILURE);
-
-  return (S_SUCCESS);
+  return (thread_pool_cancel (&context->thread_pool));
 }
 
 void *
@@ -149,7 +146,7 @@ run_multi (task_t *task, config_t *config)
   for (int i = 0; i < config->number_of_threads; ++i)
     {
       if (thread_create (&context.thread_pool, mt_password_check, &context)
-          == 0)
+          == S_SUCCESS)
         ++active_threads;
     }
 
