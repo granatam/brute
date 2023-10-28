@@ -129,7 +129,7 @@ thread_pool_cancel (thread_pool_t *thread_pool)
 
       pthread_t thread = thread_pool->threads.next->thread;
 
-      bool empty = (thread_pool->threads.next == thread_pool->threads.prev);
+      bool empty = (thread_pool->threads.next == &thread_pool->threads);
 
       if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
         {

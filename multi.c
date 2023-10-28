@@ -1,6 +1,7 @@
 #include "multi.h"
 
 #include "brute.h"
+#include "common.h"
 #include "queue.h"
 #include "single.h"
 
@@ -44,7 +45,7 @@ mt_context_init (mt_context_t *context, config_t *config)
 status_t
 mt_context_destroy (mt_context_t *context)
 {
-  if (thread_pool_cancel (&context->thread_pool) != 0)
+  if (thread_pool_cancel (&context->thread_pool) == S_FAILURE)
     {
       print_error ("Could not cancel a thread pool\n");
       return (S_FAILURE);
