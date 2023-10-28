@@ -136,7 +136,7 @@ thread_pool_cancel (thread_pool_t *thread_pool)
       if (current->thread == self_id)
         continue;
 
-      node_t *tmp_node = current;
+      pthread_t thread = current->thread;
       current = current->next;
 
       if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
@@ -145,8 +145,8 @@ thread_pool_cancel (thread_pool_t *thread_pool)
           return (S_FAILURE);
         }
 
-      pthread_cancel (tmp_node->thread);
-      pthread_join (tmp_node->thread, NULL);
+      pthread_cancel (thread);
+      pthread_join (thread, NULL);
 
       if (pthread_mutex_lock (&thread_pool->mutex) != 0)
         {
