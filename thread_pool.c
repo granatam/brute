@@ -25,7 +25,6 @@ thread_run (void *arg)
 {
   tp_context_t *context = (tp_context_t *)arg;
   tp_context_t local_context = *context;
-
   if (pthread_mutex_unlock (&context->mutex) != 0)
     {
       print_error ("Could not unlock mutex\n");
@@ -129,7 +128,7 @@ thread_pool_cancel (thread_pool_t *thread_pool)
         }
 
       pthread_t thread = thread_pool->threads.next->thread;
-      print_error ("Thread %d\n", thread);
+
       bool empty = (thread_pool->threads.next == thread_pool->threads.prev);
 
       if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
@@ -139,18 +138,15 @@ thread_pool_cancel (thread_pool_t *thread_pool)
         }
 
       if (empty)
-        {
-          print_error ("Empty\n");
-          break;
-        }
+        break;
+
       if (thread == self_id)
-        {
-          print_error ("Self\n");
-          return (S_FAILURE);
-        }
+        return (S_FAILURE);
+
       pthread_cancel (thread);
       pthread_join (thread, NULL);
     }
 
   return (S_SUCCESS);
 }
+
