@@ -26,14 +26,11 @@ thread_run (void *arg)
   tp_context_t *context = (tp_context_t *)arg;
   tp_context_t local_context = *context;
 
-  int status = pthread_mutex_unlock (&context->mutex);
-  print_error ("%d\n", status);
-  if (status != 0)
+  if (pthread_mutex_unlock (&context->mutex) != 0)
     {
       print_error ("Could not unlock mutex\n");
       return (NULL);
     }
-  print_error ("Mutex unlocked\n");
 
   node_t *node = (node_t *)calloc (1, sizeof (*node));
   if (!node)
@@ -114,7 +111,6 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg)
       print_error ("Could not lock mutex\n");
       return (S_FAILURE);
     }
-  print_error ("Mutex locked\n");
 
   return (S_SUCCESS);
 }
