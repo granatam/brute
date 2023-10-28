@@ -119,24 +119,18 @@ status_t
 thread_pool_cancel (thread_pool_t *thread_pool)
 {
   pthread_t self_id = pthread_self ();
-  node_t *current = thread_pool->threads.next;
 
-  if (pthread_mutex_lock (&thread_pool->mutex) != 0)
+  for (;;)
     {
-      print_error ("Could not lock mutex\n");
-      return (S_FAILURE);
-    }
-
-  while (current != &thread_pool->threads)
-    {
-      if (current->thread == self_id)
+      if (pthread_mutex_lock (&thread_pool->mutex) != 0)
         {
-          current = current->next;
-          continue;
+          print_error ("Could not lock mutex\n");
+          return (S_FAILURE);
         }
 
-      pthread_t thread = current->thread;
-      current = current->next;
+      pthread_t thread = thread_pool->threads.next->thread;
+      print_error ("Thread %d\n", thread);
+      bool empty = (thread_pool->threads.next == thread_pool->threads.prev);
 
       if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
         {
@@ -144,14 +138,18 @@ thread_pool_cancel (thread_pool_t *thread_pool)
           return (S_FAILURE);
         }
 
-      pthread_cancel (thread);
-      pthread_join (thread, NULL);
-
-      if (pthread_mutex_lock (&thread_pool->mutex) != 0)
+      if (empty)
         {
-          print_error ("Could not lock mutex\n");
+          print_error ("Empty\n");
+          break;
+        }
+      if (thread == self_id)
+        {
+          print_error ("Self\n");
           return (S_FAILURE);
         }
+      pthread_cancel (thread);
+      pthread_join (thread, NULL);
     }
 
   return (S_SUCCESS);
