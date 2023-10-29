@@ -26,6 +26,12 @@ typedef struct tp_context_t
   pthread_mutex_t mutex;
 } tp_context_t;
 
+typedef struct thread_cleanup_context_t
+{
+  thread_pool_t *thread_pool;
+  node_t * node;
+} thread_cleanup_context_t;
+
 status_t thread_pool_init (thread_pool_t *thread_pool);
 status_t thread_create (thread_pool_t *thread_pool, void *func (void *),
                         void *arg);
