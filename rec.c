@@ -37,7 +37,7 @@ rec_state_init (rec_state_t *state, task_t *task, config_t *config)
       return;
     }
   state->contexts[1] = state->contexts[0];
-  state->contexts[1].uc_stack.ss_sp = state->stack;
+  state->contexts[1].uc_stack.ss_sp = &state->stack;
   state->contexts[1].uc_stack.ss_size = sizeof (state->stack);
   state->contexts[1].uc_link = &state->contexts[0];
   makecontext (&state->contexts[1], (void (*) (void))brute_rec_gen_helper, 2,
