@@ -71,42 +71,40 @@ gen_context_destroy (gen_context_t *context)
 static void *
 gen_worker (void *context)
 {
-  gen_context_t *gen_context = (gen_context_t *)context;
+  gen_context_t *gen_ctx = (gen_context_t *)context;
 
-  st_context_t st_context = {
-    .hash = gen_context->config->hash,
+  st_context_t st_ctx = {
+    .hash = gen_ctx->config->hash,
     .data = { .initialized = 0 },
   };
 
-  while (!gen_context->cancelled && gen_context->password[0] == 0)
+  while (!gen_ctx->cancelled && gen_ctx->password[0] == 0)
     {
-      if (pthread_mutex_lock (&gen_context->mutex) != 0)
+      if (pthread_mutex_lock (&gen_ctx->mutex) != 0)
         {
           print_error ("Could not lock a mutex\n");
           return (NULL);
         }
 
-      task_t current_task = *gen_context->state->task;
+      task_t task = *gen_ctx->state->task;
 
-      if (!gen_context->cancelled && gen_context->password[0] == 0)
-        gen_context->cancelled = !gen_context->state_next (gen_context->state);
+      if (!gen_ctx->cancelled && gen_ctx->password[0] == 0)
+        gen_ctx->cancelled = !gen_ctx->state_next (gen_ctx->state);
 
-      if (pthread_mutex_unlock (&gen_context->mutex) != 0)
+      if (pthread_mutex_unlock (&gen_ctx->mutex) != 0)
         {
           print_error ("Could not unlock a mutex\n");
         }
 
-      if (gen_context->cancelled || gen_context->password[0] != 0)
+      if (gen_ctx->cancelled || gen_ctx->password[0] != 0)
         break;
 
-      current_task.to = current_task.from;
-      current_task.from = 0;
-      if (brute (&current_task, gen_context->config, st_password_check,
-                 &st_context))
+      task.to = task.from;
+      task.from = 0;
+      if (brute (&task, gen_ctx->config, st_password_check, &st_ctx))
         {
-          memcpy (gen_context->password, current_task.password,
-                  sizeof (current_task.password));
-          gen_context->cancelled = true;
+          memcpy (gen_ctx->password, task.password, sizeof (task.password));
+          gen_ctx->cancelled = true;
         }
     }
   return (NULL);

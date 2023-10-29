@@ -51,10 +51,10 @@ thread_cleanup (void *arg)
 static void *
 thread_run (void *arg)
 {
-  tp_context_t *context = (tp_context_t *)arg;
-  tp_context_t local_context = *context;
+  tp_context_t *tp_ctx = (tp_context_t *)arg;
+  tp_context_t local_ctx = *tp_ctx;
 
-  if (pthread_mutex_unlock (&context->mutex) != 0)
+  if (pthread_mutex_unlock (&tp_ctx->mutex) != 0)
     {
       print_error ("Could not unlock mutex\n");
       return (NULL);
@@ -72,28 +72,28 @@ thread_run (void *arg)
 
   pthread_setcancelstate (PTHREAD_CANCEL_DISABLE, NULL);
 
-  if (pthread_mutex_lock (&local_context.thread_pool->mutex) != 0)
+  if (pthread_mutex_lock (&local_ctx.thread_pool->mutex) != 0)
     {
       free (node);
       print_error ("Could not lock mutex\n");
       return (NULL);
     }
 
-  node->next = &local_context.thread_pool->threads;
-  node->prev = local_context.thread_pool->threads.prev;
+  node->next = &local_ctx.thread_pool->threads;
+  node->prev = local_ctx.thread_pool->threads.prev;
 
-  local_context.thread_pool->threads.prev->next = node;
-  local_context.thread_pool->threads.prev = node;
+  local_ctx.thread_pool->threads.prev->next = node;
+  local_ctx.thread_pool->threads.prev = node;
 
-  pthread_mutex_unlock (&local_context.thread_pool->mutex);
+  pthread_mutex_unlock (&local_ctx.thread_pool->mutex);
 
   thread_cleanup_context_t tcc
-      = { .thread_pool = local_context.thread_pool, .node = node };
+      = { .thread_pool = local_ctx.thread_pool, .node = node };
   pthread_cleanup_push (thread_cleanup, &tcc);
 
   pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL);
 
-  local_context.func (local_context.arg);
+  local_ctx.func (local_ctx.arg);
 
   pthread_cleanup_pop (!0);
 

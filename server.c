@@ -17,9 +17,6 @@
 // TODO: Add status checks and cleanup in case of errors
 // TODO: Check if code could be more readable (e.g. rewrite
 // context->context->context type code)
-// TODO: Change namings for context variables? Maybe something like mt_ctx,
-// cl_ctx, serv_ctx, local_ctx? Also it could work in other files and improve
-// project readability maybe, I'm not sure.
 
 static status_t
 serv_context_init (serv_context_t *context, config_t *config)
@@ -71,18 +68,17 @@ delegate_task (int socket_fd, task_t *task, password_t password)
 static void *
 handle_client (void *arg)
 {
-  cl_context_t *cl_context = (cl_context_t *)arg;
-  cl_context_t local_context = *cl_context;
-  serv_context_t *context = local_context.context;
+  cl_context_t *cl_ctx = (cl_context_t *)arg;
+  cl_context_t local_ctx = *cl_ctx;
+  mt_context_t *mt_ctx = &local_ctx.context->context;
 
-  if (pthread_mutex_unlock (&cl_context->context->context.mutex) != 0)
+  if (pthread_mutex_unlock (&cl_ctx->context->context.mutex) != 0)
     {
       print_error ("Could not unlock mutex\n");
       return (NULL);
     }
 
-  if (send_wrapper (local_context.socket_fd, context->context.config->hash,
-                    HASH_LENGTH, 0)
+  if (send_wrapper (local_ctx.socket_fd, mt_ctx->config->hash, HASH_LENGTH, 0)
       == S_FAILURE)
     {
       print_error ("Could not send hash to client\n");
@@ -92,32 +88,30 @@ handle_client (void *arg)
   while (true)
     {
       task_t task;
-      if (queue_pop (&context->context.queue, &task) == S_FAILURE)
+      if (queue_pop (&mt_ctx->queue, &task) == S_FAILURE)
         return (NULL);
 
       task.to = task.from;
       task.from = 0;
 
-      if (delegate_task (local_context.socket_fd, &task,
-                         context->context.password)
+      if (delegate_task (local_ctx.socket_fd, &task, mt_ctx->password)
           == S_FAILURE)
         {
-          if (queue_push (&context->context.queue, &task) == S_FAILURE)
+          if (queue_push (&mt_ctx->queue, &task) == S_FAILURE)
             print_error ("Could not push to the queue\n");
           return (NULL);
         }
 
-      if (pthread_mutex_lock (&context->context.mutex) != 0)
+      if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
         {
           print_error ("Could not lock a mutex\n");
           return (NULL);
         }
-      pthread_cleanup_push (cleanup_mutex_unlock, &context->context.mutex);
+      pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
 
-      --context->context.passwords_remaining;
-      if (context->context.passwords_remaining == 0
-          || context->context.password[0] != 0)
-        if (pthread_cond_signal (&context->context.cond_sem) != 0)
+      --mt_ctx->passwords_remaining;
+      if (mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
+        if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
           {
             print_error ("Could not signal a condition\n");
             return (NULL);
@@ -126,7 +120,7 @@ handle_client (void *arg)
       pthread_cleanup_pop (!0);
     }
 
-  close (context->socket_fd);
+  close (local_ctx.socket_fd);
 
   return (NULL);
 }
@@ -134,29 +128,28 @@ handle_client (void *arg)
 static void *
 handle_clients (void *arg)
 {
-  serv_context_t *context = (serv_context_t *)arg;
+  serv_context_t *serv_ctx = (serv_context_t *)arg;
+  mt_context_t *mt_ctx = &serv_ctx->context;
 
   while (true)
     {
-      int client_socket = accept (context->socket_fd, NULL, NULL);
+      int client_socket = accept (serv_ctx->socket_fd, NULL, NULL);
       if (client_socket == -1)
         {
           print_error ("Could not accept new connection\n");
           continue;
         }
 
-      cl_context_t client_context = {
-        .context = context,
+      cl_context_t cl_ctx = {
+        .context = serv_ctx,
         .socket_fd = client_socket,
       };
 
-      if (thread_create (&context->context.thread_pool, handle_client,
-                         &client_context)
+      if (thread_create (&mt_ctx->thread_pool, handle_client, &cl_ctx)
           == S_FAILURE)
         {
           print_error ("Could not create client thread\n");
-          if (pthread_mutex_unlock (&client_context.context->context.mutex)
-              != 0)
+          if (pthread_mutex_unlock (&mt_ctx->mutex) != 0)
             {
               print_error ("Could not lock mutex\n");
               return (NULL);
@@ -164,7 +157,7 @@ handle_clients (void *arg)
           continue;
         }
 
-      if (pthread_mutex_lock (&client_context.context->context.mutex) != 0)
+      if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
         {
           print_error ("Could not lock mutex\n");
           return (NULL);
@@ -220,20 +213,20 @@ run_server (task_t *task, config_t *config)
   task->from = (config->length < 3) ? 1 : 2;
   task->to = config->length;
 
-  mt_context_t *mt_context = (mt_context_t *)&context;
+  mt_context_t *mt_ctx = (mt_context_t *)&context;
 
-  brute (task, config, queue_push_wrapper, mt_context);
+  brute (task, config, queue_push_wrapper, mt_ctx);
 
-  if (pthread_mutex_lock (&mt_context->mutex) != 0)
+  if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
     {
       print_error ("Could not lock a mutex\n");
       goto fail;
     }
-  pthread_cleanup_push (cleanup_mutex_unlock, &mt_context->mutex);
+  pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
 
-  while (mt_context->passwords_remaining != 0 && mt_context->password[0] == 0)
+  while (mt_ctx->passwords_remaining != 0 && mt_ctx->password[0] == 0)
     {
-      if (pthread_cond_wait (&mt_context->cond_sem, &mt_context->mutex) != 0)
+      if (pthread_cond_wait (&mt_ctx->cond_sem, &mt_ctx->mutex) != 0)
         {
           print_error ("Could not wait on a condition\n");
           goto fail;
@@ -242,7 +235,7 @@ run_server (task_t *task, config_t *config)
 
   pthread_cleanup_pop (!0);
 
-  if (queue_cancel (&mt_context->queue) == S_FAILURE)
+  if (queue_cancel (&mt_ctx->queue) == S_FAILURE)
     {
       print_error ("Could not cancel a queue\n");
       goto fail;
@@ -253,9 +246,8 @@ run_server (task_t *task, config_t *config)
 
   close (context.socket_fd);
 
-  if (mt_context->password[0] != 0)
-    memcpy (task->password, mt_context->password,
-            sizeof (mt_context->password));
+  if (mt_ctx->password[0] != 0)
+    memcpy (task->password, mt_ctx->password, sizeof (mt_ctx->password));
 
   if (serv_context_destroy (&context) == S_FAILURE)
     {
@@ -263,7 +255,7 @@ run_server (task_t *task, config_t *config)
       return (false);
     }
 
-  return (mt_context->password[0] != 0);
+  return (mt_ctx->password[0] != 0);
 
 fail:
   if (serv_context_destroy (&context) == S_FAILURE)

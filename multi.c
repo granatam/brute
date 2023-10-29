@@ -75,34 +75,34 @@ mt_context_destroy (mt_context_t *context)
 void *
 mt_password_check (void *context)
 {
-  mt_context_t *mt_context = (mt_context_t *)context;
+  mt_context_t *mt_ctx = (mt_context_t *)context;
   task_t task;
-  st_context_t st_context = {
-    .hash = mt_context->config->hash,
+  st_context_t st_ctx = {
+    .hash = mt_ctx->config->hash,
     .data = { .initialized = 0 },
   };
 
   while (true)
     {
-      if (queue_pop (&mt_context->queue, &task) == S_FAILURE)
+      if (queue_pop (&mt_ctx->queue, &task) == S_FAILURE)
         return (NULL);
 
       task.to = task.from;
       task.from = 0;
 
-      if (brute (&task, mt_context->config, st_password_check, &st_context))
-        memcpy (mt_context->password, task.password, sizeof (task.password));
+      if (brute (&task, mt_ctx->config, st_password_check, &st_ctx))
+        memcpy (mt_ctx->password, task.password, sizeof (task.password));
 
-      if (pthread_mutex_lock (&mt_context->mutex) != 0)
+      if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
         {
           print_error ("Could not lock a mutex\n");
           return (NULL);
         }
-      pthread_cleanup_push (cleanup_mutex_unlock, &mt_context->mutex);
+      pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
 
-      --mt_context->passwords_remaining;
-      if (mt_context->passwords_remaining == 0 || mt_context->password[0] != 0)
-        if (pthread_cond_signal (&mt_context->cond_sem) != 0)
+      --mt_ctx->passwords_remaining;
+      if (mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
+        if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
           {
             print_error ("Could not signal a condition\n");
             return (NULL);
@@ -116,29 +116,29 @@ mt_password_check (void *context)
 bool
 queue_push_wrapper (task_t *task, void *context)
 {
-  mt_context_t *mt_context = (mt_context_t *)context;
+  mt_context_t *mt_ctx = (mt_context_t *)context;
 
-  if (pthread_mutex_lock (&mt_context->mutex) != 0)
+  if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
     {
       print_error ("Could not lock a mutex\n");
       return (false);
     }
 
-  ++mt_context->passwords_remaining;
+  ++mt_ctx->passwords_remaining;
 
-  if (pthread_mutex_unlock (&mt_context->mutex) != 0)
+  if (pthread_mutex_unlock (&mt_ctx->mutex) != 0)
     {
       print_error ("Could not unlock a mutex\n");
       return (false);
     }
 
-  if (queue_push (&mt_context->queue, task) == S_FAILURE)
+  if (queue_push (&mt_ctx->queue, task) == S_FAILURE)
     {
       print_error ("Could not push to a queue\n");
       return (false);
     }
 
-  return (mt_context->password[0] != 0);
+  return (mt_ctx->password[0] != 0);
 }
 
 bool
