@@ -36,4 +36,4 @@ def run_brute(passwd, alph, run_mode, brute_mode):
 def run_valgrind(passwd, alph, run_mode, brute_mode):
     cmd = brute_cmd(passwd, alph, run_mode, brute_mode)
 
-    return get_output(f'valgrind --log-fd=1 {cmd}')
+    return get_output(f'valgrind --leak-check=full --error-exitcode=1 --trace-children=yes --quiet {cmd}')
