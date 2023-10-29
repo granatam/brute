@@ -14,6 +14,13 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+// TODO: Add status checks and cleanup in case of errors
+// TODO: Check if code could be more readable (e.g. rewrite
+// context->context->context type code)
+// TODO: Change namings for context variables? Maybe something like mt_ctx,
+// cl_ctx, serv_ctx, local_ctx? Also it could work in other files and improve
+// project readability maybe, I'm not sure.
+
 static status_t
 serv_context_init (serv_context_t *context, config_t *config)
 {

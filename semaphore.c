@@ -15,6 +15,7 @@ sem_init (sem_t *sem, int pshared, unsigned int value)
   return (S_SUCCESS);
 }
 
+// TODO: if (sem->counter++ == 0) pthread_cond_signal () instead of this?
 status_t
 sem_post (sem_t *sem)
 {

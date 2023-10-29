@@ -10,6 +10,9 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+// TODO: Implement read_data and send_data to split code into multiple
+// functions?
+
 bool
 run_client (task_t *task, config_t *config)
 {

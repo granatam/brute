@@ -5,6 +5,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// TODO: Add status checks and cleanup in case of errors
+// TODO: Check if code could be more readable
+
 status_t
 thread_pool_init (thread_pool_t *thread_pool)
 {
@@ -44,15 +47,14 @@ thread_cleanup (void *arg)
   pthread_cond_signal (&thread_pool->cond);
 }
 
+// TODO: Add status checks and cleanup in case of errors
 static void *
 thread_run (void *arg)
 {
   tp_context_t *context = (tp_context_t *)arg;
   tp_context_t local_context = *context;
 
-  int status = pthread_mutex_unlock (&context->mutex);
-
-  if (status != 0)
+  if (pthread_mutex_unlock (&context->mutex) != 0)
     {
       print_error ("Could not unlock mutex\n");
       return (NULL);
