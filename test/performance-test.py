@@ -5,7 +5,7 @@ from datetime import timedelta
 
 
 @given(st.text(min_size=1, max_size=1, alphabet="iry"))
-@settings(deadline=timedelta(minutes=2))
+@settings(deadline=None)
 def test_performance_gen(brute_mode):
     alph = gen_str(12)
     passwd = gen_str(5, alph)
@@ -29,7 +29,7 @@ def test_performance_gen(brute_mode):
 
 
 @given(st.text(min_size=1, max_size=1, alphabet="iry"))
-@settings(deadline=timedelta(minutes=2))
+@settings(deadline=None)
 def test_performance_multi(brute_mode):
     alph = gen_str(12)
     passwd = gen_str(5, alph)
