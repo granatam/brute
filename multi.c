@@ -1,7 +1,6 @@
 #include "multi.h"
 
 #include "brute.h"
-#include "common.h"
 #include "queue.h"
 #include "single.h"
 
@@ -149,19 +148,12 @@ run_multi (task_t *task, config_t *config)
   if (mt_context_init (&context, config) == S_FAILURE)
     return (false);
 
-  int active_threads = 0;
-  for (int i = 0; i < config->number_of_threads; ++i)
-    {
-      if (thread_create (&context.thread_pool, mt_password_check, &context)
-          == S_SUCCESS)
-        ++active_threads;
-    }
+  int active_threads
+      = create_threads (&context.thread_pool, config->number_of_threads,
+                        mt_password_check, &context);
 
   if (active_threads == 0)
-    {
-      print_error ("Could not create a single thread\n");
-      return (false);
-    }
+    return (false);
 
   task->from = (config->length < 3) ? 1 : 2;
   task->to = config->length;

@@ -136,6 +136,7 @@ handle_clients (void *arg)
       int client_socket = accept (serv_ctx->socket_fd, NULL, NULL);
       if (client_socket == -1)
         {
+          perror ("pp");
           print_error ("Could not accept new connection\n");
           continue;
         }
@@ -203,8 +204,8 @@ run_server (task_t *task, config_t *config)
       goto fail;
     }
 
-  pthread_t clients_thread;
-  if (pthread_create (&clients_thread, NULL, handle_clients, &context) != 0)
+  if (thread_create (&context.context.thread_pool, handle_clients, &context)
+      == S_FAILURE)
     {
       print_error ("Could not create clients thread\n");
       goto fail;
@@ -240,9 +241,6 @@ run_server (task_t *task, config_t *config)
       print_error ("Could not cancel a queue\n");
       goto fail;
     }
-
-  pthread_cancel (clients_thread);
-  pthread_join (clients_thread, NULL);
 
   close (context.socket_fd);
 

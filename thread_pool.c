@@ -172,3 +172,18 @@ thread_pool_cancel (thread_pool_t *thread_pool)
 
   return (S_SUCCESS);
 }
+
+int
+create_threads (thread_pool_t *thread_pool, int number_of_threads,
+                void *func (void *), void *context)
+{
+  int active_threads = 0;
+  for (int i = 0; i < number_of_threads; ++i)
+    if (thread_create (thread_pool, func, context) == S_SUCCESS)
+      ++active_threads;
+
+  if (active_threads == 0)
+    print_error ("Could not create a single thread\n");
+
+  return (active_threads);
+}

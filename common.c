@@ -40,21 +40,6 @@ cleanup_mutex_unlock (void *mutex)
   pthread_mutex_unlock ((pthread_mutex_t *)mutex);
 }
 
-int
-create_threads (pthread_t *threads, int number_of_threads, void *func (void *),
-                void *context)
-{
-  int active_threads = 0;
-  for (int i = 0; i < number_of_threads; ++i)
-    if (pthread_create (&threads[active_threads], NULL, func, context) == 0)
-      ++active_threads;
-
-  if (active_threads == 0)
-    print_error ("Could not create a single thread\n");
-
-  return (active_threads);
-}
-
 status_t
 recv_wrapper (int socket_fd, void *buf, int len, int flags)
 {

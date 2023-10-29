@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "config.h"
+#include "thread_pool.h"
 
 #include <pthread.h>
 
@@ -14,6 +15,7 @@ typedef struct gen_context_t
   config_t *config;
   password_t password;
   bool cancelled;
+  thread_pool_t thread_pool;
 } gen_context_t;
 
 bool run_generator (task_t *task, config_t *config);

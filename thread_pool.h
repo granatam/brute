@@ -39,4 +39,7 @@ status_t thread_create (thread_pool_t *thread_pool, void *func (void *),
                         void *arg);
 status_t thread_pool_cancel (thread_pool_t *thread_pool);
 
+int create_threads (thread_pool_t *thread_pool, int number_of_threads,
+                    void *func (void *), void *context);
+
 #endif // THREAD_POOL_H
