@@ -15,6 +15,8 @@ typedef struct node_t
 typedef struct thread_pool_t
 {
   pthread_mutex_t mutex;
+  pthread_cond_t cond;
+  int count;
   node_t threads;
 } thread_pool_t;
 
@@ -29,7 +31,7 @@ typedef struct tp_context_t
 typedef struct thread_cleanup_context_t
 {
   thread_pool_t *thread_pool;
-  node_t * node;
+  node_t *node;
 } thread_cleanup_context_t;
 
 status_t thread_pool_init (thread_pool_t *thread_pool);

@@ -14,8 +14,15 @@ thread_pool_init (thread_pool_t *thread_pool)
       return (S_FAILURE);
     }
 
+  if (pthread_cond_init (&thread_pool->cond, NULL) != 0)
+    {
+      print_error ("Could not create thread pool conditional semaphore\n");
+      return (S_FAILURE);
+    }
+
   thread_pool->threads.prev = &thread_pool->threads;
   thread_pool->threads.next = &thread_pool->threads;
+  thread_pool->threads.thread = pthread_self ();
 
   return (S_SUCCESS);
 }
@@ -27,25 +34,14 @@ thread_cleanup (void *arg)
   node_t *node = tcc->node;
   thread_pool_t *thread_pool = tcc->thread_pool;
 
-  if (pthread_mutex_lock (&thread_pool->mutex) != 0)
-    {
-      print_error ("Could not lock mutex\n");
-    }
-
+  pthread_mutex_lock (&thread_pool->mutex);
   node->prev->next = node->next;
   node->next->prev = node->prev;
-
-  if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
-    {
-      print_error ("Could not unlock mutex\n");
-    }
-
-  if (pthread_detach (node->thread) != 0)
-    {
-      print_error ("Could not detach thread\n");
-    }
+  pthread_mutex_unlock (&thread_pool->mutex);
 
   free (node);
+
+  pthread_cond_signal (&thread_pool->cond);
 }
 
 static void *
@@ -54,7 +50,9 @@ thread_run (void *arg)
   tp_context_t *context = (tp_context_t *)arg;
   tp_context_t local_context = *context;
 
-  if (pthread_mutex_unlock (&context->mutex) != 0)
+  int status = pthread_mutex_unlock (&context->mutex);
+
+  if (status != 0)
     {
       print_error ("Could not unlock mutex\n");
       return (NULL);
@@ -68,6 +66,7 @@ thread_run (void *arg)
     }
 
   node->thread = pthread_self ();
+  pthread_detach (node->thread);
 
   pthread_setcancelstate (PTHREAD_CANCEL_DISABLE, NULL);
 
@@ -84,11 +83,7 @@ thread_run (void *arg)
   local_context.thread_pool->threads.prev->next = node;
   local_context.thread_pool->threads.prev = node;
 
-  if (pthread_mutex_unlock (&local_context.thread_pool->mutex) != 0)
-    {
-      print_error ("Could not lock mutex\n");
-      return (NULL);
-    }
+  pthread_mutex_unlock (&local_context.thread_pool->mutex);
 
   thread_cleanup_context_t tcc
       = { .thread_pool = local_context.thread_pool, .node = node };
@@ -165,17 +160,12 @@ thread_pool_cancel (thread_pool_t *thread_pool)
       if (thread == self_id)
         return (S_FAILURE);
 
-      if (pthread_cancel (thread) != 0)
-        {
-          print_error ("Could not cancel thread\n");
-          return (S_FAILURE);
-        }
+      pthread_cancel (thread);
 
-      if (pthread_join (thread, NULL) != 0)
-        {
-          print_error ("Could not join thread\n");
-          return (S_FAILURE);
-        }
+      pthread_mutex_lock (&thread_pool->mutex);
+      while (thread_pool->threads.next->thread == thread)
+        pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex);
+      pthread_mutex_unlock (&thread_pool->mutex);
     }
 
   return (S_SUCCESS);
