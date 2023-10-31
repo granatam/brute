@@ -1,6 +1,7 @@
 #include "gen.h"
 
 #include "brute.h"
+#include "common.h"
 #include "iter.h"
 #include "rec.h"
 #include "single.h"
@@ -39,9 +40,6 @@ gen_context_init (gen_context_t *context, config_t *config, task_t *task)
       break;
     }
 
-  if (thread_pool_init (&context->thread_pool) == S_FAILURE)
-    return (S_FAILURE);
-
   context->config = config;
   context->cancelled = false;
   context->password[0] = 0;
@@ -57,12 +55,6 @@ static status_t
 gen_context_destroy (gen_context_t *context)
 {
   context->cancelled = true;
-
-  if (thread_pool_cancel (&context->thread_pool) == S_FAILURE)
-    {
-      print_error ("Could not cancel a thread pool\n");
-      return (S_FAILURE);
-    }
 
   if (pthread_mutex_destroy (&context->mutex) != 0)
     {
@@ -133,13 +125,27 @@ run_generator (task_t *task, config_t *config)
 
   int number_of_threads
       = (config->number_of_threads == 1) ? 1 : config->number_of_threads - 1;
-  int active_threads = create_threads (&context.thread_pool, number_of_threads,
-                                       gen_worker, &context);
+  pthread_t threads[number_of_threads];
 
-  if (active_threads == 0)
+  // int active_threads
+  //     = create_threads (threads, number_of_threads, gen_worker, &context);
+  // if (active_threads == 0)
+  //   goto fail;
+
+  int active_threads = 0;
+  for (int i = 0; i < number_of_threads; ++i)
+    if (pthread_create (&threads[active_threads], NULL, gen_worker, &context) == 0)
+      ++active_threads;
+
+  if (active_threads == 0) {
+    print_error ("Could not create a single thread\n");
     goto fail;
+  }
 
   gen_worker (&context);
+
+  for (int i = 0; i < active_threads; ++i)
+    pthread_join (threads[i], NULL);
 
   if (context.password[0] != 0)
     memcpy (task->password, context.password, sizeof (context.password));
