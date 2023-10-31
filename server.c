@@ -28,6 +28,29 @@ serv_context_init (serv_context_t *context, config_t *config)
       return (S_FAILURE);
     }
 
+  int option = 1;
+  setsockopt (context->socket_fd, SOL_SOCKET, SO_REUSEADDR, &option,
+              sizeof (option));
+
+  struct sockaddr_in serv_addr;
+  serv_addr.sin_family = AF_INET;
+  serv_addr.sin_addr.s_addr = inet_addr (config->addr);
+  serv_addr.sin_port = htons (config->port);
+
+  if (bind (context->socket_fd, (struct sockaddr *)&serv_addr,
+            sizeof (serv_addr))
+      == -1)
+    {
+      print_error ("Could not bind socket\n");
+      return (S_FAILURE);
+    }
+
+  if (listen (context->socket_fd, 10) == -1)
+    {
+      print_error ("Could not start listening connections\n");
+      return (S_FAILURE);
+    }
+
   return (S_SUCCESS);
 }
 
@@ -146,7 +169,6 @@ handle_clients (void *arg)
       int client_socket = accept (serv_ctx->socket_fd, NULL, NULL);
       if (client_socket == -1)
         {
-          perror ("pp");
           print_error ("Could not accept new connection\n");
           continue;
         }
@@ -187,25 +209,6 @@ run_server (task_t *task, config_t *config)
     {
       print_error ("Could not initialize server context\n");
       return (false);
-    }
-
-  struct sockaddr_in serv_addr;
-  serv_addr.sin_family = AF_INET;
-  serv_addr.sin_addr.s_addr = inet_addr (config->addr);
-  serv_addr.sin_port = htons (config->port);
-
-  if (bind (context.socket_fd, (struct sockaddr *)&serv_addr,
-            sizeof (serv_addr))
-      == -1)
-    {
-      print_error ("Could not bind socket\n");
-      goto fail;
-    }
-
-  if (listen (context.socket_fd, 10) == -1)
-    {
-      print_error ("Could not start listening connections\n");
-      goto fail;
     }
 
   if (thread_create (&context.context.thread_pool, handle_clients, &context)
