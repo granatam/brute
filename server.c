@@ -78,12 +78,16 @@ delegate_task (int socket_fd, task_t *task, password_t password)
       return (S_FAILURE);
     }
 
+  print_error ("Sent task %s to client\n", task->password);
+
   int size;
   if (recv_wrapper (socket_fd, &size, sizeof (int), 0) == S_FAILURE)
     {
       print_error ("Could not receive data from client\n");
       return (S_FAILURE);
     }
+
+  print_error ("Received %d from client\n", size);
 
   if (size != 0)
     {
@@ -93,6 +97,8 @@ delegate_task (int socket_fd, task_t *task, password_t password)
           print_error ("Could not receive data from client\n");
           return (S_FAILURE);
         }
+
+      print_error ("Received password %s from client\n", password);
     }
 
   return (S_SUCCESS);
@@ -105,11 +111,13 @@ handle_client (void *arg)
   cl_context_t local_ctx = *cl_ctx;
   mt_context_t *mt_ctx = &local_ctx.context->context;
 
-  if (pthread_mutex_unlock (&cl_ctx->context->context.mutex) != 0)
+  if (pthread_mutex_unlock (&cl_ctx->mutex) != 0)
     {
       print_error ("Could not unlock mutex\n");
       return (NULL);
     }
+
+  print_error ("Mutex unlocked\n");
 
   if (send_wrapper (local_ctx.socket_fd, mt_ctx->config->hash, HASH_LENGTH, 0)
       == S_FAILURE)
@@ -117,6 +125,8 @@ handle_client (void *arg)
       print_error ("Could not send hash to client\n");
       return (NULL);
     }
+
+  print_error ("Sent hash to client\n");
 
   while (true)
     {
@@ -135,12 +145,12 @@ handle_client (void *arg)
           return (NULL);
         }
 
-      if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
+      if (pthread_mutex_lock (&cl_ctx->mutex) != 0)
         {
           print_error ("Could not lock a mutex\n");
           return (NULL);
         }
-      pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
+      pthread_cleanup_push (cleanup_mutex_unlock, &cl_ctx->mutex);
 
       --mt_ctx->passwords_remaining;
       if (mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
@@ -173,28 +183,33 @@ handle_clients (void *arg)
           continue;
         }
 
+      print_error ("Accepted new connection\n");
+
       cl_context_t cl_ctx = {
         .context = serv_ctx,
         .socket_fd = client_socket,
       };
 
+      pthread_mutex_init (&cl_ctx.mutex, NULL);
+
+      pthread_mutex_lock (&cl_ctx.mutex);
+
       if (thread_create (&mt_ctx->thread_pool, handle_client, &cl_ctx)
           == S_FAILURE)
         {
           print_error ("Could not create client thread\n");
-          if (pthread_mutex_unlock (&mt_ctx->mutex) != 0)
-            {
-              print_error ("Could not lock mutex\n");
-              return (NULL);
-            }
           continue;
         }
 
-      if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
+      print_error ("Created new client thread\n");
+
+      if (pthread_mutex_lock (&cl_ctx.mutex) != 0)
         {
           print_error ("Could not lock mutex\n");
           return (NULL);
         }
+
+      print_error ("Mutex locked\n");
     }
 
   return (NULL);

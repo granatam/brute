@@ -13,7 +13,8 @@
 typedef struct rec_state_t
 {
   base_state_t base_state;
-  ucontext_t contexts[2];
+  ucontext_t main_context;
+  ucontext_t rec_context;
   char stack[STACK_SIZE];
   bool cancelled;
 } rec_state_t;

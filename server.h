@@ -19,6 +19,7 @@ typedef struct cl_context_t
 {
   serv_context_t *context;
   int socket_fd;
+  pthread_mutex_t mutex;
 } cl_context_t;
 
 bool run_server (task_t *, config_t *);
