@@ -15,14 +15,18 @@
 #include <unistd.h>
 
 // TODO: Add status checks and cleanup in case of errors
-// TODO: Check if code could be more readable (e.g. rewrite
-// context->context->context type code)
 
 static status_t
 serv_context_init (serv_context_t *context, config_t *config)
 {
   if (mt_context_init ((mt_context_t *)context, config) == S_FAILURE)
     return (S_FAILURE);
+
+  if ((context->socket_fd = socket (AF_INET, SOCK_STREAM, 0)) == -1)
+    {
+      print_error ("Could not initialize server socket\n");
+      return (S_FAILURE);
+    }
 
   return (S_SUCCESS);
 }
@@ -32,6 +36,12 @@ serv_context_destroy (serv_context_t *context)
 {
   if (mt_context_destroy ((mt_context_t *)context) == S_FAILURE)
     return (S_FAILURE);
+
+  if (close (context->socket_fd) != 0)
+    {
+      print_error ("Could not close server socket\n");
+      return (S_FAILURE);
+    }
 
   return (S_SUCCESS);
 }
@@ -179,12 +189,6 @@ run_server (task_t *task, config_t *config)
       return (false);
     }
 
-  if ((context.socket_fd = socket (AF_INET, SOCK_STREAM, 0)) == -1)
-    {
-      print_error ("Could not initialize server socket\n");
-      goto fail;
-    }
-
   struct sockaddr_in serv_addr;
   serv_addr.sin_family = AF_INET;
   serv_addr.sin_addr.s_addr = inet_addr (config->addr);
@@ -241,8 +245,6 @@ run_server (task_t *task, config_t *config)
       print_error ("Could not cancel a queue\n");
       goto fail;
     }
-
-  close (context.socket_fd);
 
   if (mt_ctx->password[0] != 0)
     memcpy (task->password, mt_ctx->password, sizeof (mt_ctx->password));
