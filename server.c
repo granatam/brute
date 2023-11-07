@@ -182,8 +182,7 @@ handle_clients (void *arg)
 
   while (true)
     {
-      int client_socket = accept (serv_ctx->socket_fd, NULL, NULL);
-      if (client_socket == -1)
+      if ((cl_ctx.socket_fd = accept (serv_ctx->socket_fd, NULL, NULL)) == -1)
         {
           print_error ("Could not accept new connection\n");
           continue;
@@ -191,14 +190,19 @@ handle_clients (void *arg)
 
       print_error ("Accepted new connection\n");
 
-      cl_ctx.socket_fd = client_socket;
-
-      pthread_mutex_lock (&cl_ctx.mutex);
+      if (pthread_mutex_lock (&cl_ctx.mutex) != 0)
+        {
+          print_error ("Could not lock mutex\n");
+          continue;
+        }
 
       if (thread_create (&mt_ctx->thread_pool, handle_client, &cl_ctx)
           == S_FAILURE)
         {
           print_error ("Could not create client thread\n");
+          if (pthread_mutex_unlock (&cl_ctx.mutex) != 0)
+            print_error 
+              ("Could not unlock mutex after thread creation fail\n");
           continue;
         }
 
