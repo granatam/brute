@@ -174,6 +174,12 @@ handle_clients (void *arg)
   serv_context_t *serv_ctx = (serv_context_t *)arg;
   mt_context_t *mt_ctx = &serv_ctx->context;
 
+  cl_context_t cl_ctx = {
+    .context = serv_ctx,
+  };
+  
+  pthread_mutex_init (&cl_ctx.mutex, NULL);
+
   while (true)
     {
       int client_socket = accept (serv_ctx->socket_fd, NULL, NULL);
@@ -185,12 +191,7 @@ handle_clients (void *arg)
 
       print_error ("Accepted new connection\n");
 
-      cl_context_t cl_ctx = {
-        .context = serv_ctx,
-        .socket_fd = client_socket,
-      };
-
-      pthread_mutex_init (&cl_ctx.mutex, NULL);
+      cl_ctx.socket_fd = client_socket;
 
       pthread_mutex_lock (&cl_ctx.mutex);
 
