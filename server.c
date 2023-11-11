@@ -42,16 +42,20 @@ serv_context_init (serv_context_t *context, config_t *config)
       == -1)
     {
       print_error ("Could not bind socket\n");
-      return (S_FAILURE);
+      goto fail;
     }
 
   if (listen (context->socket_fd, 10) == -1)
     {
       print_error ("Could not start listening connections\n");
-      return (S_FAILURE);
+      goto fail;
     }
 
   return (S_SUCCESS);
+
+fail:
+  close (context->socket_fd);
+  return (S_FAILURE);
 }
 
 static status_t
@@ -114,7 +118,7 @@ handle_client (void *arg)
   if (pthread_mutex_unlock (&cl_ctx->mutex) != 0)
     {
       print_error ("Could not unlock mutex\n");
-      return (NULL);
+      goto end;
     }
 
   print_error ("Mutex unlocked\n");
@@ -123,7 +127,7 @@ handle_client (void *arg)
       == S_FAILURE)
     {
       print_error ("Could not send hash to client\n");
-      return (NULL);
+      goto end;
     }
 
   print_error ("Sent hash to client\n");
@@ -132,7 +136,7 @@ handle_client (void *arg)
     {
       task_t task;
       if (queue_pop (&mt_ctx->queue, &task) == S_FAILURE)
-        return (NULL);
+        goto end;
 
       task.to = task.from;
       task.from = 0;
@@ -142,13 +146,13 @@ handle_client (void *arg)
         {
           if (queue_push (&mt_ctx->queue, &task) == S_FAILURE)
             print_error ("Could not push to the queue\n");
-          return (NULL);
+          goto end;
         }
 
       if (pthread_mutex_lock (&cl_ctx->mutex) != 0)
         {
           print_error ("Could not lock a mutex\n");
-          return (NULL);
+          goto end;
         }
       pthread_cleanup_push (cleanup_mutex_unlock, &cl_ctx->mutex);
 
@@ -157,14 +161,14 @@ handle_client (void *arg)
         if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
           {
             print_error ("Could not signal a condition\n");
-            return (NULL);
+            goto end;
           }
 
       pthread_cleanup_pop (!0);
     }
 
+end:
   close (local_ctx.socket_fd);
-
   return (NULL);
 }
 
@@ -178,7 +182,11 @@ handle_clients (void *arg)
     .context = serv_ctx,
   };
   
-  pthread_mutex_init (&cl_ctx.mutex, NULL);
+  if (pthread_mutex_init (&cl_ctx.mutex, NULL) != 0)
+    {
+      print_error ("Could not create mutex\n");
+      return (NULL);
+    }
 
   while (true)
     {
@@ -193,6 +201,7 @@ handle_clients (void *arg)
       if (pthread_mutex_lock (&cl_ctx.mutex) != 0)
         {
           print_error ("Could not lock mutex\n");
+          close (cl_ctx.socket_fd);
           continue;
         }
 
@@ -211,7 +220,8 @@ handle_clients (void *arg)
       if (pthread_mutex_lock (&cl_ctx.mutex) != 0)
         {
           print_error ("Could not lock mutex\n");
-          return (NULL);
+          close (cl_ctx.socket_fd);
+          continue;
         }
 
       print_error ("Mutex locked\n");
