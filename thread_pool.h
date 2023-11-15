@@ -17,6 +17,7 @@ typedef struct thread_pool_t
   pthread_mutex_t mutex;
   pthread_cond_t cond;
   int count;
+  bool cancelled;
   node_t threads;
 } thread_pool_t;
 

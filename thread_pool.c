@@ -26,6 +26,8 @@ thread_pool_init (thread_pool_t *thread_pool)
   thread_pool->threads.prev = &thread_pool->threads;
   thread_pool->threads.next = &thread_pool->threads;
   thread_pool->threads.thread = pthread_self ();
+  thread_pool->count = 0;
+  thread_pool->cancelled = false;
 
   return (S_SUCCESS);
 }
@@ -40,6 +42,7 @@ thread_cleanup (void *arg)
   pthread_mutex_lock (&thread_pool->mutex);
   node->prev->next = node->next;
   node->next->prev = node->prev;
+  --thread_pool->count;
   pthread_mutex_unlock (&thread_pool->mutex);
 
   free (node);
@@ -53,6 +56,10 @@ thread_run (void *arg)
 {
   tp_context_t *tp_ctx = (tp_context_t *)arg;
   tp_context_t local_ctx = *tp_ctx;
+  thread_pool_t *thread_pool = local_ctx.thread_pool;
+
+  pthread_detach (pthread_self ());
+  pthread_setcancelstate (PTHREAD_CANCEL_DISABLE, NULL);
 
   if (pthread_mutex_unlock (&tp_ctx->mutex) != 0)
     {
@@ -68,27 +75,37 @@ thread_run (void *arg)
     }
 
   node->thread = pthread_self ();
-  pthread_detach (node->thread);
 
-  pthread_setcancelstate (PTHREAD_CANCEL_DISABLE, NULL);
-
-  if (pthread_mutex_lock (&local_ctx.thread_pool->mutex) != 0)
+  if (pthread_mutex_lock (&thread_pool->mutex) != 0)
     {
       free (node);
       print_error ("Could not lock mutex\n");
       return (NULL);
     }
 
-  node->next = &local_ctx.thread_pool->threads;
-  node->prev = local_ctx.thread_pool->threads.prev;
+  if (thread_pool->cancelled)
+    {
+      free (node);
+      --thread_pool->count;
+      pthread_mutex_unlock (&thread_pool->mutex);
+      pthread_cond_signal (&thread_pool->cond);
+      
+      return (NULL);
+    }
+  node->next = &thread_pool->threads;
+  node->prev = thread_pool->threads.prev;
 
-  local_ctx.thread_pool->threads.prev->next = node;
-  local_ctx.thread_pool->threads.prev = node;
+  thread_pool->threads.prev->next = node;
+  thread_pool->threads.prev = node;
 
-  pthread_mutex_unlock (&local_ctx.thread_pool->mutex);
+  if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
+    {
+      free (node);
+      print_error ("Could not unlock mutex\n");
+      return (NULL);
+    }
 
-  thread_cleanup_context_t tcc
-      = { .thread_pool = local_ctx.thread_pool, .node = node };
+  thread_cleanup_context_t tcc = { .thread_pool = thread_pool, .node = node };
   pthread_cleanup_push (thread_cleanup, &tcc);
 
   pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL);
@@ -118,9 +135,18 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg)
       return (S_FAILURE);
     }
 
+  pthread_mutex_lock (&thread_pool->mutex);
+  ++thread_pool->count;
+  pthread_mutex_unlock (&thread_pool->mutex);
+
   pthread_t thread;
   if (pthread_create (&thread, NULL, &thread_run, &context) != 0)
     {
+      pthread_mutex_lock (&thread_pool->mutex);
+      --thread_pool->count;
+      pthread_mutex_unlock (&thread_pool->mutex);
+      pthread_cond_signal (&thread_pool->cond);
+
       print_error ("Could not create thread\n");
       return (S_FAILURE);
     }
@@ -147,6 +173,7 @@ thread_pool_cancel (thread_pool_t *thread_pool)
           return (S_FAILURE);
         }
 
+      thread_pool->cancelled = true;
       pthread_t thread = thread_pool->threads.next->thread;
       bool empty = (thread_pool->threads.next == &thread_pool->threads);
 
@@ -169,6 +196,11 @@ thread_pool_cancel (thread_pool_t *thread_pool)
         pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex);
       pthread_mutex_unlock (&thread_pool->mutex);
     }
+
+  pthread_mutex_lock (&thread_pool->mutex);
+  while (thread_pool->count != 0)
+    pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex);
+  pthread_mutex_unlock (&thread_pool->mutex);
 
   return (S_SUCCESS);
 }

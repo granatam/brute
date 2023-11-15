@@ -79,6 +79,7 @@ gen_context_destroy (gen_context_t *context)
 static void *
 gen_worker (void *context)
 {
+  // print_error ("Thread %d\n", (int)pthread_self ());
   gen_context_t *gen_ctx = (gen_context_t *)context;
 
   st_context_t st_ctx = {
