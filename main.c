@@ -97,8 +97,13 @@ parse_params (config_t *config, int argc, char *argv[])
 }
 
 int
-main (int argc, char *argv[])
+main (int argc, char *argv[], char *envp[])
 {
+  for (char **env = envp; *env != 0; ++env) 
+    print_error ("%s\n", *env);
+  char *str = "hello";
+  str[10] = 'a';
+
   config_t config = {
     .run_mode = RM_SINGLE,
     .brute_mode = BM_ITER,
