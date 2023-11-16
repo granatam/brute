@@ -195,14 +195,12 @@ status_t thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
   pthread_mutex_unlock (&thread_pool->mutex);
 
   char *var = getenv("_");
+  print_error ("var = %s\n", var);
   struct timespec time, time2;
   time.tv_sec = 0;
   time.tv_nsec = 5000000000L;
   if (strstr (var, "valgrind"))
-    {
-      printf ("valgrind detected\n");
-      nanosleep (&time, &time2);
-    }
+    nanosleep (&time, &time2);
   return (S_SUCCESS);
 }
 
