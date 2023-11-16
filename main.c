@@ -97,13 +97,8 @@ parse_params (config_t *config, int argc, char *argv[])
 }
 
 int
-main (int argc, char *argv[], char *envp[])
+main (int argc, char *argv[])
 {
-  for (char **env = envp; *env != 0; ++env) 
-    print_error ("%s\n", *env);
-  char *str = malloc(10);
-  str[100] = 'a';
-
   config_t config = {
     .run_mode = RM_SINGLE,
     .brute_mode = BM_ITER,
