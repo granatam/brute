@@ -43,11 +43,8 @@ thread_cleanup (void *arg)
   node->prev->next = node->next;
   node->next->prev = node->prev;
   --thread_pool->count;
-  pthread_mutex_unlock (&thread_pool->mutex);
-
-  free (node);
-
   pthread_cond_signal (&thread_pool->cond);
+  pthread_mutex_unlock (&thread_pool->mutex);
 }
 
 // TODO: Add status checks and cleanup in case of errors
@@ -67,45 +64,36 @@ thread_run (void *arg)
       return (NULL);
     }
 
-  node_t *node = (node_t *)calloc (1, sizeof (*node));
-  if (!node)
-    {
-      print_error ("Could not allocate memory\n");
-      return (NULL);
-    }
-
-  node->thread = pthread_self ();
+  node_t node;
+  node.thread = pthread_self ();
 
   if (pthread_mutex_lock (&thread_pool->mutex) != 0)
     {
-      free (node);
       print_error ("Could not lock mutex\n");
       return (NULL);
     }
 
   if (thread_pool->cancelled)
     {
-      free (node);
       --thread_pool->count;
       pthread_mutex_unlock (&thread_pool->mutex);
       pthread_cond_signal (&thread_pool->cond);
       
       return (NULL);
     }
-  node->next = &thread_pool->threads;
-  node->prev = thread_pool->threads.prev;
+  node.next = &thread_pool->threads;
+  node.prev = thread_pool->threads.prev;
 
-  thread_pool->threads.prev->next = node;
-  thread_pool->threads.prev = node;
+  thread_pool->threads.prev->next = &node;
+  thread_pool->threads.prev = &node;
 
   if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
     {
-      free (node);
       print_error ("Could not unlock mutex\n");
       return (NULL);
     }
 
-  thread_cleanup_context_t tcc = { .thread_pool = thread_pool, .node = node };
+  thread_cleanup_context_t tcc = { .thread_pool = thread_pool, .node = &node };
   pthread_cleanup_push (thread_cleanup, &tcc);
 
   pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL);
@@ -160,8 +148,7 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg)
   return (S_SUCCESS);
 }
 
-status_t
-thread_pool_cancel (thread_pool_t *thread_pool)
+status_t thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
 {
   pthread_t self_id = pthread_self ();
 
@@ -189,7 +176,8 @@ thread_pool_cancel (thread_pool_t *thread_pool)
       if (thread == self_id)
         return (S_FAILURE);
 
-      pthread_cancel (thread);
+      if (cancel)
+        pthread_cancel (thread);
 
       pthread_mutex_lock (&thread_pool->mutex);
       while (thread_pool->threads.next->thread == thread)
@@ -203,6 +191,17 @@ thread_pool_cancel (thread_pool_t *thread_pool)
   pthread_mutex_unlock (&thread_pool->mutex);
 
   return (S_SUCCESS);
+}
+
+status_t
+thread_pool_cancel (thread_pool_t *thread_pool)
+{
+  return (thread_pool_collect (thread_pool, true));
+}
+
+status_t thread_pool_join (thread_pool_t *thread_pool)
+{
+  return (thread_pool_collect (thread_pool, false));
 }
 
 int

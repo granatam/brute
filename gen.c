@@ -58,7 +58,7 @@ gen_context_destroy (gen_context_t *context)
 {
   context->cancelled = true;
 
-  if (thread_pool_cancel (&context->thread_pool) == S_FAILURE)
+  if (thread_pool_join (&context->thread_pool) == S_FAILURE)
     {
       print_error ("Could not cancel a thread pool\n");
       return (S_FAILURE);
@@ -73,6 +73,7 @@ gen_context_destroy (gen_context_t *context)
   if (context->state)
     free (context->state);
 
+  // print_error ("gen_ctx_destroy\n");
   return (S_SUCCESS);
 }
 
@@ -127,10 +128,7 @@ run_generator (task_t *task, config_t *config)
   task->from = (config->length < 3) ? 1 : 2;
   task->to = config->length;
   if (gen_context_init (&context, config, task) == S_FAILURE)
-    {
-      gen_context_destroy (&context);
-      return (false);
-    }
+    goto fail;
 
   int number_of_threads
       = (config->number_of_threads == 1) ? 1 : config->number_of_threads - 1;
@@ -142,10 +140,10 @@ run_generator (task_t *task, config_t *config)
 
   gen_worker (&context);
 
+  gen_context_destroy (&context);
+
   if (context.password[0] != 0)
     memcpy (task->password, context.password, sizeof (context.password));
-
-  gen_context_destroy (&context);
 
   return (context.password[0] != 0);
 
