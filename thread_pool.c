@@ -197,10 +197,12 @@ status_t thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
   char *var = getenv("_");
   struct timespec time, time2;
   time.tv_sec = 0;
-  time.tv_nsec = 100000000L;
+  time.tv_nsec = 5000000000L;
   if (strstr (var, "valgrind"))
-    nanosleep (&time, &time2);
-  
+    {
+      print_error ("valgrind detected\n");
+      nanosleep (&time, &time2);
+    }
   return (S_SUCCESS);
 }
 
