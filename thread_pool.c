@@ -55,7 +55,6 @@ thread_run (void *arg)
   tp_context_t local_ctx = *tp_ctx;
   thread_pool_t *thread_pool = local_ctx.thread_pool;
 
-  pthread_detach (pthread_self ());
   pthread_setcancelstate (PTHREAD_CANCEL_DISABLE, NULL);
 
   if (pthread_mutex_unlock (&tp_ctx->mutex) != 0)
@@ -128,7 +127,10 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg)
   pthread_mutex_unlock (&thread_pool->mutex);
 
   pthread_t thread;
-  if (pthread_create (&thread, NULL, &thread_run, &context) != 0)
+  pthread_attr_t attr;
+  pthread_attr_init(&attr);
+  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+  if (pthread_create (&thread, &attr, &thread_run, &context) != 0)
     {
       pthread_mutex_lock (&thread_pool->mutex);
       --thread_pool->count;
