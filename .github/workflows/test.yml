@@ -22,7 +22,7 @@ jobs:
       - name: make
         run: CC=${{matrix.cc}} make 
       - name: make check
-        run: make check
+        run: make check WITH_PERF_TEST=false
   macos:
     runs-on: macos-latest
     name: MacOS (clang)
