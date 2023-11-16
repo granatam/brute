@@ -1,11 +1,15 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#define MAX_TCP_PORT 65535
+
 typedef enum
 {
   RM_SINGLE,
   RM_MULTI,
   RM_GENERATOR,
+  RM_CLIENT,
+  RM_SERVER,
 } run_mode_t;
 
 typedef enum
@@ -23,6 +27,8 @@ typedef struct config_t
   int length;
   char *alph;
   char *hash;
+  char *addr;
+  int port;
 } config_t;
 
 #endif // CONFIG_H

@@ -1,6 +1,6 @@
 .PHONY: clean
 CFLAGS=-O2 -Wall -Wpedantic -Wextra -pthread -gdwarf-4
-OBJ=brute.o iter.o rec.o common.o main.o multi.o queue.o single.o gen.o semaphore.o
+OBJ=brute.o iter.o rec.o common.o main.o multi.o queue.o single.o gen.o semaphore.o client.o server.o thread_pool.o
 TARGET=main
 LIBS+=crypt/libcrypt.a
 CFLAGS+=-I./crypt

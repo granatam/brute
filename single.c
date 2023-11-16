@@ -6,11 +6,11 @@
 bool
 st_password_check (task_t *task, void *context)
 {
-  st_context_t *st_context = (st_context_t *)context;
+  st_context_t *st_ctx = (st_context_t *)context;
   char *hashed_password
-      = crypt_r (task->password, st_context->hash, &st_context->data);
+      = crypt_r (task->password, st_ctx->hash, &st_ctx->data);
 
-  return (strcmp (st_context->hash, hashed_password) == 0);
+  return (strcmp (st_ctx->hash, hashed_password) == 0);
 }
 
 bool

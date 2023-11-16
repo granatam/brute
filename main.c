@@ -1,21 +1,24 @@
 #include "brute.h"
+#include "client.h"
 #include "common.h"
 #include "config.h"
 #include "gen.h"
 #include "multi.h"
 #include "queue.h"
+#include "server.h"
 #include "single.h"
 
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
-status_t
+static status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
-  while ((opt = getopt (argc, argv, "l:a:h:t:smgiry")) != -1)
+  while ((opt = getopt (argc, argv, "l:a:h:t:p:b:dmgcsiry")) != -1)
     {
       switch (opt)
         {
@@ -49,7 +52,19 @@ parse_params (config_t *config, int argc, char *argv[])
               }
             break;
           }
-        case 's':
+        case 'p':
+          config->port = atoi (optarg);
+          if (config->length <= 0 || config->length > MAX_TCP_PORT)
+            {
+              print_error ("Port must be a number between 0 and %d\n",
+                           MAX_TCP_PORT);
+              return (S_FAILURE);
+            }
+          break;
+        case 'b':
+          config->addr = optarg;
+          break;
+        case 'd': /* default mode */
           config->run_mode = RM_SINGLE;
           break;
         case 'm':
@@ -57,6 +72,12 @@ parse_params (config_t *config, int argc, char *argv[])
           break;
         case 'g':
           config->run_mode = RM_GENERATOR;
+          break;
+        case 'c':
+          config->run_mode = RM_CLIENT;
+          break;
+        case 's':
+          config->run_mode = RM_SERVER;
           break;
         case 'i':
           config->brute_mode = BM_ITER;
@@ -85,13 +106,15 @@ main (int argc, char *argv[])
     .number_of_threads = sysconf (_SC_NPROCESSORS_ONLN),
     .alph = "abc",
     .hash = "abFZSxKKdq5s6", /* crypt ("abc", "abc"); */
+    .port = 9000,
+    .addr = "127.0.0.1",
   };
 
   if (parse_params (&config, argc, argv) == S_FAILURE)
     return (EXIT_FAILURE);
 
   task_t task;
-  task.password[config.length] = '\0';
+  memset (task.password, 0, sizeof (task.password));
 
   bool is_found = false;
   switch (config.run_mode)
@@ -104,6 +127,12 @@ main (int argc, char *argv[])
       break;
     case RM_GENERATOR:
       is_found = run_generator (&task, &config);
+      break;
+    case RM_SERVER:
+      is_found = run_server (&task, &config);
+      break;
+    case RM_CLIENT:
+      is_found = run_client (&task, &config);
       break;
     }
 

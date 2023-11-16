@@ -4,7 +4,10 @@
 #include <pthread.h>
 #include <stdbool.h>
 
+#define print_error(...) print_error_impl (__func__, __LINE__, __VA_ARGS__)
+
 #define MAX_PASSWORD_LENGTH (7)
+#define HASH_LENGTH (13)
 
 typedef char password_t[MAX_PASSWORD_LENGTH + 1];
 
@@ -23,14 +26,16 @@ typedef enum status_t
   S_FAILURE,
 } status_t;
 
-typedef struct base_state_t 
+typedef struct base_state_t
 {
   task_t *task;
 } base_state_t;
 
-status_t print_error (const char *msg, ...);
+status_t print_error_impl (const char *func_name, int line, const char *msg,
+                           ...);
 void cleanup_mutex_unlock (void *mutex);
-int create_threads (pthread_t *threads, int number_of_threads,
-                    void *func (void *), void *context);
+
+status_t recv_wrapper (int socket_fd, void *buf, int len, int flags);
+status_t send_wrapper (int socket_fd, void *buf, int len, int flags);
 
 #endif // COMMON_H
