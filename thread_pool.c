@@ -76,8 +76,8 @@ thread_run (void *arg)
   if (thread_pool->cancelled)
     {
       --thread_pool->count;
-      pthread_mutex_unlock (&thread_pool->mutex);
       pthread_cond_signal (&thread_pool->cond);
+      pthread_mutex_unlock (&thread_pool->mutex);
       
       return (NULL);
     }
@@ -132,8 +132,8 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg)
     {
       pthread_mutex_lock (&thread_pool->mutex);
       --thread_pool->count;
-      pthread_mutex_unlock (&thread_pool->mutex);
       pthread_cond_signal (&thread_pool->cond);
+      pthread_mutex_unlock (&thread_pool->mutex);
 
       print_error ("Could not create thread\n");
       return (S_FAILURE);
@@ -176,10 +176,10 @@ status_t thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
       if (thread == self_id)
         return (S_FAILURE);
 
-      if (cancel)
-        pthread_cancel (thread);
 
       pthread_mutex_lock (&thread_pool->mutex);
+      if (cancel)
+        pthread_cancel (thread);
       while (thread_pool->threads.next->thread == thread)
         pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex);
       pthread_mutex_unlock (&thread_pool->mutex);
