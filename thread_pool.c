@@ -200,7 +200,7 @@ status_t thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
   time.tv_nsec = 5000000000L;
   if (strstr (var, "valgrind"))
     {
-      print_error ("valgrind detected\n");
+      printf ("valgrind detected\n");
       nanosleep (&time, &time2);
     }
   return (S_SUCCESS);
