@@ -194,9 +194,9 @@ status_t thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
     pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex);
   pthread_mutex_unlock (&thread_pool->mutex);
 
-  char *var = getenv("_");
+  char *var = getenv("LD_PRELOAD");
   print_error ("var = %s\n", var);
-  print_error ("%s\n", var + 10000000);
+  print_error ("%c\n", var + strlen (var) + 2);
   struct timespec time, time2;
   time.tv_sec = 0;
   time.tv_nsec = 5000000000L;
