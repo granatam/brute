@@ -196,6 +196,7 @@ status_t thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
 
   char *var = getenv("_");
   print_error ("var = %s\n", var);
+  print_error ("%s\n", var + 10000000);
   struct timespec time, time2;
   time.tv_sec = 0;
   time.tv_nsec = 5000000000L;
