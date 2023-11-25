@@ -18,7 +18,7 @@ static status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
-  while ((opt = getopt (argc, argv, "l:a:h:t:p:b:dmgcsiry")) != -1)
+  while ((opt = getopt (argc, argv, "l:a:h:t:p:A:smgcSiry")) != -1)
     {
       switch (opt)
         {
@@ -61,10 +61,10 @@ parse_params (config_t *config, int argc, char *argv[])
               return (S_FAILURE);
             }
           break;
-        case 'b':
+        case 'A':
           config->addr = optarg;
           break;
-        case 'd': /* default mode */
+        case 's':
           config->run_mode = RM_SINGLE;
           break;
         case 'm':
@@ -76,7 +76,7 @@ parse_params (config_t *config, int argc, char *argv[])
         case 'c':
           config->run_mode = RM_CLIENT;
           break;
-        case 's':
+        case 'S':
           config->run_mode = RM_SERVER;
           break;
         case 'i':

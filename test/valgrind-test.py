@@ -4,9 +4,8 @@ from utils import gen_str, run_valgrind
 
 # TODO: Valgrind test for client-server interaction
 
-
 @given(
-    st.text(min_size=1, max_size=1, alphabet="dmg"),
+    st.text(min_size=1, max_size=1, alphabet="smg"),
     st.text(min_size=1, max_size=1, alphabet="ir"),
 )
 @settings(deadline=None)
