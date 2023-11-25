@@ -195,7 +195,8 @@ status_t thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
   pthread_mutex_unlock (&thread_pool->mutex);
 
   char *var = getenv("PYTEST_CURRENT_TEST");
-  print_error ("var = %s\n", var);
+  if (var == NULL)
+    return (S_SUCCESS);
   struct timespec time, time2;
   time.tv_sec = 0;
   time.tv_nsec = 100000000L;
