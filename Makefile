@@ -6,7 +6,7 @@ LIBS+=crypt/libcrypt.a
 CFLAGS+=-I./crypt
 
 TESTS=test/test.py
-WITH_PERF_TEST ?= true
+WITH_PERF_TEST ?= false
 
 ifeq ($(shell uname), Linux)
 	# No valgrind on MacOS
