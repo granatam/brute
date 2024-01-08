@@ -149,13 +149,15 @@ handle_client (void *arg)
           goto end;
         }
 
-      if (pthread_mutex_lock (&cl_ctx->mutex) != 0)
+      print_error ("Before lock\n");
+      if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
         {
           print_error ("Could not lock a mutex\n");
           goto end;
         }
-      pthread_cleanup_push (cleanup_mutex_unlock, &cl_ctx->mutex);
+      pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
 
+      print_error ("After lock\n");
       --mt_ctx->passwords_remaining;
       if (mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
         if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
@@ -168,6 +170,7 @@ handle_client (void *arg)
     }
 
 end:
+  print_error ("End???\n");
   close (local_ctx.socket_fd);
   return (NULL);
 }

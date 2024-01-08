@@ -52,6 +52,7 @@ run_client (task_t *task, config_t *config)
 
   while (true)
     {
+      print_error ("Waiting for task\n");
       if (recv_wrapper (socket_fd, task, sizeof (task_t), 0) == S_FAILURE)
         {
           print_error ("Could not receive data from server\n");
