@@ -2,6 +2,7 @@
 
 #include "brute.h"
 #include "common.h"
+#include "config.h"
 #include "single.h"
 
 #include <arpa/inet.h>
@@ -49,6 +50,20 @@ run_client (task_t *task, config_t *config)
     .hash = hash,
     .data = { .initialized = 0 },
   };
+
+  if (config->run_mode == RM_LOAD_CLIENT)
+    {  
+      int wrong_password = 0;
+      if (send_wrapper (socket_fd, &wrong_password, sizeof (wrong_password), 0)
+          == S_FAILURE)
+        {
+          print_error ("Could not send data to server\n");
+          goto fail;
+        }
+
+      close (socket_fd);
+      return (false);
+    }
 
   while (true)
     {

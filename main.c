@@ -18,7 +18,7 @@ static status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
-  while ((opt = getopt (argc, argv, "l:a:h:t:p:A:smgcSiry")) != -1)
+  while ((opt = getopt (argc, argv, "l:a:h:t:p:A:smgcLSiry")) != -1)
     {
       switch (opt)
         {
@@ -76,6 +76,9 @@ parse_params (config_t *config, int argc, char *argv[])
         case 'c':
           config->run_mode = RM_CLIENT;
           break;
+        case 'L':
+          config->run_mode = RM_LOAD_CLIENT;
+          break;
         case 'S':
           config->run_mode = RM_SERVER;
           break;
@@ -132,6 +135,7 @@ main (int argc, char *argv[])
       is_found = run_server (&task, &config);
       break;
     case RM_CLIENT:
+    case RM_LOAD_CLIENT:
       is_found = run_client (&task, &config);
       break;
     }
