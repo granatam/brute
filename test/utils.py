@@ -49,9 +49,9 @@ def run_client_server(passwd, alph, brute_mode):
     client_cmd = brute_cmd(passwd, alph, "c", brute_mode)
     server_cmd = brute_cmd(passwd, alph, "S", brute_mode)
 
-    server_proc = subprocess.Popen(server_cmd)
+    server_proc = subprocess.Popen(server_cmd, shell=True)
     time.sleep(1)
-    client_proc = subprocess.Popen(client_cmd)
+    client_proc = subprocess.Popen(client_cmd, shell=True)
 
     try:
         out, err = server_proc.communicate(timeout=5)
