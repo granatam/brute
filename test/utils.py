@@ -29,7 +29,7 @@ def gen_str(size, chars=string.ascii_uppercase + string.digits):
 
 def brute_cmd(passwd, alph, run_mode, brute_mode, threads=CPU_COUNT):
     hash = crypt(passwd, passwd)
-    return f"./main -h {hash} -l {len(str(passwd))} -a {alph} -{run_mode} -{brute_mode} -t {threads}"
+    return f"./main -H {hash} -l {len(str(passwd))} -a {alph} -{run_mode} -{brute_mode} -t {threads}"
 
 
 def run_brute(passwd, alph, run_mode, brute_mode):

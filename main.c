@@ -44,7 +44,8 @@ usage (char *first_arg)
 #ifndef __APPLE__
            "\t-y           recursive generator\n"
 #endif
-           , first_arg);
+           ,
+           first_arg);
 }
 
 static status_t
