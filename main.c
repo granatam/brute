@@ -14,11 +14,44 @@
 #include <string.h>
 #include <unistd.h>
 
+static void
+usage (char *first_arg)
+{
+  fprintf (stderr,
+           "usage: %s [-l length] [-a alphabet] [-h hash] [-t number] "
+           "[-p port] [-A addr] [-s | -m | -g | -c | -L | -S] [-i | -r"
+#ifndef __APPLE__
+           " | -y"
+#endif
+           "]\n"
+           "options:\n"
+           "\t-l length    password length\n"
+           "\t-a alphabet  alphabet\n"
+           "\t-h hash      hash\n"
+           "\t-t number    number of threads\n"
+           "\t-p port      server port\n"
+           "\t-A addr      server address\n"
+           "run modes:\n"
+           "\t-s           singlethreaded mode\n"
+           "\t-m           multithreaded mode\n"
+           "\t-g           generator mode\n"
+           "\t-c           client mode\n"
+           "\t-L           load client mode\n"
+           "\t-S           server mode\n"
+           "brute modes:\n"
+           "\t-i           iterative bruteforce\n"
+           "\t-r           recursive bruteforce\n"
+#ifndef __APPLE__
+           "\t-y           recursive generator\n"
+#endif
+           , first_arg);
+}
+
 static status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
-  while ((opt = getopt (argc, argv, "l:a:h:t:p:A:smgcLSiry")) != -1)
+  while ((opt = getopt (argc, argv, "l:a:H:t:p:A:smgcLSiryh")) != -1)
     {
       switch (opt)
         {
@@ -35,7 +68,7 @@ parse_params (config_t *config, int argc, char *argv[])
         case 'a':
           config->alph = optarg;
           break;
-        case 'h':
+        case 'H':
           config->hash = optarg;
           break;
         case 't':
@@ -91,6 +124,9 @@ parse_params (config_t *config, int argc, char *argv[])
         case 'y':
           config->brute_mode = BM_REC_GEN;
           break;
+        case 'h':
+          usage (argv[0]);
+          exit (EXIT_SUCCESS);
         default:
           return (S_FAILURE);
         }
@@ -114,7 +150,10 @@ main (int argc, char *argv[])
   };
 
   if (parse_params (&config, argc, argv) == S_FAILURE)
-    return (EXIT_FAILURE);
+    {
+      usage (argv[0]);
+      return (EXIT_FAILURE);
+    }
 
   task_t task;
   memset (task.password, 0, sizeof (task.password));
