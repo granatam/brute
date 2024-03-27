@@ -184,7 +184,7 @@ handle_clients (void *arg)
   cl_context_t cl_ctx = {
     .context = serv_ctx,
   };
-  
+
   if (pthread_mutex_init (&cl_ctx.mutex, NULL) != 0)
     {
       print_error ("Could not create mutex\n");
@@ -213,8 +213,8 @@ handle_clients (void *arg)
         {
           print_error ("Could not create client thread\n");
           if (pthread_mutex_unlock (&cl_ctx.mutex) != 0)
-            print_error 
-              ("Could not unlock mutex after thread creation fail\n");
+            print_error (
+                "Could not unlock mutex after thread creation fail\n");
           continue;
         }
 

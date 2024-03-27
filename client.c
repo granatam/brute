@@ -52,7 +52,7 @@ run_client (task_t *task, config_t *config)
   };
 
   if (config->run_mode == RM_LOAD_CLIENT)
-    {  
+    {
       int wrong_password = 0;
       if (send_wrapper (socket_fd, &wrong_password, sizeof (wrong_password), 0)
           == S_FAILURE)

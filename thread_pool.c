@@ -231,10 +231,10 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
       pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
       if (cancel)
-          if (pthread_cancel (thread) != 0)
+        if (pthread_cancel (thread) != 0)
           {
-              print_error ("Could not cancel a thread\n");
-              return (S_FAILURE);
+            print_error ("Could not cancel a thread\n");
+            return (S_FAILURE);
           }
 
       while (thread_pool->threads.next->thread == thread)
@@ -262,7 +262,7 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
       }
   pthread_cleanup_pop (!0);
 
-  char *var = getenv("PYTEST_CURRENT_TEST");
+  char *var = getenv ("PYTEST_CURRENT_TEST");
   if (var == NULL)
     return (S_SUCCESS);
   struct timespec time, time2;
