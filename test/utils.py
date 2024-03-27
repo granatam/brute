@@ -1,6 +1,7 @@
 import random
 import subprocess
 import string
+import time
 
 # to suppress the DeprecationWarning by crypt.crypt()
 import warnings
@@ -42,3 +43,21 @@ def run_valgrind(passwd, alph, run_mode, brute_mode):
     return get_output(
         f"valgrind --leak-check=full --error-exitcode=1 --trace-children=yes --quiet {cmd}"
     )
+
+
+def run_client_server(passwd, alph, brute_mode):
+    client_cmd = brute_cmd(passwd, alph, "c", brute_mode)
+    server_cmd = brute_cmd(passwd, alph, "S", brute_mode)
+
+    server_proc = subprocess.Popen(server_cmd)
+    time.sleep(1)
+    client_proc = subprocess.Popen(client_cmd)
+
+    try:
+        out, err = server_proc.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        server_proc.kill()
+        out, err = server_proc.communicate()
+    client_proc.wait()
+
+    return out
