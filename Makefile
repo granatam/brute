@@ -22,7 +22,7 @@ all: ${TARGET}
 ${TARGET}: ${OBJ} ${LIBS}
 	@${CC} ${CFLAGS} ${OBJ} ${LIBS} -o ${TARGET}
 
-crypt/libcrypt.a: 
+crypt/libcrypt.a:
 	@${MAKE} -C crypt
 
 clean:
@@ -30,4 +30,4 @@ clean:
 	@${MAKE} -C crypt clean
 
 check: all
-	@pytest ${TESTS}
+	@pytest --hypothesis-show-statistics ${TESTS}
