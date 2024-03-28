@@ -29,5 +29,5 @@ clean:
 	@${RM} main *.o
 	@${MAKE} -C crypt clean
 
-check:
+check: all
 	@pytest ${TESTS}
