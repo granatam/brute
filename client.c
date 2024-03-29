@@ -7,6 +7,7 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -37,6 +38,8 @@ find_password (config_t *config, int socket_fd, task_t *task,
 
       print_error ("Sent %s to server\n", task->password);
     }
+  else
+    memset (task->password, 0, sizeof (task->password));
 
   return (S_SUCCESS);
 }

@@ -167,11 +167,11 @@ handle_client (void *arg)
         }
 
       if (is_done)
-        if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
-          {
+        {
+          if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
             print_error ("Could not signal a condition\n");
-            goto end;
-          }
+          goto end;
+        }
     }
 
 end:
@@ -200,6 +200,7 @@ handle_clients (void *arg)
       print_error ("Could not lock mutex\n");
       return (NULL);
     }
+
   while (true)
     {
       if ((cl_ctx.socket_fd = accept (serv_ctx->socket_fd, NULL, NULL)) == -1)
