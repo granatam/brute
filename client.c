@@ -7,12 +7,39 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <stdio.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
-// TODO: Implement read_data and send_data to split code into multiple
-// functions?
+status_t
+find_password (config_t *config, int socket_fd, task_t *task,
+               st_context_t *ctx)
+{
+  if (brute (task, config, st_password_check, ctx))
+    {
+      print_error ("Found something\n");
+
+      int password_size = sizeof (task->password);
+      if (send_wrapper (socket_fd, &password_size, sizeof (password_size), 0)
+          == S_FAILURE)
+        {
+          print_error ("Could not send data to server\n");
+          return (S_FAILURE);
+        }
+
+      print_error ("Sent %d to server\n", password_size);
+
+      if (send_wrapper (socket_fd, task->password, password_size, 0)
+          == S_FAILURE)
+        {
+          print_error ("Could not send data to server\n");
+          return (S_FAILURE);
+        }
+
+      print_error ("Sent %s to server\n", task->password);
+    }
+
+  return (S_SUCCESS);
+}
 
 bool
 run_client (task_t *task, config_t *config)
@@ -51,20 +78,6 @@ run_client (task_t *task, config_t *config)
     .data = { .initialized = 0 },
   };
 
-  if (config->run_mode == RM_LOAD_CLIENT)
-    {
-      int wrong_password = 0;
-      if (send_wrapper (socket_fd, &wrong_password, sizeof (wrong_password), 0)
-          == S_FAILURE)
-        {
-          print_error ("Could not send data to server\n");
-          goto fail;
-        }
-
-      close (socket_fd);
-      return (false);
-    }
-
   while (true)
     {
       print_error ("Waiting for task\n");
@@ -76,31 +89,15 @@ run_client (task_t *task, config_t *config)
 
       print_error ("Received task %s from server\n", task->password);
 
-      if (brute (task, config, st_password_check, &st_context))
+      // In RM_LOAD_CLIENT mode we should not search for a password
+      if (config->run_mode == RM_CLIENT)
         {
-          print_error ("Found something\n");
-
-          int password_size = sizeof (task->password);
-          if (send_wrapper (socket_fd, &password_size, sizeof (password_size),
-                            0)
+          if (find_password (config, socket_fd, task, &st_context)
               == S_FAILURE)
-            {
-              print_error ("Could not send data to server\n");
-              goto fail;
-            }
+            goto fail;
 
-          print_error ("Sent %d to server\n", password_size);
-
-          if (send_wrapper (socket_fd, task->password, password_size, 0)
-              == S_FAILURE)
-            {
-              print_error ("Could not send data to server\n");
-              goto fail;
-            }
-
-          print_error ("Sent %s to server\n", task->password);
-
-          return (true);
+          if (task->password[0] != 0)
+            return (true);
         }
 
       print_error ("Haven't found anything\n");
