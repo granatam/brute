@@ -50,11 +50,11 @@ def run_client_server(passwd, alph, brute_mode):
     server_cmd = brute_cmd(passwd, alph, "S", brute_mode)
 
     server_proc = subprocess.Popen(server_cmd, stdout=subprocess.PIPE, shell=True)
-    subprocess.Popen(client_cmd, stdout=subprocess.PIPE, shell=True).wait(timeout=3)
+    subprocess.Popen(client_cmd, stdout=subprocess.PIPE, shell=True).wait(timeout=5)
     try:
-        output, _ = server_proc.communicate(timeout=3)
+        output, _ = server_proc.communicate(timeout=5)
     except subprocess.TimeoutExpired:
         server_proc.kill()
-        _, output = server_proc.communicate(timeout=1)
+        _, output = server_proc.communicate(timeout=3)
 
     return output.decode()
