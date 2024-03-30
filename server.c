@@ -302,9 +302,10 @@ run_server (task_t *task, config_t *config)
       goto fail;
     }
 
-  if (mt_ctx->password[0] != 0)
+  if (mt_ctx->password[0] != 0) {
     memcpy (task->password, mt_ctx->password, sizeof (mt_ctx->password));
-
+    print_error("Password found: %s\n", task->password);
+  }
   // if (serv_context_destroy (&context) == S_FAILURE)
   //   {
   //     print_error ("Could not destroy server context\n");
