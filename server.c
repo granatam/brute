@@ -190,6 +190,8 @@ handle_client (void *arg)
             }
 
           pthread_mutex_unlock(&mt_ctx->mutex);
+          close_client (local_ctx.socket_fd);
+          close (local_ctx.socket_fd);
           return (NULL);
         }
 
