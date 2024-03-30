@@ -171,40 +171,30 @@ handle_client (void *arg)
           goto end;
         }
 
-      bool is_done = false;
-
-      if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
+       if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
         {
           print_error ("Could not lock a mutex\n");
-          goto end;
+          return (NULL);
         }
+      pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
 
       --mt_ctx->passwords_remaining;
-
-      if (mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
-      {
-        is_done = true;
-        print_error("FOUND\n");
+      if (mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0) {
+        if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
+          {
+            print_error ("Could not signal a condition\n");
+            // FIXME: Doesn't work with `goto end;`
+            return (NULL);
+          }
       }
 
-      if (pthread_mutex_unlock (&mt_ctx->mutex) != 0)
-        {
-          print_error ("Could not unlock a mutex\n");
-          goto end;
-        }
-
-      if (is_done)
-        {
-          if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
-            print_error ("Could not signal a condition\n");
-          goto end;
-        }
+      pthread_cleanup_pop (!0);
     }
 
 end:
-  print_error("END\n");
   close_client (local_ctx.socket_fd);
   close (local_ctx.socket_fd);
+  print_error("END\n");
   return (NULL);
 }
 
@@ -295,14 +285,15 @@ run_server (task_t *task, config_t *config)
     }
   pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
 
-  // while (mt_ctx->passwords_remaining != 0 && mt_ctx->password[0] == 0)
-  //   {
+  while (mt_ctx->passwords_remaining != 0 && mt_ctx->password[0] == 0)
+    {
+        print_error("WAITING\n");
       if (pthread_cond_wait (&mt_ctx->cond_sem, &mt_ctx->mutex) != 0)
         {
           print_error ("Could not wait on a condition\n");
           goto fail;
         }
-    // }
+    }
 
   pthread_cleanup_pop (!0);
 
@@ -315,11 +306,13 @@ run_server (task_t *task, config_t *config)
   if (mt_ctx->password[0] != 0)
     memcpy (task->password, mt_ctx->password, sizeof (mt_ctx->password));
 
+  print_error("COPIED\n");
   if (serv_context_destroy (&context) == S_FAILURE)
     {
       print_error ("Could not destroy server context\n");
       return (false);
     }
+    print_error("DESTROYED\n");
 
   return (mt_ctx->password[0] != 0);
 
