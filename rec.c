@@ -84,7 +84,7 @@ brute_rec (task_t *task, config_t *config, password_handler_t password_handler,
 {
   if (pos == task->to)
     {
-      print_error ("%s\n", task->password);
+      // print_error ("%s\n", task->password);
       return (password_handler (task, context));
     }
   else
@@ -92,8 +92,8 @@ brute_rec (task_t *task, config_t *config, password_handler_t password_handler,
       for (size_t i = 0; config->alph[i] != '\0'; ++i)
         {
           task->password[pos] = config->alph[i];
-          print_error ("%s %d %d %s\n", task->password,
-                       sizeof (task->password), pos, config->alph);
+          // print_error ("%s %d %d %s\n", task->password,
+          //              sizeof (task->password), pos, config->alph);
 
           if (brute_rec (task, config, password_handler, context, pos + 1))
             return (true);
