@@ -44,6 +44,7 @@ find_password (config_t *config, int socket_fd, task_t *task,
   return (S_SUCCESS);
 }
 
+// TODO: change signature to bool (task_t *task, char *addr, int port)
 bool
 run_client (task_t *task, config_t *config)
 {
@@ -67,6 +68,7 @@ run_client (task_t *task, config_t *config)
 
   print_error ("Connected to server\n");
 
+  // TODO: receive whole config instead of just hash
   char hash[HASH_LENGTH];
   if (recv_wrapper (socket_fd, hash, HASH_LENGTH, 0) == S_FAILURE)
     {

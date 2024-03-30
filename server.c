@@ -123,6 +123,7 @@ handle_client (void *arg)
 
   print_error ("Mutex unlocked\n");
 
+  // TODO: Send whole config instead of just hash
   if (send_wrapper (local_ctx.socket_fd, mt_ctx->config->hash, HASH_LENGTH, 0)
       == S_FAILURE)
     {
@@ -175,6 +176,7 @@ handle_client (void *arg)
     }
 
 end:
+  // TODO: Send exit command to client instead of just close
   close (local_ctx.socket_fd);
   return (NULL);
 }
