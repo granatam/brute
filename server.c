@@ -271,7 +271,7 @@ run_server (task_t *task, config_t *config)
       goto fail;
     }
 
-  task->from = (config->length < 3) ? 1 : 2;
+  task->from = (config->length < 4) ? 1 : 2;
   task->to = config->length;
 
   mt_context_t *mt_ctx = (mt_context_t *)&context;
@@ -285,14 +285,14 @@ run_server (task_t *task, config_t *config)
     }
   pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
 
-  while (mt_ctx->passwords_remaining != 0 && mt_ctx->password[0] == 0)
+  // while (mt_ctx->passwords_remaining != 0 && mt_ctx->password[0] == 0)
+  //   {
+  if (pthread_cond_wait (&mt_ctx->cond_sem, &mt_ctx->mutex) != 0)
     {
-      if (pthread_cond_wait (&mt_ctx->cond_sem, &mt_ctx->mutex) != 0)
-        {
-          print_error ("Could not wait on a condition\n");
-          goto fail;
-        }
+      print_error ("Could not wait on a condition\n");
+      goto fail;
     }
+  // }
 
   pthread_cleanup_pop (!0);
 
@@ -302,15 +302,16 @@ run_server (task_t *task, config_t *config)
       goto fail;
     }
 
-  if (mt_ctx->password[0] != 0) {
-    memcpy (task->password, mt_ctx->password, sizeof (mt_ctx->password));
-    print_error("Password found: %s\n", task->password);
-  }
-  // if (serv_context_destroy (&context) == S_FAILURE)
-  //   {
-  //     print_error ("Could not destroy server context\n");
-  //     return (false);
-  //   }
+  if (mt_ctx->password[0] != 0)
+    {
+      memcpy (task->password, mt_ctx->password, sizeof (mt_ctx->password));
+      print_error ("Password found: %s\n", task->password);
+    }
+  if (serv_context_destroy (&context) == S_FAILURE)
+    {
+      print_error ("Could not destroy server context\n");
+      return (false);
+    }
 
   return (mt_ctx->password[0] != 0);
 
