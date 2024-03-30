@@ -31,7 +31,12 @@ typedef struct base_state_t
   task_t *task;
 } base_state_t;
 
-// TODO: command_t for server? CONFIG & EXIT & TASK
+typedef enum command_t
+{
+    CMD_CONFIG,
+    CMD_TASK,
+    CMD_EXIT,
+} command_t;
 
 status_t print_error_impl (const char *func_name, int line, const char *msg,
                            ...);

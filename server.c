@@ -74,8 +74,29 @@ serv_context_destroy (serv_context_t *context)
 }
 
 static status_t
+close_client (int socket_fd)
+{
+  command_t cmd = CMD_EXIT;
+  if (send_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
+    {
+      print_error ("Could not send command to client\n");
+      return (S_FAILURE);
+    }
+
+  return (S_SUCCESS);
+}
+
+static status_t
 delegate_task (int socket_fd, task_t *task, password_t password)
 {
+  command_t cmd = CMD_TASK;
+
+  if (send_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
+    {
+      print_error ("Could not send command to client\n");
+      return (S_FAILURE);
+    }
+
   if (send_wrapper (socket_fd, task, sizeof (*task), 0) == S_FAILURE)
     {
       print_error ("Could not send data to client\n");
@@ -150,14 +171,16 @@ handle_client (void *arg)
           goto end;
         }
 
+      bool is_done = false;
+
       if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
         {
           print_error ("Could not lock a mutex\n");
           goto end;
         }
-      bool is_done = false;
 
       --mt_ctx->passwords_remaining;
+
       if (mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
         is_done = true;
 
@@ -177,6 +200,7 @@ handle_client (void *arg)
 
 end:
   // TODO: Send exit command to client instead of just close
+  close_client (local_ctx.socket_fd);
   close (local_ctx.socket_fd);
   return (NULL);
 }
