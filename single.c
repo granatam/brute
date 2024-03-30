@@ -11,11 +11,6 @@ st_password_check (task_t *task, void *context)
   char *hashed_password
       = crypt_r (task->password, st_ctx->hash, &st_ctx->data);
 
-  for (size_t i = 0; i < HASH_LENGTH + 1; ++i) {
-    print_error ("%d == %d\n", st_ctx->hash[i], hashed_password[i]);
-  }
-  print_error("%s == %s (%s) (%d)?\n", st_ctx->hash, hashed_password, task->password, strcmp (st_ctx->hash, hashed_password) == 0);
-
   return (strcmp (st_ctx->hash, hashed_password) == 0);
 }
 
