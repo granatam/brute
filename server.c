@@ -306,13 +306,11 @@ run_server (task_t *task, config_t *config)
   if (mt_ctx->password[0] != 0)
     memcpy (task->password, mt_ctx->password, sizeof (mt_ctx->password));
 
-  print_error ("COPIED\n");
   // if (serv_context_destroy (&context) == S_FAILURE)
   //   {
   //     print_error ("Could not destroy server context\n");
   //     return (false);
   //   }
-  print_error ("DESTROYED\n");
 
   return (mt_ctx->password[0] != 0);
 
