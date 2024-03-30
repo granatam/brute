@@ -287,7 +287,6 @@ run_server (task_t *task, config_t *config)
 
   while (mt_ctx->passwords_remaining != 0 && mt_ctx->password[0] == 0)
     {
-      print_error ("WAITING\n");
       if (pthread_cond_wait (&mt_ctx->cond_sem, &mt_ctx->mutex) != 0)
         {
           print_error ("Could not wait on a condition\n");
