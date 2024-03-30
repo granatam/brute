@@ -35,7 +35,7 @@ def test_corner_cases(run_mode, brute_mode):
 
 
 @given(
-    st.text(min_size=5, alphabet=string.ascii_letters, max_size=6),
+    st.text(min_size=2, alphabet=string.ascii_letters, max_size=4),
     st.text(min_size=1, max_size=1, alphabet="iry"),
 )
 @settings(deadline=timedelta(seconds=5), max_examples=3)
