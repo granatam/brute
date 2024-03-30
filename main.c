@@ -180,12 +180,12 @@ main (int argc, char *argv[])
       break;
     }
 
-  print_error("DBG1\n");
+  print_error("DBG1: %s\n", task.password);
   if (is_found)
     printf ("Password found: %s\n", task.password);
   else
     printf ("Password not found\n");
-  print_error("DBG2\n");
+  print_error("DBG2: %s\n", task.password);
 
   return (EXIT_SUCCESS);
 }
