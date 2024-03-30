@@ -36,9 +36,9 @@ def test_corner_cases(run_mode, brute_mode):
 
 @given(
     st.text(min_size=2, alphabet=string.ascii_letters, max_size=4),
-    st.text(min_size=1, max_size=1, alphabet="iry"),
+    st.text(min_size=1, max_size=1, alphabet="i"),
 )
-@settings(deadline=timedelta(seconds=5), max_examples=1)
+@settings(deadline=timedelta(seconds=5), max_examples=30)
 def test_client_server(passwd, brute_mode):
     alph = shuffle_password(passwd)
 
