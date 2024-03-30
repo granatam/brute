@@ -7,7 +7,7 @@
 #define print_error(...) print_error_impl (__func__, __LINE__, __VA_ARGS__)
 
 #define MAX_PASSWORD_LENGTH (7)
-#define HASH_LENGTH (13)
+#define HASH_LENGTH (14)
 
 typedef char password_t[MAX_PASSWORD_LENGTH + 1];
 

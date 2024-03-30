@@ -44,6 +44,7 @@ brute_iter (task_t *task, config_t *config,
 
   while (true)
     {
+        print_error("%s\n", state.base_state.task->password);
       if (password_handler (state.base_state.task, context))
         return (true);
 
