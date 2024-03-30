@@ -33,9 +33,9 @@ typedef struct base_state_t
 
 typedef enum command_t
 {
-    CMD_CONFIG,
-    CMD_TASK,
-    CMD_EXIT,
+  CMD_CONFIG,
+  CMD_TASK,
+  CMD_EXIT,
 } command_t;
 
 status_t print_error_impl (const char *func_name, int line, const char *msg,

@@ -15,7 +15,9 @@ status_t
 find_password (config_t *config, int socket_fd, task_t *task,
                st_context_t *ctx)
 {
-  print_error("%s %s %d %d\n", task->password, ctx->hash, task->from, task->to);
+  // TODO: Remove later
+  print_error ("%s %s %d %d\n", task->password, ctx->hash, task->from,
+               task->to);
   if (brute (task, config, st_password_check, ctx))
     {
       print_error ("Found something\n");
@@ -96,8 +98,8 @@ run_client (task_t *task, config_t *config)
 
       switch (cmd)
         {
+        // TODO: Do I need CMD_CONFIG?
         case CMD_CONFIG:
-          print_error ("not implemented yet\n");
         case CMD_EXIT:
           print_error ("received CMD_EXIT\n");
           goto fail;
