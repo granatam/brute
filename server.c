@@ -179,6 +179,7 @@ handle_client (void *arg)
       pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
 
       --mt_ctx->passwords_remaining;
+      print_error("%c\n", mt_ctx->password[0]);
       if (mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
         {
           if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
@@ -187,6 +188,9 @@ handle_client (void *arg)
               // FIXME: Doesn't work with `goto end;`
               return (NULL);
             }
+
+          pthread_mutex_unlock(&mt_ctx->mutex);
+          return (NULL);
         }
 
       pthread_cleanup_pop (!0);
