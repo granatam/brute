@@ -83,6 +83,9 @@ close_client (int socket_fd)
       return (S_FAILURE);
     }
 
+  shutdown(socket_fd, SHUT_RDWR);
+  close(socket_fd);
+
   return (S_SUCCESS);
 }
 
@@ -200,7 +203,6 @@ handle_client (void *arg)
 
 end:
   close_client (local_ctx.socket_fd);
-  close (local_ctx.socket_fd);
   return (NULL);
 }
 
