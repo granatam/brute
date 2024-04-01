@@ -321,11 +321,11 @@ run_server (task_t *task, config_t *config)
       // print_error ("Password found: %s\n", task->password);
     }
 
-  // if (serv_context_destroy (&context) == S_FAILURE)
-  //   {
-  //     print_error ("Could not destroy server context\n");
-  //     return (false);
-  //   }
+  if (serv_context_destroy (&context) == S_FAILURE)
+    {
+      print_error ("Could not destroy server context\n");
+      return (false);
+    }
 
   print_error ("After serv_context_destroy\n");
 
