@@ -180,13 +180,21 @@ main (int argc, char *argv[])
       break;
     }
 
-  // print_error ("DBG1: %s\n", task.password);
-  if (is_found)
-    printf ("Password found: %s\n", task.password);
-  else
-    printf ("Password not found\n");
-  // print_error ("DBG2: %s\n", task.password);
+  if (config.run_mode != RM_CLIENT)
+    {
+      if (is_found)
+        {
+          printf ("Password found: %s\n", task.password);
+          print_error ("Password found: %s\n", task.password);
+        }
+      else
+        {
+          printf ("Password not found\n");
+          print_error ("Password not found\n");
+        }
+    }
+  if (config.run_mode == RM_SERVER)
+    print_error ("--------------------------------\n");
 
-  print_error("--------------------------------\n");
   return (EXIT_SUCCESS);
 }

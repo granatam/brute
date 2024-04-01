@@ -28,6 +28,8 @@ thread_pool_init (thread_pool_t *thread_pool)
   thread_pool->count = 0;
   thread_pool->cancelled = false;
 
+  print_error ("Thread pool at %p\n", thread_pool);
+
   return (S_SUCCESS);
 }
 
@@ -37,6 +39,7 @@ thread_cleanup (void *arg)
   thread_cleanup_context_t *tcc = arg;
   node_t *node = tcc->node;
   thread_pool_t *thread_pool = tcc->thread_pool;
+  print_error ("Start thread_cleanup %p\n", thread_pool);
 
   if (pthread_mutex_lock (&thread_pool->mutex) != 0)
     {
@@ -50,11 +53,9 @@ thread_cleanup (void *arg)
   --thread_pool->count;
 
   if (pthread_cond_signal (&thread_pool->cond) != 0)
-    {
-      print_error ("Could not signal a conditional semaphore\n");
-      return;
-    }
+    print_error ("Could not signal a conditional semaphore\n");
   pthread_cleanup_pop (!0);
+  print_error ("End thread_cleanup\n");
 }
 
 static void *

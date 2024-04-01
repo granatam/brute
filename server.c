@@ -85,6 +85,7 @@ close_client (int socket_fd)
 
   // shutdown (socket_fd, SHUT_RDWR);
   close (socket_fd);
+  print_error("After close client\n");
 
   return (S_SUCCESS);
 }
@@ -106,7 +107,7 @@ delegate_task (int socket_fd, task_t *task, password_t password)
       return (S_FAILURE);
     }
 
-  // print_error ("Sent task %s to client\n", task->password);
+  print_error ("Sent task %s to client\n", task->password);
 
   int32_t size;
   if (recv_wrapper (socket_fd, &size, sizeof (size), 0) == S_FAILURE)
@@ -174,15 +175,21 @@ handle_client (void *arg)
           goto end;
         }
 
+      bool done = false;
       if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
         {
           print_error ("Could not lock a mutex\n");
           return (NULL);
         }
-      pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
+      if (mt_ctx->password[0] != 0)
+        print_error ("After delegate task and mutex lock\n");
 
       --mt_ctx->passwords_remaining;
       if (mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
+        done = true;
+
+      pthread_mutex_unlock (&mt_ctx->mutex);
+      if (done)
         {
           if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
             {
@@ -190,13 +197,10 @@ handle_client (void *arg)
               // FIXME: Doesn't work with `goto end;`
               return (NULL);
             }
-
-          pthread_mutex_unlock (&mt_ctx->mutex);
+          print_error ("After signal\n");
           close_client (local_ctx.socket_fd);
           return (NULL);
         }
-
-      pthread_cleanup_pop (!0);
     }
 
 end:
@@ -264,6 +268,7 @@ run_server (task_t *task, config_t *config)
 {
   serv_context_t context;
 
+  print_error ("Starting server\n");
   if (serv_context_init (&context, config) == S_FAILURE)
     {
       print_error ("Could not initialize server context\n");
@@ -291,6 +296,7 @@ run_server (task_t *task, config_t *config)
     }
   pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
 
+  print_error ("After brute and mutex lock in main thread\n");
   while (mt_ctx->passwords_remaining != 0 && mt_ctx->password[0] == 0)
     {
       if (pthread_cond_wait (&mt_ctx->cond_sem, &mt_ctx->mutex) != 0)
@@ -298,11 +304,10 @@ run_server (task_t *task, config_t *config)
           print_error ("Could not wait on a condition\n");
           goto fail;
         }
+      print_error ("After pthread_cond_wait\n");
     }
 
   pthread_cleanup_pop (!0);
-
-  print_error ("After pthread_cond_wait\n");
 
   if (queue_cancel (&mt_ctx->queue) == S_FAILURE)
     {
@@ -313,7 +318,7 @@ run_server (task_t *task, config_t *config)
   if (mt_ctx->password[0] != 0)
     {
       memcpy (task->password, mt_ctx->password, sizeof (mt_ctx->password));
-      print_error ("Password found: %s\n", task->password);
+      // print_error ("Password found: %s\n", task->password);
     }
 
   // if (serv_context_destroy (&context) == S_FAILURE)

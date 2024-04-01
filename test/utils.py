@@ -54,10 +54,12 @@ def run_client_server(passwd, alph, brute_mode):
     try:
         client_proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
+        client_proc.kill()
         return "Client timeout"
     try:
         output, _ = server_proc.communicate(timeout=5)
     except subprocess.TimeoutExpired:
+        server_proc.kill()
         return "Server imeout"
 
     return output.decode()

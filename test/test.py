@@ -2,6 +2,7 @@ from datetime import timedelta
 import string
 from hypothesis import given, strategies as st, settings
 from utils import shuffle_password, gen_str, run_brute, run_client_server
+import time
 
 
 # Password size is from 2 to 7, alphabet is just a shuffled password
@@ -41,6 +42,7 @@ def test_corner_cases(run_mode, brute_mode):
 @settings(deadline=timedelta(seconds=5), max_examples=3)
 def test_client_server(passwd, brute_mode):
     alph = shuffle_password(passwd)
+
 
     assert "Password found: {}\n".format(passwd) == run_client_server(
         passwd, alph, brute_mode

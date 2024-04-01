@@ -20,7 +20,7 @@ find_password (config_t *config, int socket_fd, task_t *task,
   //              task->to);
   if (brute (task, config, st_password_check, ctx))
     {
-      print_error ("Found something: %s\n", task->password);
+      // print_error ("Found something: %s\n", task->password);
 
       int password_size = sizeof (task->password);
       if (send_wrapper (socket_fd, &password_size, sizeof (password_size), 0)
