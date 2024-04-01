@@ -286,6 +286,7 @@ run_server (task_t *task, config_t *config)
 
   brute (task, config, queue_push_wrapper, mt_ctx);
 
+  print_error("Before lock\n");
   if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
     {
       print_error ("Could not lock a mutex\n");
