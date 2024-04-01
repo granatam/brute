@@ -179,7 +179,6 @@ run_multi (task_t *task, config_t *config)
   if (queue_cancel (&context.queue) == S_FAILURE)
     {
       print_error ("Could not cancel a queue\n");
-      return (false);
     }
 
   if (context.password[0] != 0)
