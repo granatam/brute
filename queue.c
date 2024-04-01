@@ -33,10 +33,10 @@ queue_push (queue_t *queue, task_t *task)
 
   // TODO
   if (!queue->active)
-  {
-    sem_post (&queue->empty);
-    return (S_FAILURE);
-  }
+    {
+      sem_post (&queue->empty);
+      return (S_FAILURE);
+    }
 
   if (pthread_mutex_lock (&queue->tail_mutex) != 0)
     goto fail;

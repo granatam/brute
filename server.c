@@ -173,8 +173,7 @@ handle_client (void *arg)
       task.to = task.from;
       task.from = 0;
 
-      if (delegate_task (local_ctx.socket_fd, &task, mt_ctx)
-          == S_FAILURE)
+      if (delegate_task (local_ctx.socket_fd, &task, mt_ctx) == S_FAILURE)
         {
           if (queue_push (&mt_ctx->queue, &task) == S_FAILURE)
             print_error ("Could not push to the queue\n");

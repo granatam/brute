@@ -39,7 +39,8 @@ thread_cleanup (void *arg)
   thread_cleanup_context_t *tcc = arg;
   node_t *node = tcc->node;
   thread_pool_t *thread_pool = tcc->thread_pool;
-  print_error ("Start thread_cleanup %p %p\n", thread_pool, &thread_pool->mutex);
+  print_error ("Start thread_cleanup %p %p\n", thread_pool,
+               &thread_pool->mutex);
 
   if (pthread_mutex_lock (&thread_pool->mutex) != 0)
     print_error ("Could not lock a mutex\n");
