@@ -31,6 +31,13 @@ queue_push (queue_t *queue, task_t *task)
   if (sem_wait (&queue->empty) != 0)
     goto fail;
 
+  // TODO
+  if (!queue->active)
+  {
+    sem_post (&queue->empty);
+    return (S_FAILURE);
+  }
+
   if (pthread_mutex_lock (&queue->tail_mutex) != 0)
     goto fail;
 
@@ -87,6 +94,9 @@ queue_cancel (queue_t *queue)
   queue->active = false;
 
   if (sem_post (&queue->full) != 0)
+    return (S_FAILURE);
+
+  if (sem_post (&queue->empty) != 0)
     return (S_FAILURE);
 
   return (S_SUCCESS);

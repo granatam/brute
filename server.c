@@ -91,7 +91,7 @@ close_client (int socket_fd)
 }
 
 static status_t
-delegate_task (int socket_fd, task_t *task, password_t password)
+delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
 {
   command_t cmd = CMD_TASK;
 
@@ -120,14 +120,20 @@ delegate_task (int socket_fd, task_t *task, password_t password)
 
   if (size != 0)
     {
-      if (recv_wrapper (socket_fd, password, sizeof (password_t), 0)
+      if (recv_wrapper (socket_fd, ctx->password, sizeof (password_t), 0)
           == S_FAILURE)
         {
           print_error ("Could not receive data from client\n");
           return (S_FAILURE);
         }
 
-      print_error ("Received password %s from client\n", password);
+      if (queue_cancel (&ctx->queue) == S_FAILURE)
+        {
+          print_error ("Could not cancel a queue\n");
+          return (S_FAILURE);
+        }
+
+      print_error ("Received password %s from client\n", ctx->password);
     }
 
   return (S_SUCCESS);
@@ -167,7 +173,7 @@ handle_client (void *arg)
       task.to = task.from;
       task.from = 0;
 
-      if (delegate_task (local_ctx.socket_fd, &task, mt_ctx->password)
+      if (delegate_task (local_ctx.socket_fd, &task, mt_ctx)
           == S_FAILURE)
         {
           if (queue_push (&mt_ctx->queue, &task) == S_FAILURE)
@@ -286,7 +292,7 @@ run_server (task_t *task, config_t *config)
 
   brute (task, config, queue_push_wrapper, mt_ctx);
 
-  print_error("Before lock\n");
+  print_error ("Before lock\n");
   if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
     {
       print_error ("Could not lock a mutex\n");
