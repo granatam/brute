@@ -77,6 +77,7 @@ run_client (task_t *task, config_t *config)
       print_error ("Could not receive hash from server\n");
       goto fail;
     }
+  hash[HASH_LENGTH - 1] = '\0';
 
   // print_error ("Received hash %s from server\n", hash);
 
@@ -122,7 +123,7 @@ run_client (task_t *task, config_t *config)
                 goto fail;
 
               if (task->password[0] != 0)
-                return (true);
+                return (false);
             }
 
           // print_error ("Haven't found anything\n");
