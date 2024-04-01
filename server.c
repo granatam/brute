@@ -191,6 +191,7 @@ handle_client (void *arg)
       pthread_mutex_unlock (&mt_ctx->mutex);
       if (done)
         {
+          close_client (local_ctx.socket_fd);
           if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
             {
               print_error ("Could not signal a condition\n");
@@ -198,7 +199,6 @@ handle_client (void *arg)
               return (NULL);
             }
           print_error ("After signal\n");
-          close_client (local_ctx.socket_fd);
           return (NULL);
         }
     }
@@ -306,6 +306,7 @@ run_server (task_t *task, config_t *config)
         }
       print_error ("After pthread_cond_wait\n");
     }
+  print_error ("After wait while\n");
 
   pthread_cleanup_pop (!0);
 

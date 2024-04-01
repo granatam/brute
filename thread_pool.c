@@ -42,10 +42,7 @@ thread_cleanup (void *arg)
   print_error ("Start thread_cleanup %p %p\n", thread_pool, &thread_pool->mutex);
 
   if (pthread_mutex_lock (&thread_pool->mutex) != 0)
-    {
-      print_error ("Could not lock a mutex\n");
-      return;
-    }
+    print_error ("Could not lock a mutex\n");
   pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
   node->prev->next = node->next;
@@ -262,6 +259,8 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
         return (S_FAILURE);
       }
   pthread_cleanup_pop (!0);
+
+  print_error ("After thread_pool_collect\n");
 
   char *var = getenv ("PYTEST_CURRENT_TEST");
   if (var == NULL)
