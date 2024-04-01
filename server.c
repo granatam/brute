@@ -85,7 +85,7 @@ close_client (int socket_fd)
 
   // shutdown (socket_fd, SHUT_RDWR);
   close (socket_fd);
-  print_error("After close client\n");
+  print_error ("After close client\n");
 
   return (S_SUCCESS);
 }
@@ -186,21 +186,18 @@ handle_client (void *arg)
 
       --mt_ctx->passwords_remaining;
       if (mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
-        done = true;
-
-      pthread_mutex_unlock (&mt_ctx->mutex);
-      if (done)
         {
           close_client (local_ctx.socket_fd);
           if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
             {
               print_error ("Could not signal a condition\n");
-              // FIXME: Doesn't work with `goto end;`
               return (NULL);
             }
           print_error ("After signal\n");
+          pthread_mutex_unlock (&mt_ctx->mutex);
           return (NULL);
         }
+      pthread_mutex_unlock (&mt_ctx->mutex);
     }
 
 end:
