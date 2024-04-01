@@ -83,8 +83,8 @@ close_client (int socket_fd)
       return (S_FAILURE);
     }
 
-  shutdown(socket_fd, SHUT_RDWR);
-  close(socket_fd);
+  // shutdown (socket_fd, SHUT_RDWR);
+  close (socket_fd);
 
   return (S_SUCCESS);
 }
@@ -106,7 +106,7 @@ delegate_task (int socket_fd, task_t *task, password_t password)
       return (S_FAILURE);
     }
 
-  print_error ("Sent task %s to client\n", task->password);
+  // print_error ("Sent task %s to client\n", task->password);
 
   int32_t size;
   if (recv_wrapper (socket_fd, &size, sizeof (size), 0) == S_FAILURE)
@@ -115,7 +115,7 @@ delegate_task (int socket_fd, task_t *task, password_t password)
       return (S_FAILURE);
     }
 
-  print_error ("Received %d from client\n", size);
+  // print_error ("Received %d from client\n", size);
 
   if (size != 0)
     {
@@ -145,7 +145,7 @@ handle_client (void *arg)
       goto end;
     }
 
-  print_error ("Mutex unlocked\n");
+  // print_error ("Mutex unlocked\n");
 
   // TODO: Send whole config instead of just hash
   if (send_wrapper (local_ctx.socket_fd, mt_ctx->config->hash, HASH_LENGTH, 0)
@@ -155,7 +155,7 @@ handle_client (void *arg)
       goto end;
     }
 
-  print_error ("Sent hash to client\n");
+  print_error ("Sent hash %s to client\n", mt_ctx->config->hash);
 
   while (true)
     {
@@ -182,7 +182,6 @@ handle_client (void *arg)
       pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
 
       --mt_ctx->passwords_remaining;
-      print_error("%c\n", mt_ctx->password[0]);
       if (mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
         {
           if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
@@ -192,9 +191,8 @@ handle_client (void *arg)
               return (NULL);
             }
 
-          pthread_mutex_unlock(&mt_ctx->mutex);
+          pthread_mutex_unlock (&mt_ctx->mutex);
           close_client (local_ctx.socket_fd);
-          close (local_ctx.socket_fd);
           return (NULL);
         }
 
@@ -255,7 +253,7 @@ handle_clients (void *arg)
           continue;
         }
 
-      print_error ("Mutex locked\n");
+      // print_error ("Mutex locked\n");
     }
 
   return (NULL);
@@ -293,16 +291,18 @@ run_server (task_t *task, config_t *config)
     }
   pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
 
-  // while (mt_ctx->passwords_remaining != 0 && mt_ctx->password[0] == 0)
-  //   {
-  if (pthread_cond_wait (&mt_ctx->cond_sem, &mt_ctx->mutex) != 0)
+  while (mt_ctx->passwords_remaining != 0 && mt_ctx->password[0] == 0)
     {
-      print_error ("Could not wait on a condition\n");
-      goto fail;
+      if (pthread_cond_wait (&mt_ctx->cond_sem, &mt_ctx->mutex) != 0)
+        {
+          print_error ("Could not wait on a condition\n");
+          goto fail;
+        }
     }
-  // }
 
   pthread_cleanup_pop (!0);
+
+  print_error ("After pthread_cond_wait\n");
 
   if (queue_cancel (&mt_ctx->queue) == S_FAILURE)
     {
@@ -315,11 +315,14 @@ run_server (task_t *task, config_t *config)
       memcpy (task->password, mt_ctx->password, sizeof (mt_ctx->password));
       print_error ("Password found: %s\n", task->password);
     }
-  if (serv_context_destroy (&context) == S_FAILURE)
-    {
-      print_error ("Could not destroy server context\n");
-      return (false);
-    }
+
+  // if (serv_context_destroy (&context) == S_FAILURE)
+  //   {
+  //     print_error ("Could not destroy server context\n");
+  //     return (false);
+  //   }
+
+  print_error ("After serv_context_destroy\n");
 
   return (mt_ctx->password[0] != 0);
 

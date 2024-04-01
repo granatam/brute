@@ -16,11 +16,11 @@ find_password (config_t *config, int socket_fd, task_t *task,
                st_context_t *ctx)
 {
   // TODO: Remove later
-  print_error ("%s %s %d %d\n", task->password, ctx->hash, task->from,
-               task->to);
+  // print_error ("%s %s %d %d\n", task->password, ctx->hash, task->from,
+  //              task->to);
   if (brute (task, config, st_password_check, ctx))
     {
-      print_error ("Found something\n");
+      print_error ("Found something: %s\n", task->password);
 
       int password_size = sizeof (task->password);
       if (send_wrapper (socket_fd, &password_size, sizeof (password_size), 0)
@@ -30,7 +30,7 @@ find_password (config_t *config, int socket_fd, task_t *task,
           return (S_FAILURE);
         }
 
-      print_error ("Sent %d to server\n", password_size);
+      // print_error ("Sent %d to server\n", password_size);
 
       if (send_wrapper (socket_fd, task->password, password_size, 0)
           == S_FAILURE)
@@ -78,7 +78,7 @@ run_client (task_t *task, config_t *config)
       goto fail;
     }
 
-  print_error ("Received hash %s from server\n", hash);
+  // print_error ("Received hash %s from server\n", hash);
 
   st_context_t st_context = {
     .hash = hash,
@@ -87,7 +87,7 @@ run_client (task_t *task, config_t *config)
 
   while (true)
     {
-      print_error ("Waiting for command\n");
+      // print_error ("Waiting for command\n");
 
       command_t cmd;
       if (recv_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
@@ -105,7 +105,7 @@ run_client (task_t *task, config_t *config)
           goto fail;
           break;
         case CMD_TASK:
-          print_error ("received CMD_TASK\n");
+          // print_error ("received CMD_TASK\n");
           if (recv_wrapper (socket_fd, task, sizeof (task_t), 0) == S_FAILURE)
             {
               print_error ("Could not receive data from server\n");
@@ -125,7 +125,7 @@ run_client (task_t *task, config_t *config)
                 return (true);
             }
 
-          print_error ("Haven't found anything\n");
+          // print_error ("Haven't found anything\n");
 
           int wrong_password = 0;
           if (send_wrapper (socket_fd, &wrong_password,
@@ -136,7 +136,7 @@ run_client (task_t *task, config_t *config)
               goto fail;
             }
 
-          print_error ("Sent %d to server\n", wrong_password);
+          // print_error ("Sent %d to server\n", wrong_password);
           break;
         }
     }

@@ -12,7 +12,7 @@ typedef struct mt_context_t
   queue_t queue;
   config_t *config;
   password_t password;
-  int passwords_remaining;
+  volatile int passwords_remaining;
   pthread_mutex_t mutex;
   pthread_cond_t cond_sem;
   thread_pool_t thread_pool;
