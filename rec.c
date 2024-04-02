@@ -40,6 +40,7 @@ rec_state_init (rec_state_t *state, task_t *task, char *alph)
   state->rec_context.uc_stack.ss_sp = &state->stack;
   state->rec_context.uc_stack.ss_size = sizeof (state->stack);
   state->rec_context.uc_link = &state->main_context;
+
   makecontext (&state->rec_context, (void (*) (void))brute_rec_gen_helper, 2,
                alph, state);
 

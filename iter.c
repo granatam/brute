@@ -36,8 +36,8 @@ iter_state_next (iter_state_t *state)
 }
 
 bool
-brute_iter (task_t *task, char *alph,
-            password_handler_t password_handler, void *context)
+brute_iter (task_t *task, char *alph, password_handler_t password_handler,
+            void *context)
 {
   iter_state_t state;
   iter_state_init (&state, alph, task);
