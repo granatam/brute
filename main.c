@@ -183,8 +183,10 @@ main (int argc, char *argv[])
       is_found = run_server (&task, &config);
       break;
     case RM_CLIENT:
+      is_found = run_client (&task, &config, find_password);
+      break;
     case RM_LOAD_CLIENT:
-      is_found = run_client (&task, &config);
+      is_found = run_client (&task, &config, NULL);
       break;
     }
 

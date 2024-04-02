@@ -1,9 +1,6 @@
 #include "client.h"
 
 #include "brute.h"
-#include "common.h"
-#include "config.h"
-#include "single.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -46,8 +43,8 @@ handle_hash (int socket_fd, char *hash, st_context_t *ctx)
   return (S_SUCCESS);
 }
 
-static status_t
-find_password (config_t *config, int socket_fd, task_t *task,
+status_t
+find_password (int socket_fd, task_t *task, config_t *config,
                st_context_t *ctx)
 {
   // TODO: Remove later
@@ -83,7 +80,8 @@ find_password (config_t *config, int socket_fd, task_t *task,
 }
 
 static status_t
-handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx)
+handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
+             task_callback_t task_callback)
 {
   if (recv_wrapper (socket_fd, task, sizeof (task_t), 0) == S_FAILURE)
     {
@@ -93,19 +91,17 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx)
 
   // print_error ("Received task %s from server\n", task->password);
 
-  // TODO: if (task_callback != NULL) task_callback (...)
-  if (config->run_mode == RM_CLIENT)
+  if (task_callback != NULL)
     {
-      if (find_password (config, socket_fd, task, ctx) == S_FAILURE)
+      if (task_callback (socket_fd, task, config, ctx) == S_FAILURE)
         return (S_FAILURE);
 
       if (task->password[0] != 0)
         return (S_SUCCESS);
     }
 
-  int wrong_password = 0;
-  if (send_wrapper (socket_fd, &wrong_password, sizeof (wrong_password), 0)
-      == S_FAILURE)
+  int not_found = 0;
+  if (send_wrapper (socket_fd, &not_found, sizeof (not_found), 0) == S_FAILURE)
     {
       print_error ("Could not send data to server\n");
       return (S_FAILURE);
@@ -115,7 +111,7 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx)
 }
 
 bool
-run_client (task_t *task, config_t *config)
+run_client (task_t *task, config_t *config, task_callback_t task_callback)
 {
   int socket_fd = socket (AF_INET, SOCK_STREAM, 0);
   if (socket_fd == -1)
@@ -163,7 +159,8 @@ run_client (task_t *task, config_t *config)
         case CMD_EXIT:
           goto end;
         case CMD_TASK:
-          if (handle_task (socket_fd, task, config, &st_context) == S_FAILURE)
+          if (handle_task (socket_fd, task, config, &st_context, task_callback)
+              == S_FAILURE)
             goto end;
           if (task->password[0] != 0)
             return (false);
