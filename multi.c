@@ -50,7 +50,7 @@ mt_context_destroy (mt_context_t *context)
       return (S_FAILURE);
     }
 
-  if (queue_destroy (&context->queue) == S_FAILURE)
+  if (queue_destroy (&context->queue) == QS_FAILURE)
     {
       print_error ("Could not destroy a queue\n");
       return (S_FAILURE);
@@ -83,7 +83,8 @@ mt_password_check (void *context)
 
   while (true)
     {
-      if (queue_pop (&mt_ctx->queue, &task) == S_FAILURE)
+      // TODO: != SUCCESS or == INACTIVE?
+      if (queue_pop (&mt_ctx->queue, &task) != QS_SUCCESS)
         return (NULL);
 
       task.to = task.from;
@@ -131,13 +132,12 @@ queue_push_wrapper (task_t *task, void *context)
       return (false);
     }
 
-  // TODO: impl queue_status_t or don't output error here because of
-  // server case
-  if (queue_push (&mt_ctx->queue, task) == S_FAILURE)
-    {
-      print_error ("Could not push to a queue\n");
-      return (false);
-    }
+  queue_status_t push_status = queue_push (&mt_ctx->queue, task);
+  if (push_status == QS_FAILURE)
+    print_error ("Could not push to a queue\n");
+
+  if (push_status != QS_SUCCESS)
+    return (false);
 
   return (mt_ctx->password[0] != 0);
 }
@@ -179,7 +179,7 @@ run_multi (task_t *task, config_t *config)
 
   pthread_cleanup_pop (!0);
 
-  if (queue_cancel (&context.queue) == S_FAILURE)
+  if (queue_cancel (&context.queue) != QS_SUCCESS)
     {
       print_error ("Could not cancel a queue\n");
     }

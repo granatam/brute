@@ -210,7 +210,8 @@ handle_client (void *arg)
   while (true)
     {
       task_t task;
-      if (queue_pop (&mt_ctx->queue, &task) == S_FAILURE)
+      // TODO: != QS_SUCCESS or == QS_FAILURE?
+      if (queue_pop (&mt_ctx->queue, &task) != QS_SUCCESS)
         goto end;
 
       task.to = task.from;
@@ -223,8 +224,6 @@ handle_client (void *arg)
           goto end;
         }
 
-      // TODO: remove unused variable
-      bool done = false;
       if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
         {
           print_error ("Could not lock a mutex\n");
@@ -330,8 +329,7 @@ run_server (task_t *task, config_t *config)
       goto fail;
     }
 
-  // TODO: config->length < 3
-  task->from = (config->length < 4) ? 1 : 2;
+  task->from = (config->length < 3) ? 1 : 2;
   task->to = config->length;
 
   mt_context_t *mt_ctx = (mt_context_t *)&context;
