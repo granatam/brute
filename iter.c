@@ -10,8 +10,8 @@ iter_state_init (iter_state_t *state, char *alph, task_t *task)
   state->base_state.task = task;
 
   memset (state->idx, 0, state->base_state.task->to * sizeof (int));
-  memset (state->base_state.task->password, alph[0],
-          state->base_state.task->to);
+  memset (&state->base_state.task->password[state->base_state.task->from],
+          alph[0], state->base_state.task->to - state->base_state.task->from);
 }
 
 bool

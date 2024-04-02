@@ -71,9 +71,12 @@ def run_two_clients_server(passwd, alph, brute_mode):
     server_cmd = brute_cmd(passwd, alph, "S", brute_mode)
 
     server_proc = subprocess.Popen(server_cmd, stdout=subprocess.PIPE, shell=True)
-    time.sleep(0.5)
+    time.sleep(0.25)
     first_client_proc = subprocess.Popen(client_cmd, stdout=subprocess.PIPE, shell=True)
-    second_client_proc = subprocess.Popen(client_cmd, stdout=subprocess.PIPE, shell=True)
+    time.sleep(0.25)
+    second_client_proc = subprocess.Popen(
+        client_cmd, stdout=subprocess.PIPE, shell=True
+    )
     try:
         first_client_proc.wait(timeout=5)
         second_client_proc.wait(timeout=5)
