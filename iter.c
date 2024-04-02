@@ -35,13 +35,12 @@ iter_state_next (iter_state_t *state)
   return (true);
 }
 
-// TODO: we don't need config here, just alph
 bool
-brute_iter (task_t *task, config_t *config,
+brute_iter (task_t *task, char *alph,
             password_handler_t password_handler, void *context)
 {
   iter_state_t state;
-  iter_state_init (&state, config->alph, task);
+  iter_state_init (&state, alph, task);
 
   while (true)
     {

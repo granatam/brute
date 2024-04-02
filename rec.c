@@ -4,7 +4,7 @@
 static bool
 brute_rec_gen_handler (task_t *task, void *context)
 {
-  (void)task; // to suppress "unused parameter" warning
+  (void)task; /* to suppress "unused parameter" warning */
   rec_state_t *state = (rec_state_t *)context;
 
   if (swapcontext (&state->rec_context, &state->main_context) != 0)
@@ -17,15 +17,15 @@ brute_rec_gen_handler (task_t *task, void *context)
 }
 
 static void
-brute_rec_gen_helper (config_t *config, rec_state_t *state)
+brute_rec_gen_helper (char *alph, rec_state_t *state)
 {
-  brute_rec_wrapper (state->base_state.task, config, brute_rec_gen_handler,
+  brute_rec_wrapper (state->base_state.task, alph, brute_rec_gen_handler,
                      state);
   state->cancelled = true;
 }
 
 void
-rec_state_init (rec_state_t *state, task_t *task, config_t *config)
+rec_state_init (rec_state_t *state, task_t *task, char *alph)
 {
   state->base_state.task = task;
   state->cancelled = false;
@@ -41,7 +41,7 @@ rec_state_init (rec_state_t *state, task_t *task, config_t *config)
   state->rec_context.uc_stack.ss_size = sizeof (state->stack);
   state->rec_context.uc_link = &state->main_context;
   makecontext (&state->rec_context, (void (*) (void))brute_rec_gen_helper, 2,
-               config, state);
+               alph, state);
 
   if (swapcontext (&state->main_context, &state->rec_context) != 0)
     {
@@ -63,11 +63,11 @@ rec_state_next (rec_state_t *state)
 }
 
 bool
-brute_rec_gen (task_t *task, config_t *config,
-               password_handler_t password_handler, void *context)
+brute_rec_gen (task_t *task, char *alph, password_handler_t password_handler,
+               void *context)
 {
   rec_state_t state;
-  rec_state_init (&state, task, config);
+  rec_state_init (&state, task, alph);
   while (true)
     {
       if (password_handler (state.base_state.task, context))
@@ -78,9 +78,8 @@ brute_rec_gen (task_t *task, config_t *config,
 }
 #endif // ifndef __APPLE__
 
-// TODO: also don't need config here, just alph
-bool
-brute_rec (task_t *task, config_t *config, password_handler_t password_handler,
+static bool
+brute_rec (task_t *task, char *alph, password_handler_t password_handler,
            void *context, int pos)
 {
   if (pos == task->to)
@@ -90,13 +89,11 @@ brute_rec (task_t *task, config_t *config, password_handler_t password_handler,
     }
   else
     {
-      for (size_t i = 0; config->alph[i] != '\0'; ++i)
+      for (size_t i = 0; alph[i] != '\0'; ++i)
         {
-          task->password[pos] = config->alph[i];
-          // print_error ("%s %d %d %s\n", task->password,
-          //              sizeof (task->password), pos, config->alph);
+          task->password[pos] = alph[i];
 
-          if (brute_rec (task, config, password_handler, context, pos + 1))
+          if (brute_rec (task, alph, password_handler, context, pos + 1))
             return (true);
         }
     }
@@ -104,8 +101,8 @@ brute_rec (task_t *task, config_t *config, password_handler_t password_handler,
 }
 
 bool
-brute_rec_wrapper (task_t *task, config_t *config,
+brute_rec_wrapper (task_t *task, char *alph,
                    password_handler_t password_handler, void *context)
 {
-  return (brute_rec (task, config, password_handler, context, task->from));
+  return (brute_rec (task, alph, password_handler, context, task->from));
 }
