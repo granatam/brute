@@ -357,7 +357,7 @@ run_server (task_t *task, config_t *config)
   if (serv_context_destroy (&context) == S_FAILURE)
     {
       print_error ("Could not destroy server context\n");
-      return (false);
+      // return (false);
     }
 
   // TODO: Remove debug output

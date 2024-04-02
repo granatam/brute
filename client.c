@@ -1,6 +1,7 @@
 #include "client.h"
 
 #include "brute.h"
+#include "thread_pool.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -179,4 +180,39 @@ end:
   // NOTE: shutdown?
   close (socket_fd);
   return (false);
+}
+
+static void *
+client_thread_helper (void *arg)
+{
+  client_context_t *ctx = (client_context_t *)arg;
+  run_client (ctx->task, ctx->config, ctx->task_callback);
+
+  return (NULL);
+}
+
+void
+spawn_clients (task_t *task, config_t *config, task_callback_t task_callback,
+               int number_of_threads)
+{
+  thread_pool_t thread_pool;
+  if (thread_pool_init (&thread_pool) == S_FAILURE)
+    {
+      print_error ("Could not initialize a thread pool\n");
+      return;
+    }
+
+  client_context_t context = {
+    .task = task,
+    .config = config,
+    .task_callback = task_callback,
+  };
+
+  if (create_threads (&thread_pool, number_of_threads, &client_thread_helper,
+                      &context)
+      == 0)
+    return;
+
+  if (thread_pool_join (&thread_pool) == S_FAILURE)
+    print_error ("Could not wait for a thread pool to end\n");
 }

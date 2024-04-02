@@ -181,11 +181,12 @@ main (int argc, char *argv[])
     case RM_SERVER:
       is_found = run_server (&task, &config);
       break;
+    // TODO: Handle one client and multiple clients separately
     case RM_CLIENT:
-      run_client (&task, &config, find_password);
+      spawn_clients (&task, &config, find_password, 1);
       break;
     case RM_LOAD_CLIENT:
-      run_client (&task, &config, NULL);
+      spawn_clients (&task, &config, NULL, 1);
       break;
     }
 
