@@ -47,11 +47,13 @@ status_t
 find_password (int socket_fd, task_t *task, config_t *config,
                st_context_t *ctx)
 {
-  // TODO: Remove later
+  // TODO: Remove debug output
   // print_error ("%s %s %d %d\n", task->password, ctx->hash, task->from,
   //              task->to);
+
   if (brute (task, config, st_password_check, ctx))
     {
+      // TODO: Remove debug output
       // print_error ("Found something: %s\n", task->password);
 
       int password_size = sizeof (task->password);
@@ -62,6 +64,7 @@ find_password (int socket_fd, task_t *task, config_t *config,
           return (S_FAILURE);
         }
 
+      // TODO: Remove debug output
       // print_error ("Sent %d to server\n", password_size);
 
       if (send_wrapper (socket_fd, task->password, password_size, 0)
@@ -71,6 +74,7 @@ find_password (int socket_fd, task_t *task, config_t *config,
           return (S_FAILURE);
         }
 
+      // TODO: Remove debug output
       // print_error ("Sent %s to server\n", task->password);
     }
   else
@@ -89,6 +93,7 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
       return (S_FAILURE);
     }
 
+  // TODO: Remove debug output
   // print_error ("Received task %s from server\n", task->password);
 
   if (task_callback != NULL)
@@ -130,6 +135,8 @@ run_client (task_t *task, config_t *config, task_callback_t task_callback)
       print_error ("Could not connect to server\n");
       return (false);
     }
+
+  // TODO: Remove debug output
   print_error ("Connected to server\n");
 
   char hash[HASH_LENGTH];

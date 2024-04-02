@@ -100,8 +100,7 @@ mt_password_check (void *context)
         }
       pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
 
-      --mt_ctx->passwords_remaining;
-      if (mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
+      if (--mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
         if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
           {
             print_error ("Could not signal a condition\n");

@@ -103,10 +103,10 @@ gen_worker (void *context)
       if (!gen_ctx->cancelled && gen_ctx->password[0] == 0)
         gen_ctx->cancelled = !gen_ctx->state_next (gen_ctx->state);
 
-      // TODO: why not return (NULL)?
       if (pthread_mutex_unlock (&gen_ctx->mutex) != 0)
         {
           print_error ("Could not unlock a mutex\n");
+          return (NULL);
         }
 
       if (gen_ctx->cancelled || gen_ctx->password[0] != 0)
@@ -144,10 +144,10 @@ run_generator (task_t *task, config_t *config)
   gen_worker (&context);
 
   if (gen_context_destroy (&context) == S_FAILURE)
-  {
-    print_error ("Could not destroy generator context\n");
-    return (false);
-  }
+    {
+      print_error ("Could not destroy generator context\n");
+      return (false);
+    }
 
   if (context.password[0] != 0)
     memcpy (task->password, context.password, sizeof (context.password));

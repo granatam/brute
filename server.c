@@ -14,9 +14,6 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-// TODO: More status checks and cleanup in case of errors
-// TODO: Remove debug output
-
 static status_t
 serv_context_init (serv_context_t *context, config_t *config)
 {
@@ -80,12 +77,13 @@ close_client (int socket_fd)
   command_t cmd = CMD_EXIT;
   if (send_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
     {
-      print_error ("Could not send command to client\n");
+      print_error ("Could not send CMD_EXIT to client\n");
       return (S_FAILURE);
     }
 
   shutdown (socket_fd, SHUT_RDWR);
   close (socket_fd);
+  // TODO: Remove debug output
   print_error ("After close client\n");
 
   return (S_SUCCESS);
@@ -146,25 +144,27 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
 
   if (send_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
     {
-      print_error ("Could not send command to client\n");
+      print_error ("Could not send CMD_TASK to client\n");
       return (S_FAILURE);
     }
 
   if (send_wrapper (socket_fd, task, sizeof (*task), 0) == S_FAILURE)
     {
-      print_error ("Could not send data to client\n");
+      print_error ("Could not send task to client\n");
       return (S_FAILURE);
     }
 
+  // TODO: Remove debug output
   // print_error ("Sent task %s to client\n", task->password);
 
   int32_t size;
   if (recv_wrapper (socket_fd, &size, sizeof (size), 0) == S_FAILURE)
     {
-      print_error ("Could not receive data from client\n");
+      print_error ("Could not receive password size from client\n");
       return (S_FAILURE);
     }
 
+  // TODO: Remove debug output
   // print_error ("Received %d from client\n", size);
 
   if (size != 0)
@@ -172,7 +172,7 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
       if (recv_wrapper (socket_fd, ctx->password, sizeof (password_t), 0)
           == S_FAILURE)
         {
-          print_error ("Could not receive data from client\n");
+          print_error ("Could not receive password from client\n");
           return (S_FAILURE);
         }
 
@@ -181,7 +181,7 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
           print_error ("Could not cancel a queue\n");
           return (S_FAILURE);
         }
-
+      // TODO: Remove debug output
       // print_error ("Received password %s from client\n", ctx->password);
     }
 
@@ -219,8 +219,9 @@ handle_client (void *arg)
 
       if (delegate_task (local_ctx.socket_fd, &task, mt_ctx) == S_FAILURE)
         {
-          if (queue_push (&mt_ctx->queue, &task) == S_FAILURE)
+          if (queue_push (&mt_ctx->queue, &task) == QS_FAILURE)
             print_error ("Could not push to the queue\n");
+
           goto end;
         }
 
@@ -230,12 +231,12 @@ handle_client (void *arg)
           return (NULL);
         }
 
+      // TODO: Remove debug output
       if (mt_ctx->password[0] != 0)
         print_error ("After delegate task and mutex lock\n");
 
-      --mt_ctx->passwords_remaining;
-      // TODO: refactor
-      if (mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
+      // TODO: Refactor
+      if (--mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
         {
           close_client (local_ctx.socket_fd);
           if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
@@ -243,6 +244,7 @@ handle_client (void *arg)
               print_error ("Could not signal a condition\n");
               return (NULL);
             }
+          // TODO: Remove debug output
           print_error ("After signal\n");
           pthread_mutex_unlock (&mt_ctx->mutex);
           return (NULL);
@@ -285,6 +287,7 @@ handle_clients (void *arg)
           continue;
         }
 
+      // TODO: Remove debug output
       print_error ("Accepted new connection\n");
 
       if (thread_create (&mt_ctx->thread_pool, handle_client, &cl_ctx)
@@ -295,6 +298,7 @@ handle_clients (void *arg)
           continue;
         }
 
+      // TODO: Remove debug output
       print_error ("Created new client thread\n");
 
       if (pthread_mutex_lock (&cl_ctx.mutex) != 0)
@@ -304,6 +308,7 @@ handle_clients (void *arg)
           continue;
         }
 
+      // TODO: Remove debug output
       // print_error ("Mutex locked\n");
     }
 
@@ -315,6 +320,7 @@ run_server (task_t *task, config_t *config)
 {
   serv_context_t context;
 
+  // TODO: Remove debug output
   print_error ("Starting server\n");
   if (serv_context_init (&context, config) == S_FAILURE)
     {
@@ -354,6 +360,7 @@ run_server (task_t *task, config_t *config)
       return (false);
     }
 
+  // TODO: Remove debug output
   print_error ("After serv_context_destroy\n");
 
   return (mt_ctx->password[0] != 0);
