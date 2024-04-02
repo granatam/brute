@@ -84,8 +84,7 @@ close_client (int socket_fd)
       return (S_FAILURE);
     }
 
-  // TODO: should I shut down socket connection?
-  // shutdown (socket_fd, SHUT_RDWR);
+  shutdown (socket_fd, SHUT_RDWR);
   close (socket_fd);
   print_error ("After close client\n");
 
@@ -109,7 +108,7 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
       return (S_FAILURE);
     }
 
-  print_error ("Sent task %s to client\n", task->password);
+  // print_error ("Sent task %s to client\n", task->password);
 
   int32_t size;
   if (recv_wrapper (socket_fd, &size, sizeof (size), 0) == S_FAILURE)
@@ -135,7 +134,7 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
           return (S_FAILURE);
         }
 
-      print_error ("Received password %s from client\n", ctx->password);
+      // print_error ("Received password %s from client\n", ctx->password);
     }
 
   return (S_SUCCESS);
@@ -154,9 +153,14 @@ handle_client (void *arg)
       goto end;
     }
 
-  // print_error ("Mutex unlocked\n");
+  command_t cmd = CMD_HASH;
+  if (send_wrapper (local_ctx.socket_fd, &cmd, sizeof(cmd), 0)
+      == S_FAILURE)
+    {
+      print_error ("Could not send CMD_HASH to client\n");
+      goto end;
+    }
 
-  // TODO: Also send alphabet instead of just hash
   if (send_wrapper (local_ctx.socket_fd, mt_ctx->config->hash, HASH_LENGTH, 0)
       == S_FAILURE)
     {

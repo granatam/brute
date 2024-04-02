@@ -18,11 +18,19 @@ handle_alph (void)
   print_error ("not implemented yet\n");
 }
 
-// TODO: implement
-static void
-handle_hash (void)
+static status_t
+handle_hash (int socket_fd, char *hash, st_context_t *ctx)
 {
-  print_error ("not implemented yet\n");
+  if (recv_wrapper (socket_fd, hash, HASH_LENGTH, 0) == S_FAILURE)
+    {
+      print_error ("Could not receive hash from server\n");
+      return (S_FAILURE);
+    }
+  hash[HASH_LENGTH - 1] = 0;
+
+  ctx->hash = hash;
+
+  return (S_SUCCESS);
 }
 
 static status_t
@@ -53,7 +61,7 @@ find_password (config_t *config, int socket_fd, task_t *task,
           return (S_FAILURE);
         }
 
-      print_error ("Sent %s to server\n", task->password);
+      // print_error ("Sent %s to server\n", task->password);
     }
   else
     memset (task->password, 0, sizeof (task->password));
@@ -70,7 +78,7 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx)
       return (S_FAILURE);
     }
 
-  print_error ("Received task %s from server\n", task->password);
+  // print_error ("Received task %s from server\n", task->password);
 
   // TODO: if (task_callback != NULL) task_callback (...)
   if (config->run_mode == RM_CLIENT)
@@ -113,24 +121,11 @@ run_client (task_t *task, config_t *config)
       print_error ("Could not connect to server\n");
       return (false);
     }
-
   print_error ("Connected to server\n");
 
-  // TODO: recv alphabet
-
-  // TODO: receive whole config instead of just hash
   char hash[HASH_LENGTH];
-  if (recv_wrapper (socket_fd, hash, HASH_LENGTH, 0) == S_FAILURE)
-    {
-      print_error ("Could not receive hash from server\n");
-      goto fail;
-    }
-  hash[HASH_LENGTH - 1] = 0;
-
-  // print_error ("Received hash %s from server\n", hash);
 
   st_context_t st_context = {
-    .hash = hash,
     .data = { .initialized = 0 },
   };
 
@@ -140,22 +135,22 @@ run_client (task_t *task, config_t *config)
       if (recv_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
         {
           print_error ("Could not receive command from server\n");
-          goto fail;
+          goto end;
         }
 
       switch (cmd)
         {
         case CMD_ALPH:
           handle_alph ();
-        case CMD_HASH:
-          handle_hash ();
-        case CMD_EXIT:
-          print_error ("received CMD_EXIT\n");
-          goto fail;
           break;
+        case CMD_HASH:
+          handle_hash (socket_fd, hash, &st_context);
+          break;
+        case CMD_EXIT:
+          goto end;
         case CMD_TASK:
           if (handle_task (socket_fd, task, config, &st_context) == S_FAILURE)
-            goto fail;
+            goto end;
 
           if (task->password[0] != 0)
             return (false);
@@ -164,7 +159,7 @@ run_client (task_t *task, config_t *config)
         }
     }
 
-fail:
+end:
   close (socket_fd);
   return (false);
 }
