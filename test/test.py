@@ -1,8 +1,13 @@
 from datetime import timedelta
 import string
 from hypothesis import given, strategies as st, settings
-from utils import shuffle_password, gen_str, run_brute, run_client_server
-import time
+from utils import (
+    shuffle_password,
+    gen_str,
+    run_brute,
+    run_client_server,
+    run_two_clients_server,
+)
 
 
 # Password size is from 2 to 7, alphabet is just a shuffled password
@@ -44,5 +49,18 @@ def test_client_server(passwd, brute_mode):
     alph = shuffle_password(passwd)
 
     assert "Password found: {}\n".format(passwd) == run_client_server(
+        passwd, alph, brute_mode
+    )
+
+
+@given(
+    st.text(min_size=6, alphabet=string.ascii_letters, max_size=7),
+    st.text(min_size=1, max_size=1, alphabet="iry"),
+)
+@settings(deadline=timedelta(seconds=5), max_examples=5)
+def test_two_clients_server(passwd, brute_mode):
+    alph = shuffle_password(passwd)
+
+    assert "Password found: {}\n".format(passwd) == run_two_clients_server(
         passwd, alph, brute_mode
     )

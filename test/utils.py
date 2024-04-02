@@ -64,3 +64,27 @@ def run_client_server(passwd, alph, brute_mode):
         return "Server imeout"
 
     return output.decode()
+
+
+def run_two_clients_server(passwd, alph, brute_mode):
+    client_cmd = brute_cmd(passwd, alph, "c", brute_mode)
+    server_cmd = brute_cmd(passwd, alph, "S", brute_mode)
+
+    server_proc = subprocess.Popen(server_cmd, stdout=subprocess.PIPE, shell=True)
+    time.sleep(0.5)
+    first_client_proc = subprocess.Popen(client_cmd, stdout=subprocess.PIPE, shell=True)
+    second_client_proc = subprocess.Popen(client_cmd, stdout=subprocess.PIPE, shell=True)
+    try:
+        first_client_proc.wait(timeout=5)
+        second_client_proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        first_client_proc.kill()
+        second_client_proc.kill()
+        return "Client timeout"
+    try:
+        output, _ = server_proc.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        server_proc.kill()
+        return "Server imeout"
+
+    return output.decode()
