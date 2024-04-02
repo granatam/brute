@@ -11,11 +11,24 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-// TODO: implement
-static void
-handle_alph (void)
+static status_t
+handle_alph (int socket_fd, config_t *config, char *alph)
 {
-  print_error ("not implemented yet\n");
+  int32_t length;
+  if (recv_wrapper (socket_fd, &length, sizeof (length), 0) == S_FAILURE)
+    {
+      print_error ("Could not receive alphabet length from server\n");
+      return (S_FAILURE);
+    }
+
+  if (recv_wrapper (socket_fd, alph, length, 0) == S_FAILURE)
+    {
+      print_error ("Could not receive alphabet from server\n");
+      return (S_FAILURE);
+    }
+  config->alph = alph;
+
+  return (S_SUCCESS);
 }
 
 static status_t
@@ -124,6 +137,7 @@ run_client (task_t *task, config_t *config)
   print_error ("Connected to server\n");
 
   char hash[HASH_LENGTH];
+  char alph[MAX_ALPH_LENGTH];
 
   st_context_t st_context = {
     .data = { .initialized = 0 },
@@ -141,7 +155,7 @@ run_client (task_t *task, config_t *config)
       switch (cmd)
         {
         case CMD_ALPH:
-          handle_alph ();
+          handle_alph (socket_fd, config, alph);
           break;
         case CMD_HASH:
           handle_hash (socket_fd, hash, &st_context);
@@ -151,10 +165,8 @@ run_client (task_t *task, config_t *config)
         case CMD_TASK:
           if (handle_task (socket_fd, task, config, &st_context) == S_FAILURE)
             goto end;
-
           if (task->password[0] != 0)
             return (false);
-
           break;
         }
     }

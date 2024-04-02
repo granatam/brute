@@ -92,6 +92,54 @@ close_client (int socket_fd)
 }
 
 static status_t
+send_hash (cl_context_t *cl_ctx, mt_context_t *mt_ctx)
+{
+  command_t cmd = CMD_HASH;
+  if (send_wrapper (cl_ctx->socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
+    {
+      print_error ("Could not send CMD_HASH to client\n");
+      return (S_FAILURE);
+    }
+
+  if (send_wrapper (cl_ctx->socket_fd, mt_ctx->config->hash, HASH_LENGTH, 0)
+      == S_FAILURE)
+    {
+      print_error ("Could not send hash to client\n");
+      return (S_FAILURE);
+    }
+
+  return (S_SUCCESS);
+}
+
+static status_t
+send_alph (cl_context_t *cl_ctx, mt_context_t *mt_ctx)
+{
+  command_t cmd = CMD_ALPH;
+  if (send_wrapper (cl_ctx->socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
+    {
+      print_error ("Could not send CMD_ALPH to client\n");
+      return (S_FAILURE);
+    }
+
+  int32_t length = strlen (mt_ctx->config->alph);
+  if (send_wrapper (cl_ctx->socket_fd, &length, sizeof (length), 0)
+      == S_FAILURE)
+    {
+      print_error ("Could not send alphabet length to client\n");
+      return (S_FAILURE);
+    }
+
+  if (send_wrapper (cl_ctx->socket_fd, mt_ctx->config->alph, length, 0)
+      == S_FAILURE)
+    {
+      print_error ("Could not send alphabet to client\n");
+      return (S_FAILURE);
+    }
+
+  return (S_SUCCESS);
+}
+
+static status_t
 delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
 {
   command_t cmd = CMD_TASK;
@@ -153,22 +201,11 @@ handle_client (void *arg)
       goto end;
     }
 
-  command_t cmd = CMD_HASH;
-  if (send_wrapper (local_ctx.socket_fd, &cmd, sizeof(cmd), 0)
-      == S_FAILURE)
-    {
-      print_error ("Could not send CMD_HASH to client\n");
-      goto end;
-    }
+  if (send_hash (&local_ctx, mt_ctx) == S_FAILURE)
+    goto end;
 
-  if (send_wrapper (local_ctx.socket_fd, mt_ctx->config->hash, HASH_LENGTH, 0)
-      == S_FAILURE)
-    {
-      print_error ("Could not send hash to client\n");
-      goto end;
-    }
-
-  print_error ("Sent hash %s to client\n", mt_ctx->config->hash);
+  if (send_alph (&local_ctx, mt_ctx) == S_FAILURE)
+    goto end;
 
   while (true)
     {

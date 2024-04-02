@@ -68,6 +68,14 @@ parse_params (config_t *config, int argc, char *argv[])
           break;
         case 'a':
           config->alph = optarg;
+          if (strlen (config->alph) <= 0
+              || strlen (config->alph) > MAX_ALPH_LENGTH)
+            {
+              print_error ("Alphabet's length must be between 0 and %d\n",
+                           MAX_ALPH_LENGTH);
+              return (S_FAILURE);
+            }
+
           break;
         case 'H':
           config->hash = optarg;
