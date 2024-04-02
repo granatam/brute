@@ -11,9 +11,21 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-// TODO: Remove debug output
+// TODO: implement
+static void
+handle_alph (void)
+{
+  print_error ("not implemented yet\n");
+}
 
-status_t
+// TODO: implement
+static void
+handle_hash (void)
+{
+  print_error ("not implemented yet\n");
+}
+
+static status_t
 find_password (config_t *config, int socket_fd, task_t *task,
                st_context_t *ctx)
 {
@@ -45,6 +57,38 @@ find_password (config_t *config, int socket_fd, task_t *task,
     }
   else
     memset (task->password, 0, sizeof (task->password));
+
+  return (S_SUCCESS);
+}
+
+static status_t
+handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx)
+{
+  if (recv_wrapper (socket_fd, task, sizeof (task_t), 0) == S_FAILURE)
+    {
+      print_error ("Could not receive data from server\n");
+      return (S_FAILURE);
+    }
+
+  print_error ("Received task %s from server\n", task->password);
+
+  // TODO: if (task_callback != NULL) task_callback (...)
+  if (config->run_mode == RM_CLIENT)
+    {
+      if (find_password (config, socket_fd, task, ctx) == S_FAILURE)
+        return (S_FAILURE);
+
+      if (task->password[0] != 0)
+        return (S_SUCCESS);
+    }
+
+  int wrong_password = 0;
+  if (send_wrapper (socket_fd, &wrong_password, sizeof (wrong_password), 0)
+      == S_FAILURE)
+    {
+      print_error ("Could not send data to server\n");
+      return (S_FAILURE);
+    }
 
   return (S_SUCCESS);
 }
@@ -102,47 +146,20 @@ run_client (task_t *task, config_t *config)
       switch (cmd)
         {
         case CMD_ALPH:
-          // TODO: receive alphabet length and alphabet
+          handle_alph ();
         case CMD_HASH:
-          // TODO: receive hash and set st_context.hash = hash
+          handle_hash ();
         case CMD_EXIT:
           print_error ("received CMD_EXIT\n");
           goto fail;
           break;
-        // TODO: Move it to handle_task function
         case CMD_TASK:
-          // print_error ("received CMD_TASK\n");
-          if (recv_wrapper (socket_fd, task, sizeof (task_t), 0) == S_FAILURE)
-            {
-              print_error ("Could not receive data from server\n");
-              goto fail;
-            }
+          if (handle_task (socket_fd, task, config, &st_context) == S_FAILURE)
+            goto fail;
 
-          print_error ("Received task %s from server\n", task->password);
+          if (task->password[0] != 0)
+            return (false);
 
-          // In RM_LOAD_CLIENT mode we should not search for a password
-          if (config->run_mode == RM_CLIENT)
-            {
-              if (find_password (config, socket_fd, task, &st_context)
-                  == S_FAILURE)
-                goto fail;
-
-              if (task->password[0] != 0)
-                return (false);
-            }
-
-          // print_error ("Haven't found anything\n");
-
-          int wrong_password = 0;
-          if (send_wrapper (socket_fd, &wrong_password,
-                            sizeof (wrong_password), 0)
-              == S_FAILURE)
-            {
-              print_error ("Could not send data to server\n");
-              goto fail;
-            }
-
-          // print_error ("Sent %d to server\n", wrong_password);
           break;
         }
     }
