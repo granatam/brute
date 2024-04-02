@@ -180,6 +180,8 @@ main (int argc, char *argv[])
       break;
     }
 
+  // TODO: cleanup and handle RM_CLIENT and RM_LOAD_CLIENT cases, I think
+  // we don't need to output if password was found or not
   if (config.run_mode != RM_CLIENT)
     {
       if (is_found)

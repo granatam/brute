@@ -11,6 +11,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+// TODO: Remove debug output
+
 status_t
 find_password (config_t *config, int socket_fd, task_t *task,
                st_context_t *ctx)
@@ -70,6 +72,8 @@ run_client (task_t *task, config_t *config)
 
   print_error ("Connected to server\n");
 
+  // TODO: recv alphabet
+
   // TODO: receive whole config instead of just hash
   char hash[HASH_LENGTH];
   if (recv_wrapper (socket_fd, hash, HASH_LENGTH, 0) == S_FAILURE)
@@ -77,6 +81,7 @@ run_client (task_t *task, config_t *config)
       print_error ("Could not receive hash from server\n");
       goto fail;
     }
+  // TODO: 0 instead of '\0'
   hash[HASH_LENGTH - 1] = '\0';
 
   // print_error ("Received hash %s from server\n", hash);
@@ -99,12 +104,14 @@ run_client (task_t *task, config_t *config)
 
       switch (cmd)
         {
-        // TODO: Do I need CMD_CONFIG?
+        // TODO: Remove CMD_CONFIG or add CMD_ALPH and CMD_HASH and move it
+        // into this loop
         case CMD_CONFIG:
         case CMD_EXIT:
           print_error ("received CMD_EXIT\n");
           goto fail;
           break;
+        // TODO: Move it to handle_task function
         case CMD_TASK:
           // print_error ("received CMD_TASK\n");
           if (recv_wrapper (socket_fd, task, sizeof (task_t), 0) == S_FAILURE)

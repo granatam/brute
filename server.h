@@ -9,12 +9,15 @@
 
 #include <stdbool.h>
 
+// TODO: add comments with explanation of these contexts usage
+
 typedef struct serv_context_t
 {
   mt_context_t context;
   int socket_fd;
 } serv_context_t;
 
+// TODO: find out why we need this mutex
 typedef struct cl_context_t
 {
   serv_context_t *context;

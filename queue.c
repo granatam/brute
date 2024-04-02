@@ -31,7 +31,7 @@ queue_push (queue_t *queue, task_t *task)
   if (sem_wait (&queue->empty) != 0)
     goto fail;
 
-  // TODO
+  // TODO: write it better
   if (!queue->active)
     {
       sem_post (&queue->empty);

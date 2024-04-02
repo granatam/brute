@@ -48,6 +48,7 @@ gen_context_init (gen_context_t *context, config_t *config, task_t *task)
 
   return (S_SUCCESS);
 
+// TODO: calloc_fail* or just alloc_fail
 malloc_fail:
   print_error ("Could not allocate memory for context state\n");
   return (S_FAILURE);
@@ -73,6 +74,7 @@ gen_context_destroy (gen_context_t *context)
   if (context->state)
     free (context->state);
 
+  // TODO: remove debug output
   // print_error ("gen_ctx_destroy\n");
   return (S_SUCCESS);
 }
@@ -80,6 +82,7 @@ gen_context_destroy (gen_context_t *context)
 static void *
 gen_worker (void *context)
 {
+  // TODO: remove debug output
   // print_error ("Thread %d\n", (int)pthread_self ());
   gen_context_t *gen_ctx = (gen_context_t *)context;
 
@@ -101,6 +104,7 @@ gen_worker (void *context)
       if (!gen_ctx->cancelled && gen_ctx->password[0] == 0)
         gen_ctx->cancelled = !gen_ctx->state_next (gen_ctx->state);
 
+      // TODO: why not return (NULL)?
       if (pthread_mutex_unlock (&gen_ctx->mutex) != 0)
         {
           print_error ("Could not unlock a mutex\n");

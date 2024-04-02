@@ -131,6 +131,8 @@ queue_push_wrapper (task_t *task, void *context)
       return (false);
     }
 
+  // TODO: impl queue_status_t or don't output error here because of
+  // server case
   if (queue_push (&mt_ctx->queue, task) == S_FAILURE)
     {
       print_error ("Could not push to a queue\n");
@@ -160,6 +162,7 @@ run_multi (task_t *task, config_t *config)
 
   brute (task, config, queue_push_wrapper, &context);
 
+  // TODO: implement wait_password () func to reuse it in server.c
   if (pthread_mutex_lock (&context.mutex) != 0)
     {
       print_error ("Could not lock a mutex\n");
@@ -188,4 +191,7 @@ run_multi (task_t *task, config_t *config)
     return (false);
 
   return (context.password[0] != 0);
+
+  // TODO: fail mark here with queue_cancel, mt_context_destroy and return
+  // (false) here
 }

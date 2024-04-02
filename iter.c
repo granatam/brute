@@ -35,6 +35,7 @@ iter_state_next (iter_state_t *state)
   return (true);
 }
 
+// TODO: we don't need config here, just alph
 bool
 brute_iter (task_t *task, config_t *config,
             password_handler_t password_handler, void *context)

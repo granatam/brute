@@ -14,7 +14,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-// TODO: Add status checks and cleanup in case of errors
+// TODO: More status checks and cleanup in case of errors
+// TODO: Remove debug output
 
 static status_t
 serv_context_init (serv_context_t *context, config_t *config)
@@ -83,6 +84,7 @@ close_client (int socket_fd)
       return (S_FAILURE);
     }
 
+  // TODO: should I shut down socket connection?
   // shutdown (socket_fd, SHUT_RDWR);
   close (socket_fd);
   print_error ("After close client\n");
@@ -154,7 +156,7 @@ handle_client (void *arg)
 
   // print_error ("Mutex unlocked\n");
 
-  // TODO: Send whole config instead of just hash
+  // TODO: Also send alphabet instead of just hash
   if (send_wrapper (local_ctx.socket_fd, mt_ctx->config->hash, HASH_LENGTH, 0)
       == S_FAILURE)
     {
@@ -180,16 +182,19 @@ handle_client (void *arg)
           goto end;
         }
 
+      // TODO: remove unused variable
       bool done = false;
       if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
         {
           print_error ("Could not lock a mutex\n");
           return (NULL);
         }
+
       if (mt_ctx->password[0] != 0)
         print_error ("After delegate task and mutex lock\n");
 
       --mt_ctx->passwords_remaining;
+      // TODO: refactor
       if (mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
         {
           close_client (local_ctx.socket_fd);
@@ -284,6 +289,7 @@ run_server (task_t *task, config_t *config)
       goto fail;
     }
 
+  // TODO: config->length < 3
   task->from = (config->length < 4) ? 1 : 2;
   task->to = config->length;
 
@@ -291,6 +297,7 @@ run_server (task_t *task, config_t *config)
 
   brute (task, config, queue_push_wrapper, mt_ctx);
 
+  // TODO: replace it with wait_password () function from multi.c
   print_error ("Before lock\n");
   if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
     {
@@ -336,6 +343,7 @@ run_server (task_t *task, config_t *config)
   return (mt_ctx->password[0] != 0);
 
 fail:
+  // TODO: queue_cancel here also?
   if (serv_context_destroy (&context) == S_FAILURE)
     print_error ("Could not destroy server context\n");
   return (false);

@@ -78,6 +78,7 @@ brute_rec_gen (task_t *task, config_t *config,
 }
 #endif // ifndef __APPLE__
 
+// TODO: also don't need config here, just alph
 bool
 brute_rec (task_t *task, config_t *config, password_handler_t password_handler,
            void *context, int pos)

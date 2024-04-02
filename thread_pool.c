@@ -28,8 +28,6 @@ thread_pool_init (thread_pool_t *thread_pool)
   thread_pool->count = 0;
   thread_pool->cancelled = false;
 
-  print_error ("Thread pool at %p %p\n", thread_pool, &thread_pool->mutex);
-
   return (S_SUCCESS);
 }
 
@@ -39,9 +37,9 @@ thread_cleanup (void *arg)
   thread_cleanup_context_t *tcc = arg;
   node_t *node = tcc->node;
   thread_pool_t *thread_pool = tcc->thread_pool;
-  // print_error ("Start thread_cleanup %p %p\n", thread_pool,
-  //              &thread_pool->mutex);
 
+  // TODO: if we remove return then we dont need cleanup_push/pop,
+  // why we removed return from this lock?
   if (pthread_mutex_lock (&thread_pool->mutex) != 0)
     print_error ("Could not lock a mutex\n");
   pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
@@ -52,8 +50,8 @@ thread_cleanup (void *arg)
 
   if (pthread_cond_signal (&thread_pool->cond) != 0)
     print_error ("Could not signal a conditional semaphore\n");
+
   pthread_cleanup_pop (!0);
-  // print_error ("End thread_cleanup\n");
 }
 
 static void *
@@ -184,6 +182,7 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg)
       return (S_FAILURE);
     }
 
+  // TODO: find out why there is 2 locks
   if (pthread_mutex_lock (&context.mutex) != 0)
     {
       print_error ("Could not lock mutex\n");
@@ -263,6 +262,7 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
 
   print_error ("After thread_pool_collect\n");
 
+  // TODO: add comment with explanation why we need this
   char *var = getenv ("PYTEST_CURRENT_TEST");
   if (var == NULL)
     return (S_SUCCESS);

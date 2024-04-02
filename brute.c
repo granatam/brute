@@ -8,6 +8,7 @@ brute (task_t *task, config_t *config, password_handler_t password_handler,
        void *context)
 {
   bool is_found = false;
+  // TODO: we could pass config->alph instead of config here
   switch (config->brute_mode)
     {
     case BM_REC_GEN:
