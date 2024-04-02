@@ -262,7 +262,9 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
 
   print_error ("After thread_pool_collect\n");
 
-  // TODO: add comment with explanation why we need this
+  /* Valgrind tests are returning false positive result, since it doesn't
+   * wait until all memory allocated for threads is cleared, so we need to
+   * manually make a timeout */
   char *var = getenv ("PYTEST_CURRENT_TEST");
   if (var == NULL)
     return (S_SUCCESS);

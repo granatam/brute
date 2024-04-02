@@ -143,7 +143,11 @@ run_generator (task_t *task, config_t *config)
 
   gen_worker (&context);
 
-  gen_context_destroy (&context);
+  if (gen_context_destroy (&context) == S_FAILURE)
+  {
+    print_error ("Could not destroy generator context\n");
+    return (false);
+  }
 
   if (context.password[0] != 0)
     memcpy (task->password, context.password, sizeof (context.password));
@@ -151,6 +155,8 @@ run_generator (task_t *task, config_t *config)
   return (context.password[0] != 0);
 
 fail:
-  gen_context_destroy (&context);
+  if (gen_context_destroy (&context) == S_FAILURE)
+    print_error ("Could not return generator context\n");
+
   return (false);
 }

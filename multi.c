@@ -169,6 +169,7 @@ run_multi (task_t *task, config_t *config)
 {
   mt_context_t context;
 
+  // TODO: return (false) or goto fail?
   if (mt_context_init (&context, config) == S_FAILURE)
     return (false);
 
@@ -177,7 +178,7 @@ run_multi (task_t *task, config_t *config)
                         mt_password_check, &context);
 
   if (active_threads == 0)
-    return (false);
+    goto fail;
 
   task->from = (config->length < 3) ? 1 : 2;
   task->to = config->length;
@@ -185,21 +186,28 @@ run_multi (task_t *task, config_t *config)
   brute (task, config, queue_push_wrapper, &context);
 
   if (wait_password (&context) == S_FAILURE)
-    return (false);
+    goto fail;
 
   if (queue_cancel (&context.queue) != QS_SUCCESS)
     {
       print_error ("Could not cancel a queue\n");
+      goto fail;
     }
 
   if (context.password[0] != 0)
     memcpy (task->password, context.password, sizeof (context.password));
 
   if (mt_context_destroy (&context) == S_FAILURE)
-    return (false);
+    {
+      print_error ("Could not destroy mt context\n");
+      return (false);
+    }
 
   return (context.password[0] != 0);
 
-  // TODO: fail mark here with queue_cancel, mt_context_destroy and return
-  // (false) here
+fail:
+  if (mt_context_destroy (&context) == S_FAILURE)
+    print_error ("Could not destroy mt context\n");
+
+  return (false);
 }
