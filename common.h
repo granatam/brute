@@ -33,7 +33,8 @@ typedef struct base_state_t
 
 typedef enum command_t
 {
-  CMD_CONFIG, // TODO: CMD_HASH or nothing
+  CMD_ALPH,
+  CMD_HASH,
   CMD_TASK,
   CMD_EXIT,
 } command_t;

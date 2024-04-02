@@ -81,8 +81,7 @@ run_client (task_t *task, config_t *config)
       print_error ("Could not receive hash from server\n");
       goto fail;
     }
-  // TODO: 0 instead of '\0'
-  hash[HASH_LENGTH - 1] = '\0';
+  hash[HASH_LENGTH - 1] = 0;
 
   // print_error ("Received hash %s from server\n", hash);
 
@@ -93,8 +92,6 @@ run_client (task_t *task, config_t *config)
 
   while (true)
     {
-      // print_error ("Waiting for command\n");
-
       command_t cmd;
       if (recv_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
         {
@@ -104,9 +101,10 @@ run_client (task_t *task, config_t *config)
 
       switch (cmd)
         {
-        // TODO: Remove CMD_CONFIG or add CMD_ALPH and CMD_HASH and move it
-        // into this loop
-        case CMD_CONFIG:
+        case CMD_ALPH:
+          // TODO: receive alphabet length and alphabet
+        case CMD_HASH:
+          // TODO: receive hash and set st_context.hash = hash
         case CMD_EXIT:
           print_error ("received CMD_EXIT\n");
           goto fail;
