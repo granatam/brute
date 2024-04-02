@@ -75,7 +75,6 @@ parse_params (config_t *config, int argc, char *argv[])
                            MAX_ALPH_LENGTH);
               return (S_FAILURE);
             }
-
           break;
         case 'H':
           config->hash = optarg;
@@ -183,28 +182,32 @@ main (int argc, char *argv[])
       is_found = run_server (&task, &config);
       break;
     case RM_CLIENT:
-      is_found = run_client (&task, &config, find_password);
+      run_client (&task, &config, find_password);
       break;
     case RM_LOAD_CLIENT:
-      is_found = run_client (&task, &config, NULL);
+      run_client (&task, &config, NULL);
       break;
     }
 
-  // TODO: cleanup and handle RM_CLIENT and RM_LOAD_CLIENT cases, I think
-  // we don't need to output if password was found or not
-  if (config.run_mode != RM_CLIENT)
+  /* Clients should not output anything, only computations and data exchange
+   * with the server */
+  if (config.run_mode == RM_CLIENT || config.run_mode == RM_LOAD_CLIENT)
+    return (EXIT_SUCCESS);
+
+  if (is_found)
     {
-      if (is_found)
-        {
-          printf ("Password found: %s\n", task.password);
-          print_error ("Password found: %s\n", task.password);
-        }
-      else
-        {
-          printf ("Password not found\n");
-          print_error ("Password not found\n");
-        }
+      printf ("Password found: %s\n", task.password);
+      // TODO: Remove debug output
+      print_error ("Password found: %s\n", task.password);
     }
+  else
+    {
+      printf ("Password not found\n");
+      // TODO: Remove debug output
+      print_error ("Password not found\n");
+    }
+
+  // TODO: Remove debug output
   if (config.run_mode == RM_SERVER)
     print_error ("--------------------------------\n");
 

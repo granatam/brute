@@ -1,6 +1,7 @@
 #include "gen.h"
 
 #include "brute.h"
+#include "common.h"
 #include "iter.h"
 #include "rec.h"
 #include "single.h"
@@ -26,21 +27,24 @@ gen_context_init (gen_context_t *context, config_t *config, task_t *task)
     case BM_REC_GEN:
 #ifndef __APPLE__
       if (!(context->state = calloc (1, sizeof (rec_state_t))))
-        goto malloc_fail;
+        goto alloc_fail;
       rec_state_init ((rec_state_t *)context->state, task, config->alph);
       context->state_next = (bool (*) (base_state_t *))rec_state_next;
       break;
 #endif
     case BM_ITER:
       if (!(context->state = calloc (1, sizeof (iter_state_t))))
-        goto malloc_fail;
+        goto alloc_fail;
       iter_state_init ((iter_state_t *)context->state, config->alph, task);
       context->state_next = (bool (*) (base_state_t *))iter_state_next;
       break;
     }
 
   if (thread_pool_init (&context->thread_pool) == S_FAILURE)
-    return (S_FAILURE);
+    {
+      print_error ("Could not initialize a thread pool\n");
+      return (S_FAILURE);
+    }
 
   context->config = config;
   context->cancelled = false;
@@ -48,8 +52,7 @@ gen_context_init (gen_context_t *context, config_t *config, task_t *task)
 
   return (S_SUCCESS);
 
-// TODO: calloc_fail* or just alloc_fail
-malloc_fail:
+alloc_fail:
   print_error ("Could not allocate memory for context state\n");
   return (S_FAILURE);
 }
@@ -74,16 +77,12 @@ gen_context_destroy (gen_context_t *context)
   if (context->state)
     free (context->state);
 
-  // TODO: remove debug output
-  // print_error ("gen_ctx_destroy\n");
   return (S_SUCCESS);
 }
 
 static void *
 gen_worker (void *context)
 {
-  // TODO: remove debug output
-  // print_error ("Thread %d\n", (int)pthread_self ());
   gen_context_t *gen_ctx = (gen_context_t *)context;
 
   st_context_t st_ctx = {

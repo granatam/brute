@@ -169,6 +169,7 @@ run_client (task_t *task, config_t *config, task_callback_t task_callback)
     }
 
 end:
+  // NOTE: shutdown?
   close (socket_fd);
   return (false);
 }
