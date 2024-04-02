@@ -142,6 +142,28 @@ queue_push_wrapper (task_t *task, void *context)
   return (mt_ctx->password[0] != 0);
 }
 
+status_t
+wait_password (mt_context_t *ctx)
+{
+  if (pthread_mutex_lock (&ctx->mutex) != 0)
+    {
+      print_error ("Could not lock a mutex\n");
+      return (S_FAILURE);
+    }
+  pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
+
+  while (ctx->passwords_remaining != 0 && ctx->password[0] == 0)
+    if (pthread_cond_wait (&ctx->cond_sem, &ctx->mutex) != 0)
+      {
+        print_error ("Could not wait on a condition\n");
+        return (S_FAILURE);
+      }
+
+  pthread_cleanup_pop (!0);
+
+  return (S_SUCCESS);
+}
+
 bool
 run_multi (task_t *task, config_t *config)
 {
@@ -162,22 +184,8 @@ run_multi (task_t *task, config_t *config)
 
   brute (task, config, queue_push_wrapper, &context);
 
-  // TODO: implement wait_password () func to reuse it in server.c
-  if (pthread_mutex_lock (&context.mutex) != 0)
-    {
-      print_error ("Could not lock a mutex\n");
-      return (false);
-    }
-  pthread_cleanup_push (cleanup_mutex_unlock, &context.mutex);
-
-  while (context.passwords_remaining != 0 && context.password[0] == 0)
-    if (pthread_cond_wait (&context.cond_sem, &context.mutex) != 0)
-      {
-        print_error ("Could not wait on a condition\n");
-        return (false);
-      }
-
-  pthread_cleanup_pop (!0);
+  if (wait_password (&context) == S_FAILURE)
+    return (false);
 
   if (queue_cancel (&context.queue) != QS_SUCCESS)
     {

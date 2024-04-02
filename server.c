@@ -336,28 +336,8 @@ run_server (task_t *task, config_t *config)
 
   brute (task, config, queue_push_wrapper, mt_ctx);
 
-  // TODO: replace it with wait_password () function from multi.c
-  print_error ("Before lock\n");
-  if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
-    {
-      print_error ("Could not lock a mutex\n");
-      goto fail;
-    }
-  pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
-
-  print_error ("After brute and mutex lock in main thread\n");
-  while (mt_ctx->passwords_remaining != 0 && mt_ctx->password[0] == 0)
-    {
-      if (pthread_cond_wait (&mt_ctx->cond_sem, &mt_ctx->mutex) != 0)
-        {
-          print_error ("Could not wait on a condition\n");
-          goto fail;
-        }
-      print_error ("After pthread_cond_wait\n");
-    }
-  print_error ("After wait while\n");
-
-  pthread_cleanup_pop (!0);
+  if (wait_password (mt_ctx) == S_FAILURE)
+    goto fail;
 
   if (queue_cancel (&mt_ctx->queue) == S_FAILURE)
     {
@@ -366,10 +346,7 @@ run_server (task_t *task, config_t *config)
     }
 
   if (mt_ctx->password[0] != 0)
-    {
-      memcpy (task->password, mt_ctx->password, sizeof (mt_ctx->password));
-      // print_error ("Password found: %s\n", task->password);
-    }
+    memcpy (task->password, mt_ctx->password, sizeof (mt_ctx->password));
 
   if (serv_context_destroy (&context) == S_FAILURE)
     {
@@ -382,8 +359,8 @@ run_server (task_t *task, config_t *config)
   return (mt_ctx->password[0] != 0);
 
 fail:
-  // TODO: queue_cancel here also?
   if (serv_context_destroy (&context) == S_FAILURE)
     print_error ("Could not destroy server context\n");
+
   return (false);
 }
