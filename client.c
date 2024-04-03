@@ -165,6 +165,7 @@ run_client (task_t *task, config_t *config, task_callback_t task_callback)
           handle_hash (socket_fd, hash, &st_context);
           break;
         case CMD_EXIT:
+          print_error ("received CMD_EXIT\n");
           goto end;
         case CMD_TASK:
           if (handle_task (socket_fd, task, config, &st_context, task_callback)
