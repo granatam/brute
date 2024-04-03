@@ -127,8 +127,7 @@ run_client (task_t *task, config_t *config, task_callback_t task_callback)
     }
 
   int option = 1;
-  setsockopt (socket_fd, SOL_SOCKET, SO_KEEPALIVE, &option,
-              sizeof (option));
+  setsockopt (socket_fd, SOL_SOCKET, SO_KEEPALIVE, &option, sizeof (option));
 
   struct sockaddr_in addr;
   addr.sin_family = AF_INET;
@@ -164,23 +163,25 @@ run_client (task_t *task, config_t *config, task_callback_t task_callback)
         {
         case CMD_ALPH:
           if (handle_alph (socket_fd, config, alph) == S_FAILURE)
-          {
-            print_error ("Could not handle alphabet\n");
-            goto end;
-          }
+            {
+              print_error ("Could not handle alphabet\n");
+              goto end;
+            }
           break;
         case CMD_HASH:
           if (handle_hash (socket_fd, hash, &st_context) == S_FAILURE)
-          {
-            print_error ("Could not handle hash\n");
-            goto end;
-          }
+            {
+              print_error ("Could not handle hash\n");
+              goto end;
+            }
           break;
         case CMD_EXIT:
+          print_error ("Received CMD_EXIT\n");
           goto end;
         case CMD_TASK:
           if (handle_task (socket_fd, task, config, &st_context, task_callback)
-              == S_FAILURE || task->password[0] != 0)
+                  == S_FAILURE
+              || task->password[0] != 0)
             goto end;
           break;
         }
