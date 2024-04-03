@@ -180,10 +180,8 @@ run_client (task_t *task, config_t *config, task_callback_t task_callback)
           goto end;
         case CMD_TASK:
           if (handle_task (socket_fd, task, config, &st_context, task_callback)
-              == S_FAILURE)
+              == S_FAILURE || task->password[0] != 0)
             goto end;
-          if (task->password[0] != 0)
-            return (false);
           break;
         }
     }
@@ -232,4 +230,6 @@ spawn_clients (task_t *task, config_t *config, task_callback_t task_callback,
 
   if (thread_pool_join (&thread_pool) == S_FAILURE)
     print_error ("Could not wait for a thread pool to end\n");
+
+  print_error ("End all clients\n");
 }
