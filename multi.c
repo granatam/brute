@@ -25,7 +25,7 @@ mt_context_init (mt_context_t *context, config_t *config)
       return (S_FAILURE);
     }
 
-  if (queue_init (&context->queue) == S_FAILURE)
+  if (queue_init (&context->queue) == QS_FAILURE)
     {
       print_error ("Could not initialize a queue\n");
       return (S_FAILURE);

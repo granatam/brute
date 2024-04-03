@@ -231,7 +231,7 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
           return (S_FAILURE);
         }
 
-      if (queue_cancel (&ctx->queue) == S_FAILURE)
+      if (queue_cancel (&ctx->queue) == QS_FAILURE)
         {
           print_error ("Could not cancel a queue\n");
           return (S_FAILURE);
@@ -405,7 +405,7 @@ run_server (task_t *task, config_t *config)
   if (wait_password (mt_ctx) == S_FAILURE)
     goto fail;
 
-  if (queue_cancel (&mt_ctx->queue) == S_FAILURE)
+  if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
     {
       print_error ("Could not cancel a queue\n");
       goto fail;
