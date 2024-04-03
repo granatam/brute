@@ -15,6 +15,67 @@
 #include <unistd.h>
 
 static status_t
+socket_array_init (socket_array_t *arr)
+{
+  arr->size = 0;
+  arr->capacity = 2;
+  arr->data = calloc (arr->capacity, sizeof (int));
+  if (!arr->data)
+    {
+      print_error ("Could not allocate memory for socket array\n");
+      return (S_FAILURE);
+    }
+
+  return (S_SUCCESS);
+}
+
+static status_t
+socket_array_add (socket_array_t *arr, int socket_fd)
+{
+  arr->data[arr->size++] = socket_fd;
+  if (arr->size == arr->capacity)
+    {
+      arr->capacity *= 2;
+      int *tmp = realloc (arr->data, arr->capacity);
+      if (!tmp)
+        {
+          print_error ("Could not reallocate memory for socket array\n");
+          return (S_FAILURE);
+        }
+      arr->data = tmp;
+    }
+
+  return (S_SUCCESS);
+}
+
+static status_t
+close_client (int socket_fd)
+{
+  command_t cmd = CMD_EXIT;
+  if (send_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
+    {
+      print_error ("Could not send CMD_EXIT to client\n");
+      return (S_FAILURE);
+    }
+
+  shutdown (socket_fd, SHUT_RDWR);
+  close (socket_fd);
+  // TODO: Remove debug output
+  print_error ("After close client %d\n", socket_fd);
+
+  return (S_SUCCESS);
+}
+
+static status_t
+socket_array_close_all (socket_array_t *arr)
+{
+  for (size_t i = 0; i < arr->size; ++i)
+    close_client (arr->data[i]);
+
+  return (S_SUCCESS);
+}
+
+static status_t
 serv_context_init (serv_context_t *context, config_t *config)
 {
   if (mt_context_init ((mt_context_t *)context, config) == S_FAILURE)
@@ -25,6 +86,8 @@ serv_context_init (serv_context_t *context, config_t *config)
       print_error ("Could not initialize server socket\n");
       return (S_FAILURE);
     }
+
+  socket_array_init (&context->sock_arr);
 
   int option = 1;
   setsockopt (context->socket_fd, SOL_SOCKET, SO_REUSEADDR, &option,
@@ -59,32 +122,19 @@ fail:
 static status_t
 serv_context_destroy (serv_context_t *context)
 {
+  socket_array_close_all (&context->sock_arr);
+
+  free (context->sock_arr.data);
+
   if (mt_context_destroy ((mt_context_t *)context) == S_FAILURE)
     return (S_FAILURE);
 
+  shutdown (context->socket_fd, SHUT_RDWR);
   if (close (context->socket_fd) != 0)
     {
       print_error ("Could not close server socket\n");
       return (S_FAILURE);
     }
-
-  return (S_SUCCESS);
-}
-
-static status_t
-close_client (int socket_fd)
-{
-  command_t cmd = CMD_EXIT;
-  if (send_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
-    {
-      print_error ("Could not send CMD_EXIT to client\n");
-      return (S_FAILURE);
-    }
-
-  shutdown (socket_fd, SHUT_RDWR);
-  close (socket_fd);
-  // TODO: Remove debug output
-  print_error ("After close client\n");
 
   return (S_SUCCESS);
 }
@@ -105,6 +155,8 @@ send_hash (cl_context_t *cl_ctx, mt_context_t *mt_ctx)
       print_error ("Could not send hash to client\n");
       return (S_FAILURE);
     }
+
+  print_error ("Sent hash %s to client\n", mt_ctx->config->hash);
 
   return (S_SUCCESS);
 }
@@ -134,6 +186,9 @@ send_alph (cl_context_t *cl_ctx, mt_context_t *mt_ctx)
       return (S_FAILURE);
     }
 
+  print_error ("Sent alph %s to client %d\n", mt_ctx->config->alph,
+               cl_ctx->socket_fd);
+
   return (S_SUCCESS);
 }
 
@@ -155,7 +210,7 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
     }
 
   // TODO: Remove debug output
-  // print_error ("Sent task %s to client\n", task->password);
+  print_error ("Sent task %s to client %d\n", task->password, socket_fd);
 
   int32_t size;
   if (recv_wrapper (socket_fd, &size, sizeof (size), 0) == S_FAILURE)
@@ -181,8 +236,10 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
           print_error ("Could not cancel a queue\n");
           return (S_FAILURE);
         }
+
       // TODO: Remove debug output
-      // print_error ("Received password %s from client\n", ctx->password);
+      print_error ("Received password %s from client %d\n", ctx->password,
+                   socket_fd);
     }
 
   return (S_SUCCESS);
@@ -235,10 +292,10 @@ handle_client (void *arg)
       if (mt_ctx->password[0] != 0)
         print_error ("After delegate task and mutex lock\n");
 
-      // TODO: Refactor
+      // TODO: Could be moved into separate function in multi.c now
       if (--mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
         {
-          close_client (local_ctx.socket_fd);
+          // close_client (local_ctx.socket_fd);
           if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
             {
               print_error ("Could not signal a condition\n");
@@ -253,7 +310,7 @@ handle_client (void *arg)
     }
 
 end:
-  close_client (local_ctx.socket_fd);
+  // close_client (local_ctx.socket_fd);
   return (NULL);
 }
 
@@ -290,10 +347,13 @@ handle_clients (void *arg)
       // TODO: Remove debug output
       print_error ("Accepted new connection\n");
 
+      socket_array_add (&serv_ctx->sock_arr, cl_ctx.socket_fd);
+
       if (thread_create (&mt_ctx->thread_pool, handle_client, &cl_ctx)
           == S_FAILURE)
         {
           print_error ("Could not create client thread\n");
+
           close_client (cl_ctx.socket_fd);
           continue;
         }

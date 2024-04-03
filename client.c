@@ -55,7 +55,7 @@ find_password (int socket_fd, task_t *task, config_t *config,
   if (brute (task, config, st_password_check, ctx))
     {
       // TODO: Remove debug output
-      // print_error ("Found something: %s\n", task->password);
+      print_error ("Found something: %s\n", task->password);
 
       int password_size = sizeof (task->password);
       if (send_wrapper (socket_fd, &password_size, sizeof (password_size), 0)
@@ -76,7 +76,7 @@ find_password (int socket_fd, task_t *task, config_t *config,
         }
 
       // TODO: Remove debug output
-      // print_error ("Sent %s to server\n", task->password);
+      print_error ("Sent %s to server\n", task->password);
     }
   else
     memset (task->password, 0, sizeof (task->password));
@@ -95,7 +95,7 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
     }
 
   // TODO: Remove debug output
-  // print_error ("Received task %s from server\n", task->password);
+  print_error ("Received task %s from server\n", task->password);
 
   if (task_callback != NULL)
     {
@@ -177,7 +177,7 @@ run_client (task_t *task, config_t *config, task_callback_t task_callback)
     }
 
 end:
-  // NOTE: shutdown?
+  shutdown (socket_fd, SHUT_RDWR);
   close (socket_fd);
   return (false);
 }
@@ -186,6 +186,11 @@ static void *
 client_thread_helper (void *arg)
 {
   client_context_t *ctx = (client_context_t *)arg;
+
+  // TODO: refactor
+  task_t task;
+  ctx->task = &task;
+
   run_client (ctx->task, ctx->config, ctx->task_callback);
 
   return (NULL);
