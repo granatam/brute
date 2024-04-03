@@ -122,12 +122,12 @@ fail:
 static status_t
 serv_context_destroy (serv_context_t *context)
 {
+  if (mt_context_destroy ((mt_context_t *)context) == S_FAILURE)
+    return (S_FAILURE);
+
   socket_array_close_all (&context->sock_arr);
 
   free (context->sock_arr.data);
-
-  if (mt_context_destroy ((mt_context_t *)context) == S_FAILURE)
-    return (S_FAILURE);
 
   shutdown (context->socket_fd, SHUT_RDWR);
   if (close (context->socket_fd) != 0)
