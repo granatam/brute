@@ -180,8 +180,7 @@ run_client (task_t *task, config_t *config, task_callback_t task_callback)
           goto end;
         case CMD_TASK:
           if (handle_task (socket_fd, task, config, &st_context, task_callback)
-                  == S_FAILURE
-              || task->password[0] != 0)
+              == S_FAILURE)
             goto end;
           break;
         }
