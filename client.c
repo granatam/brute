@@ -163,13 +163,20 @@ run_client (task_t *task, config_t *config, task_callback_t task_callback)
       switch (cmd)
         {
         case CMD_ALPH:
-          handle_alph (socket_fd, config, alph);
+          if (handle_alph (socket_fd, config, alph) == S_FAILURE)
+          {
+            print_error ("Could not handle alphabet\n");
+            goto end;
+          }
           break;
         case CMD_HASH:
-          handle_hash (socket_fd, hash, &st_context);
+          if (handle_hash (socket_fd, hash, &st_context) == S_FAILURE)
+          {
+            print_error ("Could not handle hash\n");
+            goto end;
+          }
           break;
         case CMD_EXIT:
-          print_error ("received CMD_EXIT\n");
           goto end;
         case CMD_TASK:
           if (handle_task (socket_fd, task, config, &st_context, task_callback)
