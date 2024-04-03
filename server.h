@@ -9,7 +9,8 @@
 
 #include <stdbool.h>
 
-typedef struct socket_array_t {
+typedef struct socket_array_t
+{
   size_t size;
   size_t capacity;
   int *data;

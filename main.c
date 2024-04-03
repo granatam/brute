@@ -183,7 +183,7 @@ main (int argc, char *argv[])
       break;
     // TODO: Handle one client and multiple clients separately
     case RM_CLIENT:
-      spawn_clients (&task, &config, find_password, 2);
+      spawn_clients (&task, &config, find_password, 1);
       break;
     case RM_LOAD_CLIENT:
       spawn_clients (&task, &config, NULL, 1);
