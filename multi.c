@@ -71,6 +71,29 @@ mt_context_destroy (mt_context_t *context)
   return (S_SUCCESS);
 }
 
+// TODO: better naming maybe?
+status_t
+signal_if_found (mt_context_t *ctx)
+{
+  if (pthread_mutex_lock (&ctx->mutex) != 0)
+    {
+      print_error ("Could not lock a mutex\n");
+      return (S_FAILURE);
+    }
+  pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
+
+  if (--ctx->passwords_remaining == 0 || ctx->password[0] != 0)
+    if (pthread_cond_signal (&ctx->cond_sem) != 0)
+      {
+        print_error ("Could not signal a condition\n");
+        return (S_FAILURE);
+      }
+
+  pthread_cleanup_pop (!0);
+
+  return (S_SUCCESS);
+}
+
 void *
 mt_password_check (void *context)
 {
@@ -93,22 +116,10 @@ mt_password_check (void *context)
       if (brute (&task, mt_ctx->config, st_password_check, &st_ctx))
         memcpy (mt_ctx->password, task.password, sizeof (task.password));
 
-      if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
-        {
-          print_error ("Could not lock a mutex\n");
-          return (NULL);
-        }
-      pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
-
-      if (--mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
-        if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
-          {
-            print_error ("Could not signal a condition\n");
-            return (NULL);
-          }
-
-      pthread_cleanup_pop (!0);
+      if (signal_if_found (mt_ctx) == S_FAILURE)
+        return (NULL);
     }
+
   return (NULL);
 }
 

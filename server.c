@@ -29,6 +29,7 @@ socket_array_init (socket_array_t *arr)
   return (S_SUCCESS);
 }
 
+// TODO: socket_array_insert is a better name maybe?
 static status_t
 socket_array_add (socket_array_t *arr, int socket_fd)
 {
@@ -46,6 +47,18 @@ socket_array_add (socket_array_t *arr, int socket_fd)
     }
 
   return (S_SUCCESS);
+}
+
+// TODO: implement socket_array_remove
+// This function should be used in case of early returns
+// Need to decide should we use socket_array_remove on handle_client () end
+// or just close all clients and free () array on serv_context_destroy ()
+static status_t
+socket_array_remove (socket_array_t *arr, int socket_fd)
+{
+  print_error ("not implemented yet\n");
+
+  return (S_FAILURE);
 }
 
 static status_t
@@ -219,11 +232,11 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
       return (S_FAILURE);
     }
 
-  // TODO: Remove debug output
-  // print_error ("Received %d from client\n", size);
-
   if (size != 0)
     {
+      // TODO: Remove debug output
+      print_error ("Received %d from client\n", size);
+
       if (recv_wrapper (socket_fd, ctx->password, sizeof (password_t), 0)
           == S_FAILURE)
         {
@@ -255,21 +268,20 @@ handle_client (void *arg)
   if (pthread_mutex_unlock (&cl_ctx->mutex) != 0)
     {
       print_error ("Could not unlock mutex\n");
-      goto end;
+      return (NULL);
     }
 
   if (send_hash (&local_ctx, mt_ctx) == S_FAILURE)
-    goto end;
+    return (NULL);
 
   if (send_alph (&local_ctx, mt_ctx) == S_FAILURE)
-    goto end;
+    return (NULL);
 
   while (true)
     {
       task_t task;
-      // TODO: != QS_SUCCESS or == QS_FAILURE?
       if (queue_pop (&mt_ctx->queue, &task) != QS_SUCCESS)
-        goto end;
+        return (NULL);
 
       task.to = task.from;
       task.from = 0;
@@ -279,38 +291,13 @@ handle_client (void *arg)
           if (queue_push (&mt_ctx->queue, &task) == QS_FAILURE)
             print_error ("Could not push to the queue\n");
 
-          goto end;
-        }
-
-      if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
-        {
-          print_error ("Could not lock a mutex\n");
           return (NULL);
         }
 
-      // TODO: Remove debug output
-      if (mt_ctx->password[0] != 0)
-        print_error ("After delegate task and mutex lock\n");
-
-      // TODO: Could be moved into separate function in multi.c now
-      if (--mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
-        {
-          // close_client (local_ctx.socket_fd);
-          if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
-            {
-              print_error ("Could not signal a condition\n");
-              return (NULL);
-            }
-          // TODO: Remove debug output
-          print_error ("After signal\n");
-          pthread_mutex_unlock (&mt_ctx->mutex);
-          return (NULL);
-        }
-      pthread_mutex_unlock (&mt_ctx->mutex);
+      if (signal_if_found (mt_ctx) == S_FAILURE)
+        return (NULL);
     }
 
-end:
-  // close_client (local_ctx.socket_fd);
   return (NULL);
 }
 
