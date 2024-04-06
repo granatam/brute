@@ -208,9 +208,5 @@ main (int argc, char *argv[])
       print_error ("Password not found\n");
     }
 
-  // TODO: Remove debug output
-  if (config.run_mode == RM_SERVER)
-    print_error ("--------------------------------\n");
-
   return (EXIT_SUCCESS);
 }

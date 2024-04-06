@@ -1,6 +1,9 @@
+from contextlib import redirect_stderr
+import io
 import random
 import subprocess
 import string
+import sys
 import time
 
 # to suppress the DeprecationWarning by crypt.crypt()
@@ -44,39 +47,28 @@ def run_valgrind(passwd, alph, run_mode, brute_mode):
         f"valgrind --leak-check=full --error-exitcode=1 --trace-children=yes --quiet {cmd}"
     )
 
-
-def run_client_server(passwd, alph, brute_mode):
+def run_client_server(passwd, alph, brute_mode, file):
     client_cmd = brute_cmd(passwd, alph, "c", brute_mode)
     server_cmd = brute_cmd(passwd, alph, "S", brute_mode)
 
-    import sys, io
-    # Redirect stderr for better logging
-    original_stderr = sys.stderr
-    stderr_output = io.StringIO()
-    sys.stderr = stderr_output
-
-    server_proc = subprocess.Popen(server_cmd, stdout=subprocess.PIPE, shell=True)
+    server_proc = subprocess.Popen(
+        server_cmd, stdout=subprocess.PIPE, stderr=file, shell=True
+    )
     time.sleep(0.05)
-    client_proc = subprocess.Popen(client_cmd, stdout=subprocess.PIPE, shell=True)
+    client_proc = subprocess.Popen(
+        client_cmd, stdout=subprocess.PIPE, stderr=file, shell=True
+    )
     try:
         client_proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
         client_proc.kill()
-        sys.stderr = original_stderr
-        print(stderr_output.getvalue(), file=sys.stderr)
         return "Client timeout"
-    else:
-        sys.stderr = original_stderr
 
     try:
         output, _ = server_proc.communicate(timeout=5)
     except subprocess.TimeoutExpired:
         server_proc.kill()
-        sys.stderr = original_stderr
-        print(stderr_output.getvalue(), file=sys.stderr)
         return "Server timeout"
-    else:
-        sys.stderr = original_stderr
 
     return output.decode()
 
@@ -84,7 +76,6 @@ def run_client_server(passwd, alph, brute_mode):
 def run_two_clients_server(passwd, alph, brute_mode):
     client_cmd = brute_cmd(passwd, alph, "c", brute_mode)
     server_cmd = brute_cmd(passwd, alph, "S", brute_mode)
-
 
     server_proc = subprocess.Popen(server_cmd, stdout=subprocess.PIPE, shell=True)
     time.sleep(0.05)
