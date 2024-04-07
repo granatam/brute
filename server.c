@@ -137,10 +137,14 @@ serv_context_destroy (serv_context_t *context)
 {
   if (mt_context_destroy ((mt_context_t *)context) == S_FAILURE)
     return (S_FAILURE);
+  
+  print_error ("After mt_context_destroy\n");
 
   socket_array_close_all (&context->sock_arr);
 
   free (context->sock_arr.data);
+
+  print_error ("After socket_array_close_all\n");
 
   shutdown (context->socket_fd, SHUT_RDWR);
   if (close (context->socket_fd) != 0)
@@ -148,6 +152,8 @@ serv_context_destroy (serv_context_t *context)
       print_error ("Could not close server socket\n");
       return (S_FAILURE);
     }
+
+  print_error ("After shutdown and close\n");
 
   return (S_SUCCESS);
 }
@@ -402,6 +408,9 @@ run_server (task_t *task, config_t *config)
 
   if (mt_ctx->password[0] != 0)
     memcpy (task->password, mt_ctx->password, sizeof (mt_ctx->password));
+
+  // TODO: Remove debug output
+  print_error ("Before serv_context_destroy\n");
 
   if (serv_context_destroy (&context) == S_FAILURE)
     {
