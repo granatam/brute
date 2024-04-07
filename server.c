@@ -271,6 +271,8 @@ handle_client (void *arg)
       return (NULL);
     }
 
+  print_error ("Mutex unlocked\n");
+
   if (send_hash (&local_ctx, mt_ctx) == S_FAILURE)
     return (NULL);
 
@@ -356,7 +358,7 @@ handle_clients (void *arg)
         }
 
       // TODO: Remove debug output
-      // print_error ("Mutex locked\n");
+      print_error ("Mutex locked\n");
     }
 
   return (NULL);
