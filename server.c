@@ -304,6 +304,8 @@ handle_client (void *arg)
 
       if (signal_if_found (mt_ctx) == S_FAILURE)
         return (NULL);
+
+      print_error ("After signal\n");
     }
 
   return (NULL);
