@@ -15,78 +15,6 @@
 #include <unistd.h>
 
 static status_t
-socket_array_init (socket_array_t *arr)
-{
-  arr->size = 0;
-  arr->capacity = 2;
-  arr->data = calloc (arr->capacity, sizeof (int));
-  if (!arr->data)
-    {
-      print_error ("Could not allocate memory for socket array\n");
-      return (S_FAILURE);
-    }
-
-  return (S_SUCCESS);
-}
-
-// TODO: socket_array_insert is a better name maybe?
-static status_t
-socket_array_add (socket_array_t *arr, int socket_fd)
-{
-  arr->data[arr->size++] = socket_fd;
-  if (arr->size == arr->capacity)
-    {
-      arr->capacity *= 2;
-      int *tmp = realloc (arr->data, arr->capacity);
-      if (!tmp)
-        {
-          print_error ("Could not reallocate memory for socket array\n");
-          return (S_FAILURE);
-        }
-      arr->data = tmp;
-    }
-
-  return (S_SUCCESS);
-}
-
-// TODO: implement socket_array_remove
-// This function should be used in case of early returns
-// Need to decide should we use socket_array_remove on handle_client () end
-// or just close all clients and free () array on serv_context_destroy ()
-static status_t
-socket_array_remove (socket_array_t *arr, int socket_fd)
-{
-  print_error ("not implemented yet\n");
-
-  return (S_FAILURE);
-}
-
-static status_t
-close_client (int socket_fd)
-{
-  command_t cmd = CMD_EXIT;
-  if (send_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
-    {
-      print_error ("Could not send CMD_EXIT to client\n");
-      return (S_FAILURE);
-    }
-
-  shutdown (socket_fd, SHUT_RDWR);
-  close (socket_fd);
-
-  return (S_SUCCESS);
-}
-
-static status_t
-socket_array_close_all (socket_array_t *arr)
-{
-  for (size_t i = 0; i < arr->size; ++i)
-    close_client (arr->data[i]);
-
-  return (S_SUCCESS);
-}
-
-static status_t
 serv_context_init (serv_context_t *context, config_t *config)
 {
   if (mt_context_init ((mt_context_t *)context, config) == S_FAILURE)
@@ -97,8 +25,6 @@ serv_context_init (serv_context_t *context, config_t *config)
       print_error ("Could not initialize server socket\n");
       return (S_FAILURE);
     }
-
-  socket_array_init (&context->sock_arr);
 
   int option = 1;
   setsockopt (context->socket_fd, SOL_SOCKET, SO_REUSEADDR, &option,
@@ -136,16 +62,28 @@ serv_context_destroy (serv_context_t *context)
   if (mt_context_destroy ((mt_context_t *)context) == S_FAILURE)
     return (S_FAILURE);
 
-  socket_array_close_all (&context->sock_arr);
-
-  free (context->sock_arr.data);
-
   shutdown (context->socket_fd, SHUT_RDWR);
   if (close (context->socket_fd) != 0)
     {
       print_error ("Could not close server socket\n");
       return (S_FAILURE);
     }
+
+  return (S_SUCCESS);
+}
+
+static status_t
+close_client (int socket_fd)
+{
+  command_t cmd = CMD_EXIT;
+  if (send_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
+    {
+      print_error ("Could not send CMD_EXIT to client\n");
+      return (S_FAILURE);
+    }
+
+  shutdown (socket_fd, SHUT_RDWR);
+  close (socket_fd);
 
   return (S_SUCCESS);
 }
@@ -194,9 +132,6 @@ send_alph (cl_context_t *cl_ctx, mt_context_t *mt_ctx)
       print_error ("Could not send alphabet to client\n");
       return (S_FAILURE);
     }
-
-  print_error ("Sent alph %s to client %d\n", mt_ctx->config->alph,
-               cl_ctx->socket_fd);
 
   return (S_SUCCESS);
 }
@@ -273,8 +208,25 @@ handle_client (void *arg)
           return (NULL);
         }
 
-      if (signal_if_found (mt_ctx) == S_FAILURE)
-        return (NULL);
+      if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
+        {
+          print_error ("Could not lock a mutex\n");
+          return (NULL);
+        }
+      pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
+
+      if (--mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
+        {
+          close_client (cl_ctx->socket_fd);
+
+          if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
+            {
+              print_error ("Could not signal a condition\n");
+              return (NULL);
+            }
+        }
+
+      pthread_cleanup_pop (!0);
     }
 
   return (NULL);
@@ -297,8 +249,6 @@ handle_clients (void *arg)
           print_error ("Could not accept new connection\n");
           continue;
         }
-
-      socket_array_add (&serv_ctx->sock_arr, cl_ctx.socket_fd);
 
       if (thread_create (&mt_ctx->thread_pool, handle_client, &cl_ctx,
                          sizeof (cl_ctx))
