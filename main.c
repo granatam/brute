@@ -189,9 +189,7 @@ main (int argc, char *argv[])
       is_found = run_server (&task, &config);
       break;
     case RM_CLIENT:
-      // TODO: run_client () instead of this
-      config.number_of_threads = 3;
-      spawn_clients (&task, &config, find_password);
+      run_client (&task, &config, find_password);
       break;
     case RM_LOAD_CLIENT:
       spawn_clients (&task, &config, NULL);
@@ -204,17 +202,9 @@ main (int argc, char *argv[])
     return (EXIT_SUCCESS);
 
   if (is_found)
-    {
-      printf ("Password found: %s\n", task.password);
-      // TODO: Remove debug output
-      print_error ("Password found: %s\n", task.password);
-    }
+    printf ("Password found: %s\n", task.password);
   else
-    {
-      printf ("Password not found\n");
-      // TODO: Remove debug output
-      print_error ("Password not found\n");
-    }
+    printf ("Password not found\n");
 
   return (EXIT_SUCCESS);
 }

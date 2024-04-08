@@ -73,8 +73,6 @@ close_client (int socket_fd)
 
   shutdown (socket_fd, SHUT_RDWR);
   close (socket_fd);
-  // TODO: Remove debug output
-  print_error ("After close client %d\n", socket_fd);
 
   return (S_SUCCESS);
 }
@@ -138,13 +136,9 @@ serv_context_destroy (serv_context_t *context)
   if (mt_context_destroy ((mt_context_t *)context) == S_FAILURE)
     return (S_FAILURE);
 
-  print_error ("After mt_context_destroy\n");
-
   socket_array_close_all (&context->sock_arr);
 
   free (context->sock_arr.data);
-
-  print_error ("After socket_array_close_all\n");
 
   shutdown (context->socket_fd, SHUT_RDWR);
   if (close (context->socket_fd) != 0)
@@ -152,8 +146,6 @@ serv_context_destroy (serv_context_t *context)
       print_error ("Could not close server socket\n");
       return (S_FAILURE);
     }
-
-  print_error ("After shutdown and close\n");
 
   return (S_SUCCESS);
 }
@@ -174,8 +166,6 @@ send_hash (cl_context_t *cl_ctx, mt_context_t *mt_ctx)
       print_error ("Could not send hash to client\n");
       return (S_FAILURE);
     }
-
-  print_error ("Sent hash %s to client\n", mt_ctx->config->hash);
 
   return (S_SUCCESS);
 }
@@ -228,9 +218,6 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
       return (S_FAILURE);
     }
 
-  // TODO: Remove debug output
-  print_error ("Sent task %s to client %d\n", task->password, socket_fd);
-
   int32_t size;
   if (recv_wrapper (socket_fd, &size, sizeof (size), 0) == S_FAILURE)
     {
@@ -240,9 +227,6 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
 
   if (size != 0)
     {
-      // TODO: Remove debug output
-      print_error ("Received %d from client\n", size);
-
       if (recv_wrapper (socket_fd, ctx->password, sizeof (password_t), 0)
           == S_FAILURE)
         {
@@ -255,10 +239,6 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
           print_error ("Could not cancel a queue\n");
           return (S_FAILURE);
         }
-
-      // TODO: Remove debug output
-      print_error ("Received password %s from client %d\n", ctx->password,
-                   socket_fd);
     }
 
   return (S_SUCCESS);
@@ -295,8 +275,6 @@ handle_client (void *arg)
 
       if (signal_if_found (mt_ctx) == S_FAILURE)
         return (NULL);
-
-      print_error ("After signal\n");
     }
 
   return (NULL);
@@ -320,9 +298,6 @@ handle_clients (void *arg)
           continue;
         }
 
-      // TODO: Remove debug output
-      print_error ("Accepted new connection\n");
-
       socket_array_add (&serv_ctx->sock_arr, cl_ctx.socket_fd);
 
       if (thread_create (&mt_ctx->thread_pool, handle_client, &cl_ctx,
@@ -334,9 +309,6 @@ handle_clients (void *arg)
           close_client (cl_ctx.socket_fd);
           continue;
         }
-
-      // TODO: Remove debug output
-      print_error ("Created new client thread\n");
     }
 
   return (NULL);
@@ -348,8 +320,6 @@ run_server (task_t *task, config_t *config)
   serv_context_t context;
   serv_context_t *context_ptr = &context;
 
-  // TODO: Remove debug output
-  print_error ("Starting server\n");
   if (serv_context_init (&context, config) == S_FAILURE)
     {
       print_error ("Could not initialize server context\n");
@@ -383,17 +353,8 @@ run_server (task_t *task, config_t *config)
   if (mt_ctx->password[0] != 0)
     memcpy (task->password, mt_ctx->password, sizeof (mt_ctx->password));
 
-  // TODO: Remove debug output
-  print_error ("Before serv_context_destroy\n");
-
   if (serv_context_destroy (&context) == S_FAILURE)
-    {
-      print_error ("Could not destroy server context\n");
-      // return (false);
-    }
-
-  // TODO: Remove debug output
-  print_error ("After serv_context_destroy\n");
+    print_error ("Could not destroy server context\n");
 
   return (mt_ctx->password[0] != 0);
 

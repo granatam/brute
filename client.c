@@ -48,15 +48,8 @@ status_t
 find_password (int socket_fd, task_t *task, config_t *config,
                st_context_t *ctx)
 {
-  // TODO: Remove debug output
-  // print_error ("%s %s %d %d\n", task->password, ctx->hash, task->from,
-  //              task->to);
-
   if (brute (task, config, st_password_check, ctx))
     {
-      // TODO: Remove debug output
-      print_error ("Found something: %s\n", task->password);
-
       int password_size = sizeof (task->password);
       if (send_wrapper (socket_fd, &password_size, sizeof (password_size), 0)
           == S_FAILURE)
@@ -65,18 +58,12 @@ find_password (int socket_fd, task_t *task, config_t *config,
           return (S_FAILURE);
         }
 
-      // TODO: Remove debug output
-      // print_error ("Sent %d to server\n", password_size);
-
       if (send_wrapper (socket_fd, task->password, password_size, 0)
           == S_FAILURE)
         {
           print_error ("Could not send data to server\n");
           return (S_FAILURE);
         }
-
-      // TODO: Remove debug output
-      print_error ("Sent %s to server\n", task->password);
     }
   else
     memset (task->password, 0, sizeof (task->password));
@@ -93,9 +80,6 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
       print_error ("Could not receive data from server\n");
       return (S_FAILURE);
     }
-
-  // TODO: Remove debug output
-  print_error ("Received task %s from server\n", task->password);
 
   if (task_callback != NULL)
     {
@@ -126,9 +110,6 @@ run_client (task_t *task, config_t *config, task_callback_t task_callback)
       return (false);
     }
 
-  int option = 1;
-  setsockopt (socket_fd, SOL_SOCKET, SO_KEEPALIVE, &option, sizeof (option));
-
   struct sockaddr_in addr;
   addr.sin_family = AF_INET;
   addr.sin_addr.s_addr = inet_addr (config->addr);
@@ -139,9 +120,6 @@ run_client (task_t *task, config_t *config, task_callback_t task_callback)
       print_error ("Could not connect to server\n");
       return (false);
     }
-
-  // TODO: Remove debug output
-  print_error ("Connected to server\n");
 
   char hash[HASH_LENGTH];
   char alph[MAX_ALPH_LENGTH];
@@ -176,7 +154,6 @@ run_client (task_t *task, config_t *config, task_callback_t task_callback)
             }
           break;
         case CMD_EXIT:
-          print_error ("Received CMD_EXIT\n");
           goto end;
         case CMD_TASK:
           if (handle_task (socket_fd, task, config, &st_context, task_callback)
@@ -197,7 +174,6 @@ client_thread_helper (void *arg)
 {
   client_context_t *ctx = *(client_context_t **)arg;
 
-  // TODO: refactor
   task_t task;
   ctx->task = &task;
 
@@ -231,6 +207,4 @@ spawn_clients (task_t *task, config_t *config, task_callback_t task_callback)
 
   if (thread_pool_join (&thread_pool) == S_FAILURE)
     print_error ("Could not wait for a thread pool to end\n");
-
-  print_error ("End all clients\n");
 }
