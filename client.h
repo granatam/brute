@@ -20,6 +20,6 @@ typedef struct client_context_t
 bool run_client (task_t *, config_t *, task_callback_t task_callback);
 status_t find_password (int socket_fd, task_t *, config_t *, st_context_t *);
 void spawn_clients (task_t *task, config_t *config,
-                    task_callback_t task_callback, int number_of_threads);
+                    task_callback_t task_callback);
 
 #endif // CLIENT_H

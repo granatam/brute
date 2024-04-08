@@ -207,8 +207,7 @@ client_thread_helper (void *arg)
 }
 
 void
-spawn_clients (task_t *task, config_t *config, task_callback_t task_callback,
-               int number_of_threads)
+spawn_clients (task_t *task, config_t *config, task_callback_t task_callback)
 {
   thread_pool_t thread_pool;
   if (thread_pool_init (&thread_pool) == S_FAILURE)
@@ -223,8 +222,8 @@ spawn_clients (task_t *task, config_t *config, task_callback_t task_callback,
     .task_callback = task_callback,
   };
 
-  if (create_threads (&thread_pool, number_of_threads, &client_thread_helper,
-                      &context)
+  if (create_threads (&thread_pool, config->number_of_threads,
+                      &client_thread_helper, &context)
       == 0)
     return;
 

@@ -52,7 +52,7 @@ static status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
-  while ((opt = getopt (argc, argv, "l:a:H:t:p:A:smgcLSiryh")) != -1)
+  while ((opt = getopt (argc, argv, "l:a:H:t:p:A:L:smgcSiryh")) != -1)
     {
       switch (opt)
         {
@@ -118,6 +118,13 @@ parse_params (config_t *config, int argc, char *argv[])
           config->run_mode = RM_CLIENT;
           break;
         case 'L':
+          config->number_of_threads = atoi (optarg);
+          if (config->number_of_threads < 1)
+            {
+              print_error ("Number of load clients to spawn must be a number "
+                           "greater than 1\n");
+              return (S_FAILURE);
+            }
           config->run_mode = RM_LOAD_CLIENT;
           break;
         case 'S':
@@ -181,12 +188,13 @@ main (int argc, char *argv[])
     case RM_SERVER:
       is_found = run_server (&task, &config);
       break;
-    // TODO: Handle one client and multiple clients separately
     case RM_CLIENT:
-      spawn_clients (&task, &config, find_password, 3);
+      // TODO: run_client () instead of this
+      config.number_of_threads = 3;
+      spawn_clients (&task, &config, find_password);
       break;
     case RM_LOAD_CLIENT:
-      spawn_clients (&task, &config, NULL, 1);
+      spawn_clients (&task, &config, NULL);
       break;
     }
 
