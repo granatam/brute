@@ -62,7 +62,7 @@ thread_run (void *arg)
   thread_pool_t *thread_pool = local_ctx.thread_pool;
 
   char args[local_ctx.arg_size];
-  memcpy(args, local_ctx.arg, local_ctx.arg_size);
+  memcpy (args, local_ctx.arg, local_ctx.arg_size);
 
   if (pthread_setcancelstate (PTHREAD_CANCEL_DISABLE, NULL) != 0)
     print_error ("Could not set cancel state\n");
@@ -119,10 +119,12 @@ thread_run (void *arg)
 }
 
 status_t
-thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg, size_t arg_size)
+thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg,
+               size_t arg_size)
 {
-  tp_context_t context
-      = { .thread_pool = thread_pool, .func = func, .arg = arg, .arg_size = arg_size };
+  tp_context_t context = {
+    .thread_pool = thread_pool, .func = func, .arg = arg, .arg_size = arg_size
+  };
 
   if (pthread_mutex_init (&context.mutex, NULL) != 0)
     {

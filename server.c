@@ -325,7 +325,8 @@ handle_clients (void *arg)
 
       socket_array_add (&serv_ctx->sock_arr, cl_ctx.socket_fd);
 
-      if (thread_create (&mt_ctx->thread_pool, handle_client, &cl_ctx, sizeof (cl_ctx))
+      if (thread_create (&mt_ctx->thread_pool, handle_client, &cl_ctx,
+                         sizeof (cl_ctx))
           == S_FAILURE)
         {
           print_error ("Could not create client thread\n");
@@ -355,7 +356,8 @@ run_server (task_t *task, config_t *config)
       return (false);
     }
 
-  if (thread_create (&context.context.thread_pool, handle_clients, &context_ptr, sizeof (context_ptr))
+  if (thread_create (&context.context.thread_pool, handle_clients,
+                     &context_ptr, sizeof (context_ptr))
       == S_FAILURE)
     {
       print_error ("Could not create clients thread\n");
