@@ -48,7 +48,7 @@ recv_wrapper (int socket_fd, void *buf, int len, int flags)
     {
       int bytes_read
           = TEMP_FAILURE_RETRY (recv (socket_fd, bytes, len, flags));
-      if (bytes_read == -1 || bytes_read == 0)
+      if (bytes_read <= 0)
         return (S_FAILURE);
       len -= bytes_read;
       bytes += bytes_read;
@@ -65,7 +65,7 @@ send_wrapper (int socket_fd, void *buf, int len, int flags)
     {
       int bytes_written
           = TEMP_FAILURE_RETRY (send (socket_fd, bytes, len, flags));
-      if (bytes_written == -1 || bytes_written == 0)
+      if (bytes_written <= 0)
         return (S_FAILURE);
       len -= bytes_written;
       bytes += bytes_written;

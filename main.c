@@ -36,7 +36,7 @@ usage (char *first_arg)
            "\t-m           multithreaded mode\n"
            "\t-g           generator mode\n"
            "\t-c           client mode\n"
-           "\t-L           load client mode\n"
+           "\t-L number    spawn N load clients\n"
            "\t-S           server mode\n"
            "brute modes:\n"
            "\t-i           iterative bruteforce\n"

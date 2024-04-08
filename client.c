@@ -195,7 +195,7 @@ end:
 static void *
 client_thread_helper (void *arg)
 {
-  client_context_t *ctx = (client_context_t *)arg;
+  client_context_t *ctx = *(client_context_t **)arg;
 
   // TODO: refactor
   task_t task;
@@ -221,9 +221,10 @@ spawn_clients (task_t *task, config_t *config, task_callback_t task_callback)
     .config = config,
     .task_callback = task_callback,
   };
+  client_context_t *context_ptr = &context;
 
   if (create_threads (&thread_pool, config->number_of_threads,
-                      &client_thread_helper, &context)
+                      &client_thread_helper, &context_ptr, sizeof (context_ptr))
       == 0)
     return;
 

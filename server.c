@@ -268,21 +268,12 @@ static void *
 handle_client (void *arg)
 {
   cl_context_t *cl_ctx = (cl_context_t *)arg;
-  cl_context_t local_ctx = *cl_ctx;
-  mt_context_t *mt_ctx = &local_ctx.context->context;
+  mt_context_t *mt_ctx = &cl_ctx->context->context;
 
-  if (pthread_mutex_unlock (&cl_ctx->mutex) != 0)
-    {
-      print_error ("Could not unlock mutex\n");
-      return (NULL);
-    }
-
-  print_error ("Mutex unlocked\n");
-
-  if (send_hash (&local_ctx, mt_ctx) == S_FAILURE)
+  if (send_hash (cl_ctx, mt_ctx) == S_FAILURE)
     return (NULL);
 
-  if (send_alph (&local_ctx, mt_ctx) == S_FAILURE)
+  if (send_alph (cl_ctx, mt_ctx) == S_FAILURE)
     return (NULL);
 
   while (true)
@@ -294,7 +285,7 @@ handle_client (void *arg)
       task.to = task.from;
       task.from = 0;
 
-      if (delegate_task (local_ctx.socket_fd, &task, mt_ctx) == S_FAILURE)
+      if (delegate_task (cl_ctx->socket_fd, &task, mt_ctx) == S_FAILURE)
         {
           if (queue_push (&mt_ctx->queue, &task) == QS_FAILURE)
             print_error ("Could not push to the queue\n");
@@ -314,24 +305,12 @@ handle_client (void *arg)
 static void *
 handle_clients (void *arg)
 {
-  serv_context_t *serv_ctx = (serv_context_t *)arg;
+  serv_context_t *serv_ctx = *(serv_context_t **)arg;
   mt_context_t *mt_ctx = &serv_ctx->context;
 
   cl_context_t cl_ctx = {
     .context = serv_ctx,
   };
-
-  if (pthread_mutex_init (&cl_ctx.mutex, NULL) != 0)
-    {
-      print_error ("Could not create mutex\n");
-      return (NULL);
-    }
-
-  if (pthread_mutex_lock (&cl_ctx.mutex) != 0)
-    {
-      print_error ("Could not lock mutex\n");
-      return (NULL);
-    }
 
   while (true)
     {
@@ -346,7 +325,7 @@ handle_clients (void *arg)
 
       socket_array_add (&serv_ctx->sock_arr, cl_ctx.socket_fd);
 
-      if (thread_create (&mt_ctx->thread_pool, handle_client, &cl_ctx)
+      if (thread_create (&mt_ctx->thread_pool, handle_client, &cl_ctx, sizeof (cl_ctx))
           == S_FAILURE)
         {
           print_error ("Could not create client thread\n");
@@ -357,16 +336,6 @@ handle_clients (void *arg)
 
       // TODO: Remove debug output
       print_error ("Created new client thread\n");
-
-      if (pthread_mutex_lock (&cl_ctx.mutex) != 0)
-        {
-          print_error ("Could not lock mutex\n");
-          close (cl_ctx.socket_fd);
-          continue;
-        }
-
-      // TODO: Remove debug output
-      print_error ("Mutex locked\n");
     }
 
   return (NULL);
@@ -376,6 +345,7 @@ bool
 run_server (task_t *task, config_t *config)
 {
   serv_context_t context;
+  serv_context_t *context_ptr = &context;
 
   // TODO: Remove debug output
   print_error ("Starting server\n");
@@ -385,7 +355,7 @@ run_server (task_t *task, config_t *config)
       return (false);
     }
 
-  if (thread_create (&context.context.thread_pool, handle_clients, &context)
+  if (thread_create (&context.context.thread_pool, handle_clients, &context_ptr, sizeof (context_ptr))
       == S_FAILURE)
     {
       print_error ("Could not create clients thread\n");

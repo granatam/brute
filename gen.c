@@ -83,7 +83,7 @@ gen_context_destroy (gen_context_t *context)
 static void *
 gen_worker (void *context)
 {
-  gen_context_t *gen_ctx = (gen_context_t *)context;
+  gen_context_t *gen_ctx = *(gen_context_t **)context;
 
   st_context_t st_ctx = {
     .hash = gen_ctx->config->hash,
@@ -127,6 +127,7 @@ bool
 run_generator (task_t *task, config_t *config)
 {
   gen_context_t context;
+  gen_context_t *context_ptr = &context;
 
   task->from = (config->length < 3) ? 1 : 2;
   task->to = config->length;
@@ -136,12 +137,12 @@ run_generator (task_t *task, config_t *config)
   int number_of_threads
       = (config->number_of_threads == 1) ? 1 : config->number_of_threads - 1;
   int active_threads = create_threads (&context.thread_pool, number_of_threads,
-                                       gen_worker, &context);
+                                       gen_worker, &context_ptr, sizeof (context_ptr));
 
   if (active_threads == 0)
     goto fail;
 
-  gen_worker (&context);
+  gen_worker (&context_ptr);
 
   if (gen_context_destroy (&context) == S_FAILURE)
     {

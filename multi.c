@@ -97,7 +97,7 @@ signal_if_found (mt_context_t *ctx)
 void *
 mt_password_check (void *context)
 {
-  mt_context_t *mt_ctx = (mt_context_t *)context;
+  mt_context_t *mt_ctx = *(mt_context_t **)context;
   task_t task;
   st_context_t st_ctx = {
     .hash = mt_ctx->config->hash,
@@ -178,6 +178,7 @@ bool
 run_multi (task_t *task, config_t *config)
 {
   mt_context_t context;
+  mt_context_t *context_ptr = &context;
 
   // TODO: return (false) or goto fail?
   if (mt_context_init (&context, config) == S_FAILURE)
@@ -185,7 +186,7 @@ run_multi (task_t *task, config_t *config)
 
   int active_threads
       = create_threads (&context.thread_pool, config->number_of_threads,
-                        mt_password_check, &context);
+                        mt_password_check, &context_ptr, sizeof (context_ptr));
 
   if (active_threads == 0)
     goto fail;
