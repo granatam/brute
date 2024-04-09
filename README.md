@@ -2,7 +2,7 @@
 
 ## Usage
 ```
-usage: ./main [-l length] [-a alphabet] [-h hash] [-t number] [-p port] [-A addr] [-s | -m | -g | -c | -L | -S] [-i | -r]
+usage: ./main [-l length] [-a alphabet] [-h hash] [-t number] [-p port] [-A addr] [-s | -m | -g | -c | -L | -S] [-i | -r | -y]
 options:
         -l length    password length
         -a alphabet  alphabet
@@ -20,4 +20,7 @@ run modes:
 brute modes:
         -i           iterative bruteforce
         -r           recursive bruteforce
+        -y           recursive generator
 ```
+
+> Note: Recursive generator is not available on MacOS
