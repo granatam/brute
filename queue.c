@@ -1,6 +1,6 @@
 #include "queue.h"
 
-status_t
+queue_status_t
 queue_init (queue_t *queue)
 {
   queue->head = queue->tail = 0;
@@ -18,18 +18,24 @@ queue_init (queue_t *queue)
   if (pthread_mutex_init (&queue->tail_mutex, NULL) != 0)
     goto fail;
 
-  return (S_SUCCESS);
+  return (QS_SUCCESS);
 
 fail:
   queue->active = false;
-  return (S_FAILURE);
+  return (QS_FAILURE);
 }
 
-status_t
+queue_status_t
 queue_push (queue_t *queue, task_t *task)
 {
   if (sem_wait (&queue->empty) != 0)
     goto fail;
+
+  if (!queue->active)
+    {
+      sem_post (&queue->empty);
+      return (QS_INACTIVE);
+    }
 
   if (pthread_mutex_lock (&queue->tail_mutex) != 0)
     goto fail;
@@ -43,14 +49,14 @@ queue_push (queue_t *queue, task_t *task)
   if (sem_post (&queue->full) != 0)
     goto fail;
 
-  return (S_SUCCESS);
+  return (QS_SUCCESS);
 
 fail:
   queue->active = false;
-  return (S_FAILURE);
+  return (QS_FAILURE);
 }
 
-status_t
+queue_status_t
 queue_pop (queue_t *queue, task_t *task)
 {
   if (sem_wait (&queue->full) != 0)
@@ -59,7 +65,7 @@ queue_pop (queue_t *queue, task_t *task)
   if (!queue->active)
     {
       sem_post (&queue->full);
-      return (S_FAILURE);
+      return (QS_INACTIVE);
     }
 
   if (pthread_mutex_lock (&queue->head_mutex) != 0)
@@ -74,41 +80,44 @@ queue_pop (queue_t *queue, task_t *task)
   if (sem_post (&queue->empty) != 0)
     goto fail;
 
-  return (S_SUCCESS);
+  return (QS_SUCCESS);
 
 fail:
   queue->active = false;
-  return (S_FAILURE);
+  return (QS_FAILURE);
 }
 
-status_t
+queue_status_t
 queue_cancel (queue_t *queue)
 {
   queue->active = false;
 
   if (sem_post (&queue->full) != 0)
-    return (S_FAILURE);
+    return (QS_FAILURE);
 
-  return (S_SUCCESS);
+  if (sem_post (&queue->empty) != 0)
+    return (QS_FAILURE);
+
+  return (QS_SUCCESS);
 }
 
-status_t
+queue_status_t
 queue_destroy (queue_t *queue)
 {
   queue->active = false;
   queue->head = queue->tail = 0;
 
   if (sem_destroy (&queue->full) != 0)
-    return (S_FAILURE);
+    return (QS_FAILURE);
 
   if (sem_destroy (&queue->empty) != 0)
-    return (S_FAILURE);
+    return (QS_FAILURE);
 
   if (pthread_mutex_destroy (&queue->head_mutex) != 0)
-    return (S_FAILURE);
+    return (QS_FAILURE);
 
   if (pthread_mutex_destroy (&queue->tail_mutex) != 0)
-    return (S_FAILURE);
+    return (QS_FAILURE);
 
-  return (S_SUCCESS);
+  return (QS_SUCCESS);
 }

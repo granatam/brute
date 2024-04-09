@@ -1,4 +1,3 @@
-from datetime import timedelta
 from hypothesis import given, strategies as st, settings
 from utils import gen_str, run_valgrind
 
@@ -6,7 +5,7 @@ from utils import gen_str, run_valgrind
 
 
 @given(
-    st.text(min_size=1, max_size=1, alphabet="dmg"),
+    st.text(min_size=1, max_size=1, alphabet="smg"),
     st.text(min_size=1, max_size=1, alphabet="ir"),
 )
 @settings(deadline=None)

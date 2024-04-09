@@ -25,7 +25,7 @@ mt_context_init (mt_context_t *context, config_t *config)
       return (S_FAILURE);
     }
 
-  if (queue_init (&context->queue) == S_FAILURE)
+  if (queue_init (&context->queue) == QS_FAILURE)
     {
       print_error ("Could not initialize a queue\n");
       return (S_FAILURE);
@@ -50,7 +50,7 @@ mt_context_destroy (mt_context_t *context)
       return (S_FAILURE);
     }
 
-  if (queue_destroy (&context->queue) == S_FAILURE)
+  if (queue_destroy (&context->queue) == QS_FAILURE)
     {
       print_error ("Could not destroy a queue\n");
       return (S_FAILURE);
@@ -71,10 +71,32 @@ mt_context_destroy (mt_context_t *context)
   return (S_SUCCESS);
 }
 
+status_t
+signal_if_found (mt_context_t *ctx)
+{
+  if (pthread_mutex_lock (&ctx->mutex) != 0)
+    {
+      print_error ("Could not lock a mutex\n");
+      return (S_FAILURE);
+    }
+  pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
+
+  if (--ctx->passwords_remaining == 0 || ctx->password[0] != 0)
+    if (pthread_cond_signal (&ctx->cond_sem) != 0)
+      {
+        print_error ("Could not signal a condition\n");
+        return (S_FAILURE);
+      }
+
+  pthread_cleanup_pop (!0);
+
+  return (S_SUCCESS);
+}
+
 void *
 mt_password_check (void *context)
 {
-  mt_context_t *mt_ctx = (mt_context_t *)context;
+  mt_context_t *mt_ctx = *(mt_context_t **)context;
   task_t task;
   st_context_t st_ctx = {
     .hash = mt_ctx->config->hash,
@@ -83,7 +105,7 @@ mt_password_check (void *context)
 
   while (true)
     {
-      if (queue_pop (&mt_ctx->queue, &task) == S_FAILURE)
+      if (queue_pop (&mt_ctx->queue, &task) != QS_SUCCESS)
         return (NULL);
 
       task.to = task.from;
@@ -92,23 +114,10 @@ mt_password_check (void *context)
       if (brute (&task, mt_ctx->config, st_password_check, &st_ctx))
         memcpy (mt_ctx->password, task.password, sizeof (task.password));
 
-      if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
-        {
-          print_error ("Could not lock a mutex\n");
-          return (NULL);
-        }
-      pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
-
-      --mt_ctx->passwords_remaining;
-      if (mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
-        if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
-          {
-            print_error ("Could not signal a condition\n");
-            return (NULL);
-          }
-
-      pthread_cleanup_pop (!0);
+      if (signal_if_found (mt_ctx) == S_FAILURE)
+        return (NULL);
     }
+
   return (NULL);
 }
 
@@ -131,62 +140,82 @@ queue_push_wrapper (task_t *task, void *context)
       return (false);
     }
 
-  if (queue_push (&mt_ctx->queue, task) == S_FAILURE)
-    {
-      print_error ("Could not push to a queue\n");
-      return (false);
-    }
+  queue_status_t push_status = queue_push (&mt_ctx->queue, task);
+  if (push_status == QS_FAILURE)
+    print_error ("Could not push to a queue\n");
+
+  if (push_status != QS_SUCCESS)
+    return (false);
 
   return (mt_ctx->password[0] != 0);
+}
+
+status_t
+wait_password (mt_context_t *ctx)
+{
+  if (pthread_mutex_lock (&ctx->mutex) != 0)
+    {
+      print_error ("Could not lock a mutex\n");
+      return (S_FAILURE);
+    }
+  pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
+
+  while (ctx->passwords_remaining != 0 && ctx->password[0] == 0)
+    if (pthread_cond_wait (&ctx->cond_sem, &ctx->mutex) != 0)
+      {
+        print_error ("Could not wait on a condition\n");
+        return (S_FAILURE);
+      }
+
+  pthread_cleanup_pop (!0);
+
+  return (S_SUCCESS);
 }
 
 bool
 run_multi (task_t *task, config_t *config)
 {
   mt_context_t context;
+  mt_context_t *context_ptr = &context;
 
   if (mt_context_init (&context, config) == S_FAILURE)
     return (false);
 
   int active_threads
       = create_threads (&context.thread_pool, config->number_of_threads,
-                        mt_password_check, &context);
+                        mt_password_check, &context_ptr, sizeof (context_ptr));
 
   if (active_threads == 0)
-    return (false);
+    goto fail;
 
   task->from = (config->length < 3) ? 1 : 2;
   task->to = config->length;
 
   brute (task, config, queue_push_wrapper, &context);
 
-  if (pthread_mutex_lock (&context.mutex) != 0)
-    {
-      print_error ("Could not lock a mutex\n");
-      return (false);
-    }
-  pthread_cleanup_push (cleanup_mutex_unlock, &context.mutex);
+  if (wait_password (&context) == S_FAILURE)
+    goto fail;
 
-  while (context.passwords_remaining != 0 && context.password[0] == 0)
-    if (pthread_cond_wait (&context.cond_sem, &context.mutex) != 0)
-      {
-        print_error ("Could not wait on a condition\n");
-        return (false);
-      }
-
-  pthread_cleanup_pop (!0);
-
-  if (queue_cancel (&context.queue) == S_FAILURE)
+  if (queue_cancel (&context.queue) != QS_SUCCESS)
     {
       print_error ("Could not cancel a queue\n");
-      return (false);
+      goto fail;
     }
 
   if (context.password[0] != 0)
     memcpy (task->password, context.password, sizeof (context.password));
 
   if (mt_context_destroy (&context) == S_FAILURE)
-    return (false);
+    {
+      print_error ("Could not destroy mt context\n");
+      return (false);
+    }
 
   return (context.password[0] != 0);
+
+fail:
+  if (mt_context_destroy (&context) == S_FAILURE)
+    print_error ("Could not destroy mt context\n");
+
+  return (false);
 }

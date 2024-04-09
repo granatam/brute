@@ -10,14 +10,15 @@ iter_state_init (iter_state_t *state, char *alph, task_t *task)
   state->base_state.task = task;
 
   memset (state->idx, 0, state->base_state.task->to * sizeof (int));
-  memset (state->base_state.task->password, alph[0], state->base_state.task->to);
+  memset (&state->base_state.task->password[state->base_state.task->from],
+          alph[0], state->base_state.task->to - state->base_state.task->from);
 }
 
 bool
 iter_state_next (iter_state_t *state)
 {
   task_t *task = state->base_state.task;
-  
+
   int pos;
   for (pos = task->to - 1;
        pos >= task->from && state->idx[pos] == state->alph_size; --pos)
@@ -35,11 +36,11 @@ iter_state_next (iter_state_t *state)
 }
 
 bool
-brute_iter (task_t *task, config_t *config,
-            password_handler_t password_handler, void *context)
+brute_iter (task_t *task, char *alph, password_handler_t password_handler,
+            void *context)
 {
   iter_state_t state;
-  iter_state_init (&state, config->alph, task);
+  iter_state_init (&state, alph, task);
 
   while (true)
     {

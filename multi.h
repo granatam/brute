@@ -12,7 +12,7 @@ typedef struct mt_context_t
   queue_t queue;
   config_t *config;
   password_t password;
-  int passwords_remaining;
+  volatile int passwords_remaining;
   pthread_mutex_t mutex;
   pthread_cond_t cond_sem;
   thread_pool_t thread_pool;
@@ -23,6 +23,8 @@ status_t mt_context_destroy (mt_context_t *context);
 
 void *mt_password_check (void *context);
 bool queue_push_wrapper (task_t *task, void *context);
+status_t signal_if_found (mt_context_t *ctx);
+status_t wait_password (mt_context_t *ctx);
 bool run_multi (task_t *task, config_t *config);
 
 #endif // MULTI_H

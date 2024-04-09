@@ -14,8 +14,6 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-// TODO: Add status checks and cleanup in case of errors
-
 static status_t
 serv_context_init (serv_context_t *context, config_t *config)
 {
@@ -64,6 +62,7 @@ serv_context_destroy (serv_context_t *context)
   if (mt_context_destroy ((mt_context_t *)context) == S_FAILURE)
     return (S_FAILURE);
 
+  shutdown (context->socket_fd, SHUT_RDWR);
   if (close (context->socket_fd) != 0)
     {
       print_error ("Could not close server socket\n");
@@ -74,35 +73,107 @@ serv_context_destroy (serv_context_t *context)
 }
 
 static status_t
-delegate_task (int socket_fd, task_t *task, password_t password)
+close_client (int socket_fd)
 {
-  if (send_wrapper (socket_fd, task, sizeof (task_t), 0) == S_FAILURE)
+  command_t cmd = CMD_EXIT;
+  if (send_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
     {
-      print_error ("Could not send data to client\n");
+      print_error ("Could not send CMD_EXIT to client\n");
       return (S_FAILURE);
     }
 
-  print_error ("Sent task %s to client\n", task->password);
+  shutdown (socket_fd, SHUT_RDWR);
+  close (socket_fd);
 
-  int size;
-  if (recv_wrapper (socket_fd, &size, sizeof (int), 0) == S_FAILURE)
+  return (S_SUCCESS);
+}
+
+static status_t
+send_hash (cl_context_t *cl_ctx, mt_context_t *mt_ctx)
+{
+  command_t cmd = CMD_HASH;
+  if (send_wrapper (cl_ctx->socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
     {
-      print_error ("Could not receive data from client\n");
+      print_error ("Could not send CMD_HASH to client\n");
       return (S_FAILURE);
     }
 
-  print_error ("Received %d from client\n", size);
+  if (send_wrapper (cl_ctx->socket_fd, mt_ctx->config->hash, HASH_LENGTH, 0)
+      == S_FAILURE)
+    {
+      print_error ("Could not send hash to client\n");
+      return (S_FAILURE);
+    }
+
+  return (S_SUCCESS);
+}
+
+static status_t
+send_alph (cl_context_t *cl_ctx, mt_context_t *mt_ctx)
+{
+  command_t cmd = CMD_ALPH;
+  if (send_wrapper (cl_ctx->socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
+    {
+      print_error ("Could not send CMD_ALPH to client\n");
+      return (S_FAILURE);
+    }
+
+  int32_t length = strlen (mt_ctx->config->alph);
+  if (send_wrapper (cl_ctx->socket_fd, &length, sizeof (length), 0)
+      == S_FAILURE)
+    {
+      print_error ("Could not send alphabet length to client\n");
+      return (S_FAILURE);
+    }
+
+  if (send_wrapper (cl_ctx->socket_fd, mt_ctx->config->alph, length, 0)
+      == S_FAILURE)
+    {
+      print_error ("Could not send alphabet to client\n");
+      return (S_FAILURE);
+    }
+
+  return (S_SUCCESS);
+}
+
+static status_t
+delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
+{
+  command_t cmd = CMD_TASK;
+
+  if (send_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
+    {
+      print_error ("Could not send CMD_TASK to client\n");
+      return (S_FAILURE);
+    }
+
+  if (send_wrapper (socket_fd, task, sizeof (*task), 0) == S_FAILURE)
+    {
+      print_error ("Could not send task to client\n");
+      return (S_FAILURE);
+    }
+
+  int32_t size;
+  if (recv_wrapper (socket_fd, &size, sizeof (size), 0) == S_FAILURE)
+    {
+      print_error ("Could not receive password size from client\n");
+      return (S_FAILURE);
+    }
 
   if (size != 0)
     {
-      if (recv_wrapper (socket_fd, password, sizeof (password_t), 0)
+      if (recv_wrapper (socket_fd, ctx->password, sizeof (password_t), 0)
           == S_FAILURE)
         {
-          print_error ("Could not receive data from client\n");
+          print_error ("Could not receive password from client\n");
           return (S_FAILURE);
         }
 
-      print_error ("Received password %s from client\n", password);
+      if (queue_cancel (&ctx->queue) == QS_FAILURE)
+        {
+          print_error ("Could not cancel a queue\n");
+          return (S_FAILURE);
+        }
     }
 
   return (S_SUCCESS);
@@ -112,81 +183,64 @@ static void *
 handle_client (void *arg)
 {
   cl_context_t *cl_ctx = (cl_context_t *)arg;
-  cl_context_t local_ctx = *cl_ctx;
-  mt_context_t *mt_ctx = &local_ctx.context->context;
+  mt_context_t *mt_ctx = &cl_ctx->context->context;
 
-  if (pthread_mutex_unlock (&cl_ctx->mutex) != 0)
-    {
-      print_error ("Could not unlock mutex\n");
-      goto end;
-    }
+  if (send_hash (cl_ctx, mt_ctx) == S_FAILURE)
+    return (NULL);
 
-  print_error ("Mutex unlocked\n");
-
-  if (send_wrapper (local_ctx.socket_fd, mt_ctx->config->hash, HASH_LENGTH, 0)
-      == S_FAILURE)
-    {
-      print_error ("Could not send hash to client\n");
-      goto end;
-    }
-
-  print_error ("Sent hash to client\n");
+  if (send_alph (cl_ctx, mt_ctx) == S_FAILURE)
+    return (NULL);
 
   while (true)
     {
       task_t task;
-      if (queue_pop (&mt_ctx->queue, &task) == S_FAILURE)
-        goto end;
+      if (queue_pop (&mt_ctx->queue, &task) != QS_SUCCESS)
+        return (NULL);
 
       task.to = task.from;
       task.from = 0;
 
-      if (delegate_task (local_ctx.socket_fd, &task, mt_ctx->password)
-          == S_FAILURE)
+      if (delegate_task (cl_ctx->socket_fd, &task, mt_ctx) == S_FAILURE)
         {
-          if (queue_push (&mt_ctx->queue, &task) == S_FAILURE)
+          if (queue_push (&mt_ctx->queue, &task) == QS_FAILURE)
             print_error ("Could not push to the queue\n");
-          goto end;
+
+          return (NULL);
         }
 
-      if (pthread_mutex_lock (&cl_ctx->mutex) != 0)
+      if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
         {
           print_error ("Could not lock a mutex\n");
-          goto end;
+          return (NULL);
         }
-      pthread_cleanup_push (cleanup_mutex_unlock, &cl_ctx->mutex);
+      pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
 
-      --mt_ctx->passwords_remaining;
-      if (mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
-        if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
-          {
-            print_error ("Could not signal a condition\n");
-            goto end;
-          }
+      if (--mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
+        {
+          close_client (cl_ctx->socket_fd);
+
+          if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
+            {
+              print_error ("Could not signal a condition\n");
+              return (NULL);
+            }
+        }
 
       pthread_cleanup_pop (!0);
     }
 
-end:
-  close (local_ctx.socket_fd);
   return (NULL);
 }
 
 static void *
 handle_clients (void *arg)
 {
-  serv_context_t *serv_ctx = (serv_context_t *)arg;
+  serv_context_t *serv_ctx = *(serv_context_t **)arg;
   mt_context_t *mt_ctx = &serv_ctx->context;
 
   cl_context_t cl_ctx = {
     .context = serv_ctx,
   };
-  
-  if (pthread_mutex_init (&cl_ctx.mutex, NULL) != 0)
-    {
-      print_error ("Could not create mutex\n");
-      return (NULL);
-    }
 
   while (true)
     {
@@ -196,35 +250,15 @@ handle_clients (void *arg)
           continue;
         }
 
-      print_error ("Accepted new connection\n");
-
-      if (pthread_mutex_lock (&cl_ctx.mutex) != 0)
-        {
-          print_error ("Could not lock mutex\n");
-          close (cl_ctx.socket_fd);
-          continue;
-        }
-
-      if (thread_create (&mt_ctx->thread_pool, handle_client, &cl_ctx)
+      if (thread_create (&mt_ctx->thread_pool, handle_client, &cl_ctx,
+                         sizeof (cl_ctx))
           == S_FAILURE)
         {
           print_error ("Could not create client thread\n");
-          if (pthread_mutex_unlock (&cl_ctx.mutex) != 0)
-            print_error 
-              ("Could not unlock mutex after thread creation fail\n");
+
+          close_client (cl_ctx.socket_fd);
           continue;
         }
-
-      print_error ("Created new client thread\n");
-
-      if (pthread_mutex_lock (&cl_ctx.mutex) != 0)
-        {
-          print_error ("Could not lock mutex\n");
-          close (cl_ctx.socket_fd);
-          continue;
-        }
-
-      print_error ("Mutex locked\n");
     }
 
   return (NULL);
@@ -234,6 +268,7 @@ bool
 run_server (task_t *task, config_t *config)
 {
   serv_context_t context;
+  serv_context_t *context_ptr = &context;
 
   if (serv_context_init (&context, config) == S_FAILURE)
     {
@@ -241,7 +276,8 @@ run_server (task_t *task, config_t *config)
       return (false);
     }
 
-  if (thread_create (&context.context.thread_pool, handle_clients, &context)
+  if (thread_create (&context.context.thread_pool, handle_clients,
+                     &context_ptr, sizeof (context_ptr))
       == S_FAILURE)
     {
       print_error ("Could not create clients thread\n");
@@ -255,25 +291,10 @@ run_server (task_t *task, config_t *config)
 
   brute (task, config, queue_push_wrapper, mt_ctx);
 
-  if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
-    {
-      print_error ("Could not lock a mutex\n");
-      goto fail;
-    }
-  pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
+  if (wait_password (mt_ctx) == S_FAILURE)
+    goto fail;
 
-  while (mt_ctx->passwords_remaining != 0 && mt_ctx->password[0] == 0)
-    {
-      if (pthread_cond_wait (&mt_ctx->cond_sem, &mt_ctx->mutex) != 0)
-        {
-          print_error ("Could not wait on a condition\n");
-          goto fail;
-        }
-    }
-
-  pthread_cleanup_pop (!0);
-
-  if (queue_cancel (&mt_ctx->queue) == S_FAILURE)
+  if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
     {
       print_error ("Could not cancel a queue\n");
       goto fail;
@@ -283,15 +304,13 @@ run_server (task_t *task, config_t *config)
     memcpy (task->password, mt_ctx->password, sizeof (mt_ctx->password));
 
   if (serv_context_destroy (&context) == S_FAILURE)
-    {
-      print_error ("Could not destroy server context\n");
-      return (false);
-    }
+    print_error ("Could not destroy server context\n");
 
   return (mt_ctx->password[0] != 0);
 
 fail:
   if (serv_context_destroy (&context) == S_FAILURE)
     print_error ("Could not destroy server context\n");
+
   return (false);
 }

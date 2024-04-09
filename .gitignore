@@ -2,8 +2,10 @@
 .pytest_cache
 .DS_Store
 .vscode
+.venv
+
 __pycache__
+
 main
 *.o
 *.a
-encrypt

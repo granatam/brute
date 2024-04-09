@@ -1,6 +1,7 @@
 #include "single.h"
 
 #include "brute.h"
+#include "common.h"
 #include <string.h>
 
 bool

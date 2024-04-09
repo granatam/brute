@@ -10,6 +10,7 @@ typedef enum
   RM_GENERATOR,
   RM_CLIENT,
   RM_SERVER,
+  RM_LOAD_CLIENT,
 } run_mode_t;
 
 typedef enum

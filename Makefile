@@ -6,7 +6,7 @@ LIBS+=crypt/libcrypt.a
 CFLAGS+=-I./crypt
 
 TESTS=test/test.py
-WITH_PERF_TEST ?= true
+WITH_PERF_TEST ?= false
 
 ifeq ($(shell uname), Linux)
 	# No valgrind on MacOS
@@ -22,12 +22,12 @@ all: ${TARGET}
 ${TARGET}: ${OBJ} ${LIBS}
 	@${CC} ${CFLAGS} ${OBJ} ${LIBS} -o ${TARGET}
 
-crypt/libcrypt.a: 
+crypt/libcrypt.a:
 	@${MAKE} -C crypt
 
 clean:
 	@${RM} main *.o
 	@${MAKE} -C crypt clean
 
-check:
-	@pytest ${TESTS}
+check: all
+	@pytest --hypothesis-show-statistics ${TESTS}

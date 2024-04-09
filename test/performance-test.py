@@ -1,7 +1,6 @@
 from timeit import timeit
 from hypothesis import given, strategies as st, settings
 from utils import gen_str, brute_cmd, CPU_COUNT
-from datetime import timedelta
 
 
 @given(st.text(min_size=1, max_size=1, alphabet="iry"))

@@ -7,7 +7,8 @@
 #define print_error(...) print_error_impl (__func__, __LINE__, __VA_ARGS__)
 
 #define MAX_PASSWORD_LENGTH (7)
-#define HASH_LENGTH (13)
+#define MAX_ALPH_LENGTH (20)
+#define HASH_LENGTH (14)
 
 typedef char password_t[MAX_PASSWORD_LENGTH + 1];
 
@@ -30,6 +31,14 @@ typedef struct base_state_t
 {
   task_t *task;
 } base_state_t;
+
+typedef enum command_t
+{
+  CMD_ALPH,
+  CMD_HASH,
+  CMD_TASK,
+  CMD_EXIT,
+} command_t;
 
 status_t print_error_impl (const char *func_name, int line, const char *msg,
                            ...);
