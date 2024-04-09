@@ -71,7 +71,6 @@ mt_context_destroy (mt_context_t *context)
   return (S_SUCCESS);
 }
 
-// TODO: better naming maybe?
 status_t
 signal_if_found (mt_context_t *ctx)
 {
@@ -106,7 +105,6 @@ mt_password_check (void *context)
 
   while (true)
     {
-      // TODO: != SUCCESS or == INACTIVE?
       if (queue_pop (&mt_ctx->queue, &task) != QS_SUCCESS)
         return (NULL);
 
@@ -180,7 +178,6 @@ run_multi (task_t *task, config_t *config)
   mt_context_t context;
   mt_context_t *context_ptr = &context;
 
-  // TODO: return (false) or goto fail?
   if (mt_context_init (&context, config) == S_FAILURE)
     return (false);
 

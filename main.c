@@ -19,7 +19,7 @@ usage (char *first_arg)
 {
   fprintf (stderr,
            "usage: %s [-l length] [-a alphabet] [-h hash] [-t number] "
-           "[-p port] [-A addr] [-s | -m | -g | -c | -L | -S] [-i | -r"
+           "[-p port] [-A addr] [-s | -m | -g | -c | -L number | -S] [-i | -r"
 #ifndef __APPLE__
            " | -y"
 #endif

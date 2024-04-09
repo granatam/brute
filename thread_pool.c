@@ -38,8 +38,6 @@ thread_cleanup (void *arg)
   node_t *node = tcc->node;
   thread_pool_t *thread_pool = tcc->thread_pool;
 
-  // TODO: if we remove return then we dont need cleanup_push/pop,
-  // why we removed return from this lock?
   if (pthread_mutex_lock (&thread_pool->mutex) != 0)
     print_error ("Could not lock a mutex\n");
   pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
