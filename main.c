@@ -19,7 +19,8 @@ usage (char *first_arg)
 {
   fprintf (stderr,
            "usage: %s [-l length] [-a alphabet] [-h hash] [-t number] "
-           "[-p port] [-A addr] [-s | -m | -g | -c | -L number | -S] [-i | -r"
+           "[-p port] [-A addr] [-s | -m | -g | -c | -L number | -S | -v | -w]"
+           " [-i | -r"
 #ifndef __APPLE__
            " | -y"
 #endif
@@ -35,9 +36,11 @@ usage (char *first_arg)
            "\t-s           singlethreaded mode\n"
            "\t-m           multithreaded mode\n"
            "\t-g           generator mode\n"
-           "\t-c           client mode\n"
+           "\t-c           synchronous client mode\n"
            "\t-L number    spawn N load clients\n"
-           "\t-S           server mode\n"
+           "\t-S           synchronous server mode\n"
+           "\t-v           asynchronous client mode\n"
+           "\t-w           asynchronous server mode\n"
            "brute modes:\n"
            "\t-i           iterative bruteforce\n"
            "\t-r           recursive bruteforce\n"
@@ -52,7 +55,7 @@ static status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
-  while ((opt = getopt (argc, argv, "l:a:H:t:p:A:L:smgcSiryh")) != -1)
+  while ((opt = getopt (argc, argv, "l:a:H:t:p:A:L:smgcSvwiryh")) != -1)
     {
       switch (opt)
         {
@@ -130,6 +133,12 @@ parse_params (config_t *config, int argc, char *argv[])
         case 'S':
           config->run_mode = RM_SERVER;
           break;
+        case 'v':
+          config->run_mode = RM_ASYNC_CLIENT;
+          break;
+        case 'w':
+          config->run_mode = RM_ASYNC_SERVER;
+          break;
         case 'i':
           config->brute_mode = BM_ITER;
           break;
@@ -185,9 +194,13 @@ main (int argc, char *argv[])
     case RM_GENERATOR:
       is_found = run_generator (&task, &config);
       break;
+    /* FIXME #1: Implement these run modes separate handling */
+    case RM_ASYNC_SERVER:
     case RM_SERVER:
       is_found = run_server (&task, &config);
       break;
+    /* FIXME #2 */
+    case RM_ASYNC_CLIENT:
     case RM_CLIENT:
       run_client (&task, &config, find_password);
       break;
@@ -198,7 +211,8 @@ main (int argc, char *argv[])
 
   /* Clients should not output anything, only computations and data exchange
    * with the server */
-  if (config.run_mode == RM_CLIENT || config.run_mode == RM_LOAD_CLIENT)
+  if (config.run_mode == RM_CLIENT || config.run_mode == RM_LOAD_CLIENT
+      || config.run_mode == RM_ASYNC_CLIENT)
     return (EXIT_SUCCESS);
 
   if (is_found)

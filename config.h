@@ -11,6 +11,8 @@ typedef enum
   RM_CLIENT,
   RM_SERVER,
   RM_LOAD_CLIENT,
+  RM_ASYNC_CLIENT,
+  RM_ASYNC_SERVER,
 } run_mode_t;
 
 typedef enum

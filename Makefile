@@ -1,7 +1,7 @@
 .PHONY: clean
 CFLAGS=-O2 -Wall -Wpedantic -Wextra -pthread -gdwarf-4
 OBJ=brute.o iter.o rec.o common.o main.o multi.o queue.o single.o gen.o semaphore.o client.o server.o thread_pool.o
-TARGET=main
+TARGET=brute
 LIBS+=crypt/libcrypt.a
 CFLAGS+=-I./crypt
 
@@ -26,7 +26,7 @@ crypt/libcrypt.a:
 	@${MAKE} -C crypt
 
 clean:
-	@${RM} main *.o
+	@${RM} ${TARGET} *.o
 	@${MAKE} -C crypt clean
 
 check: all
