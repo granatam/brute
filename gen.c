@@ -116,7 +116,8 @@ gen_worker (void *context)
       task.from = 0;
       if (brute (&task, gen_ctx->config, st_password_check, &st_ctx))
         {
-          memcpy (gen_ctx->password, task.password, sizeof (task.password));
+          memcpy (gen_ctx->password, task.task.password,
+                  sizeof (task.task.password));
           gen_ctx->cancelled = true;
         }
     }
@@ -152,7 +153,7 @@ run_generator (task_t *task, config_t *config)
     }
 
   if (context.password[0] != 0)
-    memcpy (task->password, context.password, sizeof (context.password));
+    memcpy (task->task.password, context.password, sizeof (context.password));
 
   return (context.password[0] != 0);
 

@@ -25,7 +25,7 @@ mt_context_init (mt_context_t *context, config_t *config)
       return (S_FAILURE);
     }
 
-  if (queue_init (&context->queue) == QS_FAILURE)
+  if (queue_init (&context->queue, sizeof (task_t)) == QS_FAILURE)
     {
       print_error ("Could not initialize a queue\n");
       return (S_FAILURE);
@@ -105,14 +105,15 @@ mt_password_check (void *context)
 
   while (true)
     {
-      if (queue_pop (&mt_ctx->queue, &task) != QS_SUCCESS)
+      if (queue_pop (&mt_ctx->queue, (void **)&task) != QS_SUCCESS)
         return (NULL);
 
       task.to = task.from;
       task.from = 0;
 
       if (brute (&task, mt_ctx->config, st_password_check, &st_ctx))
-        memcpy (mt_ctx->password, task.password, sizeof (task.password));
+        memcpy (mt_ctx->password, task.task.password,
+                sizeof (task.task.password));
 
       if (signal_if_found (mt_ctx) == S_FAILURE)
         return (NULL);
@@ -203,7 +204,7 @@ run_multi (task_t *task, config_t *config)
     }
 
   if (context.password[0] != 0)
-    memcpy (task->password, context.password, sizeof (context.password));
+    memcpy (task->task.password, context.password, sizeof (context.password));
 
   if (mt_context_destroy (&context) == S_FAILURE)
     {

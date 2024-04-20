@@ -10,7 +10,7 @@ iter_state_init (iter_state_t *state, char *alph, task_t *task)
   state->base_state.task = task;
 
   memset (state->idx, 0, state->base_state.task->to * sizeof (int));
-  memset (&state->base_state.task->password[state->base_state.task->from],
+  memset (&state->base_state.task->task.password[state->base_state.task->from],
           alph[0], state->base_state.task->to - state->base_state.task->from);
 }
 
@@ -24,13 +24,13 @@ iter_state_next (iter_state_t *state)
        pos >= task->from && state->idx[pos] == state->alph_size; --pos)
     {
       state->idx[pos] = 0;
-      task->password[pos] = state->alph[state->idx[pos]];
+      task->task.password[pos] = state->alph[state->idx[pos]];
     }
 
   if (pos < task->from)
     return (false);
 
-  task->password[pos] = state->alph[++state->idx[pos]];
+  task->task.password[pos] = state->alph[++state->idx[pos]];
 
   return (true);
 }

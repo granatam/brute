@@ -12,9 +12,15 @@
 
 typedef char password_t[MAX_PASSWORD_LENGTH + 1];
 
+typedef struct result_t
+{
+  size_t id;
+  password_t password;
+} result_t;
+
 typedef struct task_t
 {
-  password_t password;
+  result_t task;
   int from;
   int to;
 } task_t;

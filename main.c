@@ -180,7 +180,7 @@ main (int argc, char *argv[])
     }
 
   task_t task;
-  memset (task.password, 0, sizeof (task.password));
+  memset (task.task.password, 0, sizeof (task.task.password));
 
   bool is_found = false;
   switch (config.run_mode)
@@ -216,7 +216,7 @@ main (int argc, char *argv[])
     return (EXIT_SUCCESS);
 
   if (is_found)
-    printf ("Password found: %s\n", task.password);
+    printf ("Password found: %s\n", task.task.password);
   else
     printf ("Password not found\n");
 

@@ -50,7 +50,7 @@ find_password (int socket_fd, task_t *task, config_t *config,
 {
   if (brute (task, config, st_password_check, ctx))
     {
-      int password_size = sizeof (task->password);
+      int password_size = sizeof (task->task.password);
       if (send_wrapper (socket_fd, &password_size, sizeof (password_size), 0)
           == S_FAILURE)
         {
@@ -58,7 +58,7 @@ find_password (int socket_fd, task_t *task, config_t *config,
           return (S_FAILURE);
         }
 
-      if (send_wrapper (socket_fd, task->password, password_size, 0)
+      if (send_wrapper (socket_fd, task->task.password, password_size, 0)
           == S_FAILURE)
         {
           print_error ("Could not send data to server\n");
@@ -66,7 +66,7 @@ find_password (int socket_fd, task_t *task, config_t *config,
         }
     }
   else
-    memset (task->password, 0, sizeof (task->password));
+    memset (task->task.password, 0, sizeof (task->task.password));
 
   return (S_SUCCESS);
 }
@@ -86,7 +86,7 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
       if (task_callback (socket_fd, task, config, ctx) == S_FAILURE)
         return (S_FAILURE);
 
-      if (task->password[0] != 0)
+      if (task->task.password[0] != 0)
         return (S_SUCCESS);
     }
 

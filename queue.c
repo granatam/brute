@@ -1,8 +1,15 @@
 #include "queue.h"
 
+#include <stdlib.h>
+#include <string.h>
+
 queue_status_t
-queue_init (queue_t *queue)
+queue_init (queue_t *queue, size_t unit_size)
 {
+  if (!(queue->queue = calloc (QUEUE_SIZE, unit_size)))
+    goto fail;
+
+  queue->unit_size = unit_size;
   queue->head = queue->tail = 0;
   queue->active = true;
 
@@ -26,7 +33,7 @@ fail:
 }
 
 queue_status_t
-queue_push (queue_t *queue, task_t *task)
+queue_push (queue_t *queue, void *task)
 {
   if (sem_wait (&queue->empty) != 0)
     goto fail;
@@ -40,7 +47,8 @@ queue_push (queue_t *queue, task_t *task)
   if (pthread_mutex_lock (&queue->tail_mutex) != 0)
     goto fail;
 
-  queue->queue[queue->tail] = *task;
+  memcpy ((char *)queue->queue + (queue->tail * queue->unit_size), task,
+          queue->unit_size);
   queue->tail = (queue->tail + 1) % QUEUE_SIZE;
 
   if (pthread_mutex_unlock (&queue->tail_mutex) != 0)
@@ -57,7 +65,7 @@ fail:
 }
 
 queue_status_t
-queue_pop (queue_t *queue, task_t *task)
+queue_pop (queue_t *queue, void *task)
 {
   if (sem_wait (&queue->full) != 0)
     goto fail;
@@ -71,7 +79,8 @@ queue_pop (queue_t *queue, task_t *task)
   if (pthread_mutex_lock (&queue->head_mutex) != 0)
     goto fail;
 
-  *task = queue->queue[queue->head];
+  memcpy (task, (char *)queue->queue + (queue->head * queue->unit_size),
+          queue->unit_size);
   queue->head = (queue->head + 1) % QUEUE_SIZE;
 
   if (pthread_mutex_unlock (&queue->head_mutex) != 0)
@@ -106,6 +115,8 @@ queue_destroy (queue_t *queue)
 {
   queue->active = false;
   queue->head = queue->tail = 0;
+
+  free (queue->queue);
 
   if (sem_destroy (&queue->full) != 0)
     return (QS_FAILURE);

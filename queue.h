@@ -16,16 +16,17 @@ typedef enum queue_status_t
 
 typedef struct queue_t
 {
-  task_t queue[QUEUE_SIZE];
+  void *queue;
+  size_t unit_size;
   int head, tail;
   sem_t full, empty;
   pthread_mutex_t head_mutex, tail_mutex;
   bool active;
 } queue_t;
 
-queue_status_t queue_init (queue_t *queue);
-queue_status_t queue_push (queue_t *queue, task_t *task);
-queue_status_t queue_pop (queue_t *queue, task_t *task);
+queue_status_t queue_init (queue_t *queue, size_t unit_size);
+queue_status_t queue_push (queue_t *queue, void *task);
+queue_status_t queue_pop (queue_t *queue, void *task);
 queue_status_t queue_cancel (queue_t *queue);
 queue_status_t queue_destroy (queue_t *queue);
 
