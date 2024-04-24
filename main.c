@@ -195,8 +195,9 @@ main (int argc, char *argv[])
     case RM_GENERATOR:
       is_found = run_generator (&task, &config);
       break;
-    /* FIXME #1: Implement these run modes separate handling */
     case RM_ASYNC_SERVER:
+      is_found = run_async_server(&task, &config);
+      break;
     case RM_SERVER:
       is_found = run_server (&task, &config);
       break;

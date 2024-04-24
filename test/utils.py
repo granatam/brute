@@ -47,9 +47,10 @@ def run_valgrind(passwd, alph, run_mode, brute_mode):
         f"valgrind --leak-check=full --error-exitcode=1 --trace-children=yes --quiet {cmd}"
     )
 
-def run_client_server(passwd, alph, brute_mode, file):
-    client_cmd = brute_cmd(passwd, alph, "c", brute_mode)
-    server_cmd = brute_cmd(passwd, alph, "S", brute_mode)
+
+def run_client_server(passwd, alph, brute_mode, client_flag, server_flag, file):
+    client_cmd = brute_cmd(passwd, alph, client_flag, brute_mode)
+    server_cmd = brute_cmd(passwd, alph, server_flag, brute_mode)
 
     server_proc = subprocess.Popen(
         server_cmd, stdout=subprocess.PIPE, stderr=file, shell=True
@@ -73,9 +74,9 @@ def run_client_server(passwd, alph, brute_mode, file):
     return output.decode()
 
 
-def run_two_clients_server(passwd, alph, brute_mode, file):
-    client_cmd = brute_cmd(passwd, alph, "c", brute_mode)
-    server_cmd = brute_cmd(passwd, alph, "S", brute_mode)
+def run_two_clients_server(passwd, alph, brute_mode, client_flag, server_flag, file):
+    client_cmd = brute_cmd(passwd, alph, client_flag, brute_mode)
+    server_cmd = brute_cmd(passwd, alph, server_flag, brute_mode)
 
     server_proc = subprocess.Popen(
         server_cmd, stdout=subprocess.PIPE, stderr=file, shell=True

@@ -17,12 +17,95 @@
 static void *
 result_receiver (void *arg)
 {
+  acl_context_t *cl_ctx = (acl_context_t *)arg;
+  mt_context_t *mt_ctx = &cl_ctx->context->context;
+
+  while (true)
+    {
+      int32_t size;
+      if (recv_wrapper (cl_ctx->socket_fd, &size, sizeof (size), 0)
+          == S_FAILURE)
+        {
+          print_error ("Could not receive password size from client\n");
+          return (NULL);
+        }
+
+      if (size != 0)
+        {
+          if (recv_wrapper (cl_ctx->socket_fd, mt_ctx->password,
+                            sizeof (password_t), 0)
+              == S_FAILURE)
+            {
+              print_error ("Could not receive password from client\n");
+              return (NULL);
+            }
+
+          if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
+            {
+              print_error ("Could not cancel a queue\n");
+              return (NULL);
+            }
+        }
+
+      if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
+        {
+          print_error ("Could not lock a mutex\n");
+          return (NULL);
+        }
+      pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
+
+      if (--mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
+        {
+          close_client (cl_ctx->socket_fd);
+
+          if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
+            {
+              print_error ("Could not signal a condition\n");
+              return (NULL);
+            }
+        }
+      pthread_cleanup_pop (!0);
+    }
+
   return (NULL);
 }
 
 static void *
 task_sender (void *arg)
 {
+  acl_context_t *cl_ctx = (acl_context_t *)arg;
+  mt_context_t *mt_ctx = &cl_ctx->context->context;
+
+  if (send_hash (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
+    return (NULL);
+
+  if (send_alph (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
+    return (NULL);
+
+  while (true)
+    {
+      task_t task;
+      if (queue_pop (&mt_ctx->queue, &task) != QS_SUCCESS)
+        return (NULL);
+
+      task.to = task.from;
+      task.from = 0;
+
+      command_t cmd = CMD_TASK;
+      if (send_wrapper (cl_ctx->socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
+        {
+          print_error ("Could not send CMD_TASK to client\n");
+          return (NULL);
+        }
+
+      if (send_wrapper (cl_ctx->socket_fd, &task, sizeof (task), 0)
+          == S_FAILURE)
+        {
+          print_error ("Could not send task to client\n");
+          return (NULL);
+        }
+    }
+
   return (NULL);
 }
 

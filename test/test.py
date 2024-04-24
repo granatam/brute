@@ -47,13 +47,17 @@ def test_corner_cases(run_mode, brute_mode):
 @given(
     st.text(min_size=3, alphabet=string.ascii_letters, max_size=4),
     st.text(min_size=1, max_size=1, alphabet="iry"),
+    st.text(min_size=1, max_size=1, alphabet="cv"),
+    st.text(min_size=1, max_size=1, alphabet="Sw"),
 )
 @settings(deadline=timedelta(seconds=5))
-def test_client_server(passwd, brute_mode):
+def test_client_server(passwd, brute_mode, client_flag, server_flag):
     alph = shuffle_password(passwd)
-    
+
     with tempfile.NamedTemporaryFile() as f:
-        result = run_client_server(passwd, alph, brute_mode, f)
+        result = run_client_server(
+            passwd, alph, brute_mode, client_flag, server_flag, f
+        )
 
         f.flush()
         if result != f"Password found: {passwd}\n":
@@ -62,8 +66,8 @@ def test_client_server(passwd, brute_mode):
                 for line in output:
                     sys.stderr.write(line.decode())
             sys.stderr.write("End of captured stderr.\n")
-            
-        assert f"Password found: {passwd}\n" == result 
+
+        assert f"Password found: {passwd}\n" == result
 
 
 # Tests for client-server synchronous interaction with two clients
@@ -74,7 +78,7 @@ def test_client_server(passwd, brute_mode):
 @settings(deadline=timedelta(seconds=5))
 def test_two_clients_server(passwd, brute_mode):
     alph = shuffle_password(passwd)
-    
+
     with tempfile.NamedTemporaryFile() as f:
         result = run_two_clients_server(passwd, alph, brute_mode, f)
 
@@ -85,5 +89,5 @@ def test_two_clients_server(passwd, brute_mode):
                 for line in output:
                     sys.stderr.write(line.decode())
             sys.stderr.write("End of captured stderr.\n")
-            
-        assert f"Password found: {passwd}\n" == result 
+
+        assert f"Password found: {passwd}\n" == result
