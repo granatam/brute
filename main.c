@@ -5,7 +5,8 @@
 #include "gen.h"
 #include "multi.h"
 #include "queue.h"
-#include "server.h"
+#include "async_server.h"
+#include "sync_server.h"
 #include "single.h"
 
 #include <stdbool.h>
