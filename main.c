@@ -1,3 +1,4 @@
+#include "async_server.h"
 #include "brute.h"
 #include "client.h"
 #include "common.h"
@@ -5,9 +6,8 @@
 #include "gen.h"
 #include "multi.h"
 #include "queue.h"
-#include "async_server.h"
-#include "sync_server.h"
 #include "single.h"
+#include "sync_server.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -196,7 +196,7 @@ main (int argc, char *argv[])
       is_found = run_generator (&task, &config);
       break;
     case RM_ASYNC_SERVER:
-      is_found = run_async_server(&task, &config);
+      is_found = run_async_server (&task, &config);
       break;
     case RM_SERVER:
       is_found = run_server (&task, &config);

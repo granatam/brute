@@ -119,15 +119,13 @@ send_alph (int socket_fd, mt_context_t *mt_ctx)
     }
 
   int32_t length = strlen (mt_ctx->config->alph);
-  if (send_wrapper (socket_fd, &length, sizeof (length), 0)
-      == S_FAILURE)
+  if (send_wrapper (socket_fd, &length, sizeof (length), 0) == S_FAILURE)
     {
       print_error ("Could not send alphabet length to client\n");
       return (S_FAILURE);
     }
 
-  if (send_wrapper (socket_fd, mt_ctx->config->alph, length, 0)
-      == S_FAILURE)
+  if (send_wrapper (socket_fd, mt_ctx->config->alph, length, 0) == S_FAILURE)
     {
       print_error ("Could not send alphabet to client\n");
       return (S_FAILURE);

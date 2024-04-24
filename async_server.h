@@ -3,8 +3,8 @@
 
 #include "common.h"
 #include "config.h"
-#include "server_common.h"
 #include "queue.h"
+#include "server_common.h"
 
 #include <stdbool.h>
 
