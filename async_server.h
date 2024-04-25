@@ -12,6 +12,7 @@ typedef struct acl_context_t
 {
   serv_context_t *context;
   task_t registry[QUEUE_SIZE];
+  queue_t registry_idx;
   int socket_fd;
 } acl_context_t;
 

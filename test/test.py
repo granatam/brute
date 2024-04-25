@@ -47,8 +47,6 @@ def test_corner_cases(run_mode, brute_mode):
 @given(
     st.text(min_size=3, alphabet=string.ascii_letters, max_size=4),
     st.text(min_size=1, max_size=1, alphabet="iry"),
-    st.text(min_size=1, max_size=1, alphabet="cv"),
-    st.text(min_size=1, max_size=1, alphabet="Sw"),
 )
 @settings(deadline=timedelta(seconds=5))
 def test_client_server(passwd, brute_mode, client_flag, server_flag):
@@ -56,7 +54,7 @@ def test_client_server(passwd, brute_mode, client_flag, server_flag):
 
     with tempfile.NamedTemporaryFile() as f:
         result = run_client_server(
-            passwd, alph, brute_mode, client_flag, server_flag, f
+            passwd, alph, brute_mode, "c", "S", f
         )
 
         f.flush()
@@ -74,16 +72,64 @@ def test_client_server(passwd, brute_mode, client_flag, server_flag):
 @given(
     st.text(min_size=4, alphabet=string.ascii_letters, max_size=5),
     st.text(min_size=1, max_size=1, alphabet="iry"),
-    st.text(min_size=1, max_size=1, alphabet="cv"),
-    st.text(min_size=1, max_size=1, alphabet="Sw"),
 )
 @settings(deadline=timedelta(seconds=5))
-def test_two_clients_server(passwd, brute_mode, client_flag, server_flag):
+def test_two_clients_server(passwd, brute_mode):
     alph = shuffle_password(passwd)
 
     with tempfile.NamedTemporaryFile() as f:
         result = run_two_clients_server(
-            passwd, alph, brute_mode, client_flag, server_flag, f
+            passwd, alph, brute_mode, "c", "S", f
+        )
+
+        f.flush()
+        if result != f"Password found: {passwd}\n":
+            sys.stderr.write("Test failed. Captured stderr for this test:\n")
+            with open(f.name, "rb") as output:
+                for line in output:
+                    sys.stderr.write(line.decode())
+            sys.stderr.write("End of captured stderr.\n")
+
+        assert f"Password found: {passwd}\n" == result
+
+
+# Tests for client-server asynchronous interaction with one client
+@given(
+    st.text(min_size=3, alphabet=string.ascii_letters, max_size=4),
+    st.text(min_size=1, max_size=1, alphabet="iry"),
+)
+@settings(deadline=timedelta(seconds=5))
+def test_async_client_server(passwd, brute_mode):
+    alph = shuffle_password(passwd)
+
+    with tempfile.NamedTemporaryFile() as f:
+        result = run_client_server(
+            passwd, alph, brute_mode, "v", "w", f
+        )
+
+        f.flush()
+        if result != f"Password found: {passwd}\n":
+            sys.stderr.write("Test failed. Captured stderr for this test:\n")
+            with open(f.name, "rb") as output:
+                for line in output:
+                    sys.stderr.write(line.decode())
+            sys.stderr.write("End of captured stderr.\n")
+
+        assert f"Password found: {passwd}\n" == result
+
+
+# Tests for client-server asynchronous interaction with two clients
+@given(
+    st.text(min_size=4, alphabet=string.ascii_letters, max_size=5),
+    st.text(min_size=1, max_size=1, alphabet="iry"),
+)
+@settings(deadline=timedelta(seconds=5))
+def test_async_two_clients_server(passwd, brute_mode):
+    alph = shuffle_password(passwd)
+
+    with tempfile.NamedTemporaryFile() as f:
+        result = run_two_clients_server(
+            passwd, alph, brute_mode, "v", "w", f
         )
 
         f.flush()

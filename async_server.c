@@ -23,6 +23,8 @@ result_receiver (void *arg)
   while (true)
     {
       int32_t size;
+
+      // TODO: receive id
       if (recv_wrapper (cl_ctx->socket_fd, &size, sizeof (size), 0)
           == S_FAILURE)
         {
@@ -84,24 +86,36 @@ task_sender (void *arg)
 
   while (true)
     {
-      task_t task;
+      // TODO: status check
+      size_t id;
+      queue_pop (&cl_ctx->registry_idx, &id);
+
+      task_t *task = &cl_ctx->registry[id];
+
       if (queue_pop (&mt_ctx->queue, &task) != QS_SUCCESS)
         return (NULL);
 
-      task.to = task.from;
-      task.from = 0;
+      task->task.id = id;
+      task->to = task->from;
+      task->from = 0;
 
       command_t cmd = CMD_TASK;
       if (send_wrapper (cl_ctx->socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
         {
           print_error ("Could not send CMD_TASK to client\n");
+          // TODO: status check
+          queue_push (&cl_ctx->registry_idx, &id);
+
           return (NULL);
         }
 
-      if (send_wrapper (cl_ctx->socket_fd, &task, sizeof (task), 0)
+      if (send_wrapper (cl_ctx->socket_fd, task, sizeof (*task), 0)
           == S_FAILURE)
         {
           print_error ("Could not send task to client\n");
+          // TODO: status check
+          queue_push (&cl_ctx->registry_idx, &id);
+
           return (NULL);
         }
     }
@@ -127,6 +141,12 @@ handle_clients (void *arg)
           continue;
         }
 
+      // TODO: status checks
+      queue_init (&cl_ctx.registry_idx, sizeof (size_t));
+      for (size_t i = 0; i < QUEUE_SIZE; ++i)
+        queue_push (&cl_ctx.registry_idx, &i);
+
+      // FIXME: shared cl_ctx for these 2 threads
       if (thread_create (&mt_ctx->thread_pool, task_sender, &cl_ctx,
                          sizeof (cl_ctx))
           == S_FAILURE)
