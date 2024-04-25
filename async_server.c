@@ -3,7 +3,6 @@
 #include "brute.h"
 #include "common.h"
 #include "multi.h"
-#include "thread_pool.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -17,7 +16,7 @@
 static void *
 result_receiver (void *arg)
 {
-  acl_context_t *cl_ctx = (acl_context_t *)arg;
+  acl_context_t *cl_ctx = *(acl_context_t **)arg;
   mt_context_t *mt_ctx = &cl_ctx->context->context;
 
   while (true)
@@ -41,11 +40,11 @@ result_receiver (void *arg)
           memcpy (mt_ctx->password, task.password, sizeof (task.password));
         }
 
-      // if (queue_push (&cl_ctx->registry_idx, &task.id) != QS_SUCCESS)
-      //   {
-      //     print_error ("Could not return id to a queue\n");
-      //     return (NULL);
-      //   }
+      if (queue_push (&cl_ctx->registry_idx, &task.id) != QS_SUCCESS)
+        {
+          print_error ("Could not return id to a queue\n");
+          return (NULL);
+        }
 
       if (serv_signal_if_found (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
         return (NULL);
@@ -57,7 +56,7 @@ result_receiver (void *arg)
 static void *
 task_sender (void *arg)
 {
-  acl_context_t *cl_ctx = (acl_context_t *)arg;
+  acl_context_t *cl_ctx = *(acl_context_t **)arg;
   mt_context_t *mt_ctx = &cl_ctx->context->context;
 
   if (send_hash (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
@@ -130,9 +129,12 @@ handle_clients (void *arg)
       for (size_t i = 0; i < QUEUE_SIZE; ++i)
         queue_push (&cl_ctx.registry_idx, &i);
 
+      acl_context_t *ctx_copy = malloc(sizeof(acl_context_t));
+      ctx_copy = &cl_ctx;
+
       // FIXME: shared cl_ctx for these 2 threads
-      if (thread_create (&mt_ctx->thread_pool, task_sender, &cl_ctx,
-                         sizeof (cl_ctx))
+      if (thread_create (&mt_ctx->thread_pool, task_sender, &ctx_copy,
+                         sizeof (ctx_copy))
           == S_FAILURE)
         {
           print_error ("Could not create task sender thread\n");
@@ -141,8 +143,8 @@ handle_clients (void *arg)
           continue;
         }
 
-      if (thread_create (&mt_ctx->thread_pool, result_receiver, &cl_ctx,
-                         sizeof (cl_ctx))
+      if (thread_create (&mt_ctx->thread_pool, result_receiver, &ctx_copy,
+                         sizeof (ctx_copy))
           == S_FAILURE)
         {
           print_error ("Could not create result receiver thread\n");
