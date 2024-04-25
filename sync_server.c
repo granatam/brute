@@ -25,6 +25,7 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
       return (S_FAILURE);
     }
 
+  task->task.is_correct = false;
   if (send_wrapper (socket_fd, task, sizeof (*task), 0) == S_FAILURE)
     {
       print_error ("Could not send task to client\n");

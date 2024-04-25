@@ -156,4 +156,6 @@ serv_signal_if_found (int socket_fd, mt_context_t *ctx)
     }
 
   pthread_cleanup_pop (!0);
+
+  return (S_SUCCESS);
 }

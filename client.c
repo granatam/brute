@@ -24,6 +24,7 @@ handle_alph (int socket_fd, config_t *config, char *alph)
       print_error ("Could not receive alphabet from server\n");
       return (S_FAILURE);
     }
+
   config->alph = alph;
 
   return (S_SUCCESS);
@@ -73,7 +74,7 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
         return (S_FAILURE);
     }
 
-  result_t task_result;
+  result_t task_result = task->task;
   if (send_wrapper (socket_fd, &task_result, sizeof (task_result), 0)
       == S_FAILURE)
     {
