@@ -133,3 +133,27 @@ send_alph (int socket_fd, mt_context_t *mt_ctx)
 
   return (S_SUCCESS);
 }
+
+status_t
+serv_signal_if_found (int socket_fd, mt_context_t *ctx)
+{
+  if (pthread_mutex_lock (&ctx->mutex) != 0)
+    {
+      print_error ("Could not lock a mutex\n");
+      return (S_FAILURE);
+    }
+  pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
+
+  if (--ctx->passwords_remaining == 0 || ctx->password[0] != 0)
+    {
+      close_client (socket_fd);
+
+      if (pthread_cond_signal (&ctx->cond_sem) != 0)
+        {
+          print_error ("Could not signal a condition\n");
+          return (S_FAILURE);
+        }
+    }
+
+  pthread_cleanup_pop (!0);
+}

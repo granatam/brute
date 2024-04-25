@@ -22,51 +22,32 @@ result_receiver (void *arg)
 
   while (true)
     {
-      int32_t size;
-
-      // TODO: receive id
-      if (recv_wrapper (cl_ctx->socket_fd, &size, sizeof (size), 0)
+      result_t task;
+      if (recv_wrapper (cl_ctx->socket_fd, &task, sizeof (task), 0)
           == S_FAILURE)
         {
-          print_error ("Could not receive password size from client\n");
+          print_error ("Could not receive result from client\n");
           return (NULL);
         }
 
-      if (size != 0)
+      if (task.is_correct)
         {
-          if (recv_wrapper (cl_ctx->socket_fd, mt_ctx->password,
-                            sizeof (password_t), 0)
-              == S_FAILURE)
-            {
-              print_error ("Could not receive password from client\n");
-              return (NULL);
-            }
-
           if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
             {
               print_error ("Could not cancel a queue\n");
               return (NULL);
             }
+          memcpy (mt_ctx->password, task.password, sizeof (task.password));
         }
 
-      if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
+      if (queue_push (&cl_ctx->registry_idx, &task.id) != QS_SUCCESS)
         {
-          print_error ("Could not lock a mutex\n");
+          print_error ("Could not return id to a queue\n");
           return (NULL);
         }
-      pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
 
-      if (--mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
-        {
-          close_client (cl_ctx->socket_fd);
-
-          if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
-            {
-              print_error ("Could not signal a condition\n");
-              return (NULL);
-            }
-        }
-      pthread_cleanup_pop (!0);
+      if (serv_signal_if_found (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
+        return (NULL);
     }
 
   return (NULL);
@@ -86,9 +67,9 @@ task_sender (void *arg)
 
   while (true)
     {
-      // TODO: status check
       size_t id;
-      queue_pop (&cl_ctx->registry_idx, &id);
+      if (queue_pop (&cl_ctx->registry_idx, &id) != QS_SUCCESS)
+        return (NULL);
 
       task_t *task = &cl_ctx->registry[id];
 
@@ -146,9 +127,19 @@ handle_clients (void *arg)
       for (size_t i = 0; i < QUEUE_SIZE; ++i)
         queue_push (&cl_ctx.registry_idx, &i);
 
+      acl_context_t *cl_ctx_copy = malloc (sizeof (acl_context_t));
+      if (!cl_ctx_copy)
+        {
+          print_error ("Could not allocate memory for client context copy\n");
+
+          close_client (cl_ctx.socket_fd);
+          continue;
+        }
+      cl_ctx_copy = *(acl_context_t **)&cl_ctx;
+
       // FIXME: shared cl_ctx for these 2 threads
-      if (thread_create (&mt_ctx->thread_pool, task_sender, &cl_ctx,
-                         sizeof (cl_ctx))
+      if (thread_create (&mt_ctx->thread_pool, task_sender, cl_ctx_copy,
+                         sizeof (cl_ctx_copy))
           == S_FAILURE)
         {
           print_error ("Could not create task sender thread\n");
@@ -157,8 +148,8 @@ handle_clients (void *arg)
           continue;
         }
 
-      if (thread_create (&mt_ctx->thread_pool, result_receiver, &cl_ctx,
-                         sizeof (cl_ctx))
+      if (thread_create (&mt_ctx->thread_pool, result_receiver, cl_ctx_copy,
+                         sizeof (cl_ctx_copy))
           == S_FAILURE)
         {
           print_error ("Could not create result receiver thread\n");

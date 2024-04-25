@@ -31,27 +31,23 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
       return (S_FAILURE);
     }
 
-  int32_t size;
-  if (recv_wrapper (socket_fd, &size, sizeof (size), 0) == S_FAILURE)
+  result_t task_result;
+  if (recv_wrapper (socket_fd, &task_result, sizeof (task_result), 0)
+      == S_FAILURE)
     {
-      print_error ("Could not receive password size from client\n");
+      print_error ("Could not receive result from client\n");
       return (S_FAILURE);
     }
 
-  if (size != 0)
+  if (task_result.is_correct)
     {
-      if (recv_wrapper (socket_fd, ctx->password, sizeof (password_t), 0)
-          == S_FAILURE)
-        {
-          print_error ("Could not receive password from client\n");
-          return (S_FAILURE);
-        }
-
       if (queue_cancel (&ctx->queue) == QS_FAILURE)
         {
           print_error ("Could not cancel a queue\n");
           return (S_FAILURE);
         }
+      memcpy (ctx->password, task_result.password,
+              sizeof (task_result.password));
     }
 
   return (S_SUCCESS);
@@ -86,25 +82,8 @@ handle_client (void *arg)
           return (NULL);
         }
 
-      if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
-        {
-          print_error ("Could not lock a mutex\n");
-          return (NULL);
-        }
-      pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
-
-      if (--mt_ctx->passwords_remaining == 0 || mt_ctx->password[0] != 0)
-        {
-          close_client (cl_ctx->socket_fd);
-
-          if (pthread_cond_signal (&mt_ctx->cond_sem) != 0)
-            {
-              print_error ("Could not signal a condition\n");
-              return (NULL);
-            }
-        }
-
-      pthread_cleanup_pop (!0);
+      if (serv_signal_if_found (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
+        return (NULL);
     }
 
   return (NULL);

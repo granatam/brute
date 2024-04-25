@@ -16,6 +16,7 @@ typedef struct result_t
 {
   size_t id;
   password_t password;
+  bool is_correct;
 } result_t;
 
 typedef struct task_t

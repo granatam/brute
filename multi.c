@@ -71,6 +71,7 @@ mt_context_destroy (mt_context_t *context)
   return (S_SUCCESS);
 }
 
+// TODO: make it static or add pointer to a function and if not NULL call it
 status_t
 signal_if_found (mt_context_t *ctx)
 {

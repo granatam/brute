@@ -44,27 +44,13 @@ handle_hash (int socket_fd, char *hash, st_context_t *ctx)
   return (S_SUCCESS);
 }
 
+// TODO: Should it return status_t now?
 status_t
 find_password (int socket_fd, task_t *task, config_t *config,
                st_context_t *ctx)
 {
   if (brute (task, config, st_password_check, ctx))
-    {
-      int password_size = sizeof (task->task.password);
-      if (send_wrapper (socket_fd, &password_size, sizeof (password_size), 0)
-          == S_FAILURE)
-        {
-          print_error ("Could not send data to server\n");
-          return (S_FAILURE);
-        }
-
-      if (send_wrapper (socket_fd, task->task.password, password_size, 0)
-          == S_FAILURE)
-        {
-          print_error ("Could not send data to server\n");
-          return (S_FAILURE);
-        }
-    }
+    task->task.is_correct = true;
   else
     memset (task->task.password, 0, sizeof (task->task.password));
 
@@ -77,7 +63,7 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
 {
   if (recv_wrapper (socket_fd, task, sizeof (task_t), 0) == S_FAILURE)
     {
-      print_error ("Could not receive data from server\n");
+      print_error ("Could not receive task from server\n");
       return (S_FAILURE);
     }
 
@@ -85,15 +71,13 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
     {
       if (task_callback (socket_fd, task, config, ctx) == S_FAILURE)
         return (S_FAILURE);
-
-      if (task->task.password[0] != 0)
-        return (S_SUCCESS);
     }
 
-  int not_found = 0;
-  if (send_wrapper (socket_fd, &not_found, sizeof (not_found), 0) == S_FAILURE)
+  result_t task_result;
+  if (send_wrapper (socket_fd, &task_result, sizeof (task_result), 0)
+      == S_FAILURE)
     {
-      print_error ("Could not send data to server\n");
+      print_error ("Could not send result to server\n");
       return (S_FAILURE);
     }
 
