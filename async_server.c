@@ -29,6 +29,7 @@ result_receiver (void *arg)
           print_error ("Could not receive result from client\n");
           return (NULL);
         }
+      print_error("Received result\n");
 
       if (task.is_correct)
         {
@@ -40,11 +41,11 @@ result_receiver (void *arg)
           memcpy (mt_ctx->password, task.password, sizeof (task.password));
         }
 
-      if (queue_push (&cl_ctx->registry_idx, &task.id) != QS_SUCCESS)
-        {
-          print_error ("Could not return id to a queue\n");
-          return (NULL);
-        }
+      // if (queue_push (&cl_ctx->registry_idx, &task.id) != QS_SUCCESS)
+      //   {
+      //     print_error ("Could not return id to a queue\n");
+      //     return (NULL);
+      //   }
 
       if (serv_signal_if_found (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
         return (NULL);
@@ -73,7 +74,7 @@ task_sender (void *arg)
 
       task_t *task = &cl_ctx->registry[id];
 
-      if (queue_pop (&mt_ctx->queue, &task) != QS_SUCCESS)
+      if (queue_pop (&mt_ctx->queue, task) != QS_SUCCESS)
         return (NULL);
 
       task->task.id = id;
@@ -89,6 +90,7 @@ task_sender (void *arg)
 
           return (NULL);
         }
+      print_error ("Sent task cmd\n");
 
       if (send_wrapper (cl_ctx->socket_fd, task, sizeof (*task), 0)
           == S_FAILURE)
@@ -99,6 +101,7 @@ task_sender (void *arg)
 
           return (NULL);
         }
+      print_error ("Sent task\n");
     }
 
   return (NULL);
@@ -127,19 +130,9 @@ handle_clients (void *arg)
       for (size_t i = 0; i < QUEUE_SIZE; ++i)
         queue_push (&cl_ctx.registry_idx, &i);
 
-      acl_context_t *cl_ctx_copy = malloc (sizeof (acl_context_t));
-      if (!cl_ctx_copy)
-        {
-          print_error ("Could not allocate memory for client context copy\n");
-
-          close_client (cl_ctx.socket_fd);
-          continue;
-        }
-      cl_ctx_copy = *(acl_context_t **)&cl_ctx;
-
       // FIXME: shared cl_ctx for these 2 threads
-      if (thread_create (&mt_ctx->thread_pool, task_sender, cl_ctx_copy,
-                         sizeof (cl_ctx_copy))
+      if (thread_create (&mt_ctx->thread_pool, task_sender, &cl_ctx,
+                         sizeof (cl_ctx))
           == S_FAILURE)
         {
           print_error ("Could not create task sender thread\n");
@@ -148,8 +141,8 @@ handle_clients (void *arg)
           continue;
         }
 
-      if (thread_create (&mt_ctx->thread_pool, result_receiver, cl_ctx_copy,
-                         sizeof (cl_ctx_copy))
+      if (thread_create (&mt_ctx->thread_pool, result_receiver, &cl_ctx,
+                         sizeof (cl_ctx))
           == S_FAILURE)
         {
           print_error ("Could not create result receiver thread\n");

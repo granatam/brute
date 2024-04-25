@@ -257,8 +257,6 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
       }
   pthread_cleanup_pop (!0);
 
-  print_error ("After thread_pool_collect\n");
-
   /* Valgrind tests are returning false positive result, since it doesn't
    * wait until all memory allocated for threads is cleared, so we need to
    * manually make a timeout */

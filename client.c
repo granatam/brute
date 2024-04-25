@@ -67,6 +67,7 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
       print_error ("Could not receive task from server\n");
       return (S_FAILURE);
     }
+  print_error("Received task\n");
 
   if (task_callback != NULL)
     {
@@ -81,6 +82,7 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
       print_error ("Could not send result to server\n");
       return (S_FAILURE);
     }
+  print_error("Sent result\n");
 
   return (S_SUCCESS);
 }
