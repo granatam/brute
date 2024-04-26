@@ -1,9 +1,8 @@
-from contextlib import redirect_stderr
-import io
 import random
 import subprocess
 import string
 import sys
+import tempfile
 import time
 
 # to suppress the DeprecationWarning by crypt.crypt()
@@ -74,7 +73,9 @@ def run_client_server(passwd, alph, brute_mode, client_flag, server_flag, file):
     return output.decode()
 
 
-def run_two_clients_server(passwd, alph, brute_mode, client_flag, server_flag, file):
+def run_two_clients_server(
+    passwd, alph, brute_mode, client_flag, server_flag, file
+):
     client_cmd = brute_cmd(passwd, alph, client_flag, brute_mode)
     server_cmd = brute_cmd(passwd, alph, server_flag, brute_mode)
 
@@ -104,3 +105,20 @@ def run_two_clients_server(passwd, alph, brute_mode, client_flag, server_flag, f
         return "Server timeout"
 
     return output.decode()
+
+
+def capture_client_server_log(
+    passwd, alph, brute_mode, client_flag, server_flag, func
+):
+    with tempfile.NamedTemporaryFile() as f:
+        result = func(passwd, alph, brute_mode, client_flag, server_flag, f)
+
+        f.flush()
+        if result != f"Password found: {passwd}\n":
+            sys.stderr.write("Test failed. Captured stderr for this test:\n")
+            with open(f.name, "rb") as output:
+                for line in output:
+                    sys.stderr.write(line.decode())
+            sys.stderr.write("End of captured stderr.\n")
+
+        assert f"Password found: {passwd}\n" == result
