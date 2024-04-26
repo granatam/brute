@@ -5,7 +5,7 @@ TARGET=brute
 LIBS+=crypt/libcrypt.a
 CFLAGS+=-I./crypt
 
-TESTS=test/test.py
+TESTS=test/simple-test.py test/client-server-test.py
 WITH_PERF_TEST ?= false
 
 ifeq ($(shell uname), Linux)
