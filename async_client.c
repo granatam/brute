@@ -26,13 +26,13 @@ client_worker (void *arg)
     {
       task_t task;
       queue_pop (&ctx->task_queue, &task);
-      print_error("[worker] After task_queue pop\n");
+      print_error ("[worker] After task_queue pop\n");
       bool is_found
           = brute (&task, ctx->config, st_password_check, &st_context);
       task.task.is_correct = is_found;
 
       queue_push (&ctx->result_queue, &task.task);
-      print_error("[worker] After result_queue push\n");
+      print_error ("[worker] After result_queue push\n");
     }
   return (NULL);
 }
@@ -63,7 +63,7 @@ task_receiver (void *arg)
               print_error ("Could not handle alphabet\n");
               goto end;
             }
-            print_error("[receiver] Received alph\n");
+          print_error ("[receiver] Received alph\n");
           break;
         case CMD_HASH:
           if (handle_hash (ctx->socket_fd, hash) == S_FAILURE)
@@ -71,11 +71,13 @@ task_receiver (void *arg)
               print_error ("Could not handle hash\n");
               goto end;
             }
-          print_error("[receiver] Received hash %s at %p, ctx->config->hash is %p\n", hash, hash, ctx->config->hash);
+          print_error (
+              "[receiver] Received hash %s at %p, ctx->config->hash is %p\n",
+              hash, hash, ctx->config->hash);
           ctx->config->hash = hash;
           break;
         case CMD_EXIT:
-          print_error("[receiver] Received exit\n");
+          print_error ("[receiver] Received exit\n");
           goto end;
         case CMD_TASK:
           if (recv_wrapper (ctx->socket_fd, &task, sizeof (task_t), 0)
@@ -84,14 +86,17 @@ task_receiver (void *arg)
               print_error ("Could not receive task from server\n");
               goto end;
             }
-          print_error("[receiver] Received task\n");
+          print_error ("[receiver] Received task\n");
           queue_push (&ctx->task_queue, &task);
-          print_error("[receiver] Pushed task to queue\n");
+          print_error ("[receiver] Pushed task to queue\n");
           break;
         }
     }
 
 end:
+  ctx->done = true;
+  pthread_cond_signal (&ctx->cond_sem);
+
   shutdown (ctx->socket_fd, SHUT_RDWR);
   close (ctx->socket_fd);
   return (NULL);
@@ -123,7 +128,9 @@ run_async_client (task_t *task, config_t *config)
   queue_init (&ctx.task_queue, sizeof (task_t));
   queue_init (&ctx.result_queue, sizeof (result_t));
   pthread_mutex_init (&ctx.mutex, NULL);
+  pthread_cond_init (&ctx.cond_sem, NULL);
   ctx.config = config;
+  ctx.done = false;
 
   ctx.socket_fd = socket (AF_INET, SOCK_STREAM, 0);
   if (ctx.socket_fd == -1)
@@ -146,13 +153,30 @@ run_async_client (task_t *task, config_t *config)
   async_client_context_t *ctx_ptr = &ctx;
 
   thread_create (&ctx.thread_pool, task_receiver, &ctx_ptr, sizeof (ctx_ptr));
-  print_error("[main] Created receiver thread\n");
+  print_error ("[main] Created receiver thread\n");
   thread_create (&ctx.thread_pool, result_sender, &ctx_ptr, sizeof (ctx_ptr));
-  print_error("[main] Created sender thread\n");
-  create_threads (&ctx.thread_pool, config->number_of_threads - 2,
-                  client_worker, &ctx_ptr, sizeof (ctx_ptr));
-  print_error("[main] Created worker threads\n");
+  print_error ("[main] Created sender thread\n");
+  create_threads (&ctx.thread_pool, config->number_of_threads, client_worker,
+                  &ctx_ptr, sizeof (ctx_ptr));
+  print_error ("[main] Created worker threads\n");
 
+  if (pthread_mutex_lock (&ctx.mutex) != 0)
+    {
+      print_error ("Could not lock a mutex\n");
+      return (S_FAILURE);
+    }
+  pthread_cleanup_push (cleanup_mutex_unlock, &ctx.mutex);
+
+  while (!ctx.done)
+    if (pthread_cond_wait (&ctx.cond_sem, &ctx.mutex) != 0)
+      {
+        print_error ("Could not wait on a condition\n");
+        return (S_FAILURE);
+      }
+
+  pthread_cleanup_pop (!0);
+
+  thread_pool_cancel (&ctx.thread_pool);
 end:
   shutdown (ctx.socket_fd, SHUT_RDWR);
   close (ctx.socket_fd);

@@ -20,6 +20,8 @@ typedef struct async_client_context_t
   queue_t result_queue;
   pthread_mutex_t mutex;
   config_t *config;
+  bool done;
+  pthread_cond_t cond_sem;
 } async_client_context_t;
 
 bool run_async_client (task_t *, config_t *);

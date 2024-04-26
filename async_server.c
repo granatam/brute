@@ -61,20 +61,24 @@ task_sender (void *arg)
 
   if (send_hash (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
     return (NULL);
+  print_error ("[server sender] Sent hash\n");
 
   if (send_alph (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
     return (NULL);
+  print_error ("[server sender] Sent alph\n");
 
   while (true)
     {
       size_t id;
       if (queue_pop (&cl_ctx->registry_idx, &id) != QS_SUCCESS)
         return (NULL);
+      print_error ("[server sender] After registry_idx pop\n");
 
       task_t *task = &cl_ctx->registry[id];
 
       if (queue_pop (&mt_ctx->queue, task) != QS_SUCCESS)
         return (NULL);
+      print_error ("[server sender] After task queue pop\n");
 
       task->task.id = id;
       task->to = task->from;
@@ -89,7 +93,7 @@ task_sender (void *arg)
 
           return (NULL);
         }
-      print_error ("Sent task cmd\n");
+      print_error ("[server sender] Sent task cmd\n");
 
       if (send_wrapper (cl_ctx->socket_fd, task, sizeof (*task), 0)
           == S_FAILURE)
@@ -100,7 +104,7 @@ task_sender (void *arg)
 
           return (NULL);
         }
-      print_error ("Sent task\n");
+      print_error ("[server sender] Sent task\n");
     }
 
   return (NULL);
