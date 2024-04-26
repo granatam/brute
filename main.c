@@ -1,13 +1,13 @@
 #include "async_client.h"
 #include "async_server.h"
 #include "brute.h"
-#include "sync_client.h"
 #include "common.h"
 #include "config.h"
 #include "gen.h"
 #include "multi.h"
 #include "queue.h"
 #include "single.h"
+#include "sync_client.h"
 #include "sync_server.h"
 
 #include <stdbool.h>

@@ -3,9 +3,9 @@
 
 #include "common.h"
 #include "config.h"
+#include "queue.h"
 #include "single.h"
 #include "thread_pool.h"
-#include "queue.h"
 
 #include <stdbool.h>
 
@@ -20,7 +20,6 @@ typedef struct async_client_context_t
   queue_t result_queue;
   pthread_mutex_t mutex;
   config_t *config;
-  task_t *task;
 } async_client_context_t;
 
 bool run_async_client (task_t *, config_t *);

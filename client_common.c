@@ -31,7 +31,7 @@ handle_alph (int socket_fd, config_t *config, char *alph)
 }
 
 status_t
-handle_hash (int socket_fd, char *hash, st_context_t *ctx)
+handle_hash (int socket_fd, char *hash)
 {
   if (recv_wrapper (socket_fd, hash, HASH_LENGTH, 0) == S_FAILURE)
     {
@@ -39,8 +39,6 @@ handle_hash (int socket_fd, char *hash, st_context_t *ctx)
       return (S_FAILURE);
     }
   hash[HASH_LENGTH - 1] = 0;
-
-  ctx->hash = hash;
 
   return (S_SUCCESS);
 }

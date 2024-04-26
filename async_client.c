@@ -2,6 +2,8 @@
 
 #include "brute.h"
 #include "client_common.h"
+#include "common.h"
+#include "single.h"
 #include "thread_pool.h"
 
 #include <arpa/inet.h>
@@ -13,6 +15,23 @@
 static void *
 client_worker (void *arg)
 {
+  async_client_context_t *ctx = *(async_client_context_t **)arg;
+
+  st_context_t st_context = {
+    .hash = ctx->config->hash,
+    .data = { .initialized = 0 },
+  };
+
+  while (true)
+    {
+      task_t task;
+      queue_pop (&ctx->task_queue, &task);
+      bool is_found
+          = brute (&task, ctx->config, st_password_check, &st_context);
+      task.task.is_correct = is_found;
+
+      queue_push (&ctx->result_queue, &task.task);
+    }
   return (NULL);
 }
 
@@ -24,10 +43,7 @@ task_receiver (void *arg)
   char hash[HASH_LENGTH];
   char alph[MAX_ALPH_LENGTH];
 
-  st_context_t st_context = {
-    .data = { .initialized = 0 },
-  };
-
+  task_t task;
   while (true)
     {
       command_t cmd;
@@ -47,21 +63,23 @@ task_receiver (void *arg)
             }
           break;
         case CMD_HASH:
-          if (handle_hash (ctx->socket_fd, hash, &st_context) == S_FAILURE)
+          if (handle_hash (ctx->socket_fd, hash) == S_FAILURE)
             {
               print_error ("Could not handle hash\n");
               goto end;
             }
+          ctx->config->hash = hash;
           break;
         case CMD_EXIT:
           goto end;
         case CMD_TASK:
-          if (recv_wrapper (ctx->socket_fd, ctx->task, sizeof (task_t), 0) == S_FAILURE)
+          if (recv_wrapper (ctx->socket_fd, &task, sizeof (task_t), 0)
+              == S_FAILURE)
             {
               print_error ("Could not receive task from server\n");
               goto end;
             }
-          queue_push(&ctx->task_queue, ctx->task);
+          queue_push (&ctx->task_queue, &task);
           break;
         }
     }
@@ -73,8 +91,17 @@ end:
 }
 
 static void *
-result_sender (void *ard)
+result_sender (void *arg)
 {
+  async_client_context_t *ctx = *(async_client_context_t **)arg;
+
+  result_t task;
+  while (true)
+    {
+      queue_pop (&ctx->result_queue, &task);
+      send_wrapper (ctx->socket_fd, &task, sizeof (task), 0);
+    }
+
   return (NULL);
 }
 

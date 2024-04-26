@@ -28,7 +28,7 @@ result_receiver (void *arg)
           print_error ("Could not receive result from client\n");
           return (NULL);
         }
-      print_error("Received result\n");
+      print_error ("Received result\n");
 
       if (task.is_correct)
         {
@@ -129,7 +129,7 @@ handle_clients (void *arg)
       for (size_t i = 0; i < QUEUE_SIZE; ++i)
         queue_push (&cl_ctx.registry_idx, &i);
 
-      acl_context_t *ctx_copy = malloc(sizeof(acl_context_t));
+      acl_context_t *ctx_copy = malloc (sizeof (acl_context_t));
       ctx_copy = &cl_ctx;
 
       // FIXME: shared cl_ctx for these 2 threads

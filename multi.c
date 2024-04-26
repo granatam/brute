@@ -106,7 +106,7 @@ mt_password_check (void *context)
 
   while (true)
     {
-      if (queue_pop (&mt_ctx->queue, (void **)&task) != QS_SUCCESS)
+      if (queue_pop (&mt_ctx->queue, &task) != QS_SUCCESS)
         return (NULL);
 
       task.to = task.from;

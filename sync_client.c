@@ -10,7 +10,6 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-
 // TODO: Should it return status_t now?
 status_t
 find_password (int socket_fd, task_t *task, config_t *config,
@@ -33,7 +32,7 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
       print_error ("Could not receive task from server\n");
       return (S_FAILURE);
     }
-  print_error("Received task\n");
+  print_error ("Received task\n");
 
   if (task_callback != NULL)
     {
@@ -48,7 +47,7 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
       print_error ("Could not send result to server\n");
       return (S_FAILURE);
     }
-  print_error("Sent result\n");
+  print_error ("Sent result\n");
 
   return (S_SUCCESS);
 }
@@ -100,11 +99,12 @@ run_client (task_t *task, config_t *config, task_callback_t task_callback)
             }
           break;
         case CMD_HASH:
-          if (handle_hash (socket_fd, hash, &st_context) == S_FAILURE)
+          if (handle_hash (socket_fd, hash) == S_FAILURE)
             {
               print_error ("Could not handle hash\n");
               goto end;
             }
+          st_context.hash = hash;
           break;
         case CMD_EXIT:
           goto end;
