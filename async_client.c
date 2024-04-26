@@ -22,20 +22,17 @@ client_worker (void *arg)
     .data = { .initialized = 0 },
   };
 
-  print_error("[sender] After st_ctx init\n");
   while (true)
     {
       task_t task;
       queue_pop (&ctx->task_queue, &task);
-      print_error("[sender] After task_queue pop\n");
+      print_error("[worker] After task_queue pop\n");
       bool is_found
           = brute (&task, ctx->config, st_password_check, &st_context);
-      print_error("[sender] After brute\n");
       task.task.is_correct = is_found;
-      print_error("[sender] After is_correct set\n");
 
       queue_push (&ctx->result_queue, &task.task);
-      print_error("[sender] After result_queue push\n");
+      print_error("[worker] After result_queue push\n");
     }
   return (NULL);
 }
@@ -57,7 +54,7 @@ task_receiver (void *arg)
           print_error ("Could not receive command from server\n");
           goto end;
         }
-      print_error("[receiver] Received command\n");
+
       switch (cmd)
         {
         case CMD_ALPH:
@@ -76,7 +73,6 @@ task_receiver (void *arg)
             }
           print_error("[receiver] Received hash %s at %p, ctx->config->hash is %p\n", hash, hash, ctx->config->hash);
           ctx->config->hash = hash;
-          print_error("[receiver] After hash setting\n");
           break;
         case CMD_EXIT:
           print_error("[receiver] Received exit\n");
@@ -110,7 +106,9 @@ result_sender (void *arg)
   while (true)
     {
       queue_pop (&ctx->result_queue, &task);
+      print_error ("[sender] After result_queue pop\n");
       send_wrapper (ctx->socket_fd, &task, sizeof (task), 0);
+      print_error ("[sender] After task send\n");
     }
 
   return (NULL);
@@ -148,12 +146,12 @@ run_async_client (task_t *task, config_t *config)
   async_client_context_t *ctx_ptr = &ctx;
 
   thread_create (&ctx.thread_pool, task_receiver, &ctx_ptr, sizeof (ctx_ptr));
-  print_error("Created receiver thread\n");
+  print_error("[main] Created receiver thread\n");
   thread_create (&ctx.thread_pool, result_sender, &ctx_ptr, sizeof (ctx_ptr));
-  print_error("Created sender thread\n");
+  print_error("[main] Created sender thread\n");
   create_threads (&ctx.thread_pool, config->number_of_threads - 2,
                   client_worker, &ctx_ptr, sizeof (ctx_ptr));
-  print_error("Created worker threads\n");
+  print_error("[main] Created worker threads\n");
 
 end:
   shutdown (ctx.socket_fd, SHUT_RDWR);

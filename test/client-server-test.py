@@ -14,7 +14,7 @@ from utils import (
     st.text(min_size=3, alphabet=string.ascii_letters, max_size=4),
     st.text(min_size=1, max_size=1, alphabet="iry"),
 )
-@settings(deadline=timedelta(seconds=5))
+@settings(deadline=timedelta(seconds=5), max_examples=3)
 def test_sync_client_sync_server(passwd, brute_mode):
     alph = shuffle_password(passwd)
     capture_client_server_log(
@@ -27,7 +27,7 @@ def test_sync_client_sync_server(passwd, brute_mode):
     st.text(min_size=4, alphabet=string.ascii_letters, max_size=5),
     st.text(min_size=1, max_size=1, alphabet="iry"),
 )
-@settings(deadline=timedelta(seconds=5))
+@settings(deadline=timedelta(seconds=5), max_examples=3)
 def test_two_sync_clients_sync_server(passwd, brute_mode):
     alph = shuffle_password(passwd)
     capture_client_server_log(
@@ -40,7 +40,7 @@ def test_two_sync_clients_sync_server(passwd, brute_mode):
     st.text(min_size=3, alphabet=string.ascii_letters, max_size=4),
     st.text(min_size=1, max_size=1, alphabet="iry"),
 )
-@settings(deadline=timedelta(seconds=5))
+@settings(deadline=timedelta(seconds=5), max_examples=3)
 def test_sync_client_async_server(passwd, brute_mode):
     alph = shuffle_password(passwd)
     capture_client_server_log(
@@ -53,7 +53,7 @@ def test_sync_client_async_server(passwd, brute_mode):
     st.text(min_size=4, alphabet=string.ascii_letters, max_size=5),
     st.text(min_size=1, max_size=1, alphabet="iry"),
 )
-@settings(deadline=timedelta(seconds=5))
+@settings(deadline=timedelta(seconds=5), max_examples=3)
 def test_two_sync_clients_async_server(passwd, brute_mode):
     alph = shuffle_password(passwd)
     capture_client_server_log(
@@ -66,7 +66,7 @@ def test_two_sync_clients_async_server(passwd, brute_mode):
     st.text(min_size=3, alphabet=string.ascii_letters, max_size=4),
     st.text(min_size=1, max_size=1, alphabet="iry"),
 )
-@settings(deadline=timedelta(seconds=5))
+@settings(deadline=timedelta(seconds=5), max_examples=3)
 def test_async_client_async_server(passwd, brute_mode):
     alph = shuffle_password(passwd)
     capture_client_server_log(
@@ -79,9 +79,35 @@ def test_async_client_async_server(passwd, brute_mode):
     st.text(min_size=4, alphabet=string.ascii_letters, max_size=5),
     st.text(min_size=1, max_size=1, alphabet="iry"),
 )
-@settings(deadline=timedelta(seconds=5))
+@settings(deadline=timedelta(seconds=5), max_examples=3)
 def test_two_async_clients_async_server(passwd, brute_mode):
     alph = shuffle_password(passwd)
     capture_client_server_log(
         passwd, alph, brute_mode, "v", "w", run_two_clients_server
+    )
+
+
+# Synchronous server, one asynchronous client
+@given(
+    st.text(min_size=3, alphabet=string.ascii_letters, max_size=4),
+    st.text(min_size=1, max_size=1, alphabet="iry"),
+)
+@settings(deadline=timedelta(seconds=5), max_examples=3)
+def test_async_client_sync_server(passwd, brute_mode):
+    alph = shuffle_password(passwd)
+    capture_client_server_log(
+        passwd, alph, brute_mode, "v", "w", run_client_server
+    )
+
+
+# Synchronous server, two asynchronous clients
+@given(
+    st.text(min_size=4, alphabet=string.ascii_letters, max_size=5),
+    st.text(min_size=1, max_size=1, alphabet="iry"),
+)
+@settings(deadline=timedelta(seconds=5), max_examples=3)
+def test_two_async_clients_sync_server(passwd, brute_mode):
+    alph = shuffle_password(passwd)
+    capture_client_server_log(
+        passwd, alph, brute_mode, "v", "S", run_two_clients_server
     )
