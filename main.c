@@ -1,6 +1,7 @@
+#include "async_client.h"
 #include "async_server.h"
 #include "brute.h"
-#include "client.h"
+#include "sync_client.h"
 #include "common.h"
 #include "config.h"
 #include "gen.h"
@@ -201,8 +202,9 @@ main (int argc, char *argv[])
     case RM_SERVER:
       is_found = run_server (&task, &config);
       break;
-    /* FIXME #2 */
     case RM_ASYNC_CLIENT:
+      run_async_client (&task, &config);
+      break;
     case RM_CLIENT:
       run_client (&task, &config, find_password);
       break;
