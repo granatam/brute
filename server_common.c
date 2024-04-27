@@ -135,6 +135,20 @@ send_alph (int socket_fd, mt_context_t *mt_ctx)
 }
 
 status_t
+send_config_data (int socket_fd, mt_context_t *ctx)
+{
+  if (send_hash (socket_fd, ctx) == S_FAILURE)
+    return (S_FAILURE);
+  print_error ("[server sender] Sent hash\n");
+
+  if (send_alph (socket_fd, ctx) == S_FAILURE)
+    return (S_FAILURE);
+  print_error ("[server sender] Sent alph\n");
+
+  return (S_SUCCESS);
+}
+
+status_t
 serv_signal_if_found (int socket_fd, mt_context_t *ctx)
 {
   if (pthread_mutex_lock (&ctx->mutex) != 0)

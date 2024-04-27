@@ -31,15 +31,6 @@ acl_context_init (acl_context_t *global_ctx)
         return (NULL);
       }
 
-  mt_context_t *mt_ctx = &ctx->context->context;
-  if (send_hash (ctx->socket_fd, mt_ctx) == S_FAILURE)
-    return (NULL);
-  print_error ("[server sender] Sent hash\n");
-
-  if (send_alph (ctx->socket_fd, mt_ctx) == S_FAILURE)
-    return (NULL);
-  print_error ("[server sender] Sent alph\n");
-
   return ctx;
 }
 
@@ -88,6 +79,9 @@ task_sender (void *arg)
 {
   acl_context_t *cl_ctx = *(acl_context_t **)arg;
   mt_context_t *mt_ctx = &cl_ctx->context->context;
+
+  if (send_config_data (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
+    return (NULL);
 
   while (true)
     {

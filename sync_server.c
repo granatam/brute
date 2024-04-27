@@ -60,10 +60,7 @@ handle_client (void *arg)
   cl_context_t *cl_ctx = (cl_context_t *)arg;
   mt_context_t *mt_ctx = &cl_ctx->context->context;
 
-  if (send_hash (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
-    return (NULL);
-
-  if (send_alph (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
+  if (send_config_data (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
     return (NULL);
 
   while (true)
