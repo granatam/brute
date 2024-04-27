@@ -5,6 +5,7 @@ from utils import (
     shuffle_password,
     gen_str,
     run_brute,
+    phases,
 )
 
 
@@ -14,7 +15,7 @@ from utils import (
     st.text(min_size=1, max_size=1, alphabet="smg"),
     st.text(min_size=1, max_size=1, alphabet="iry"),
 )
-@settings(deadline=timedelta(seconds=3))
+@settings(deadline=timedelta(seconds=3), phases=phases)
 def test_password_found(passwd, run_mode, brute_mode):
     alph = shuffle_password(passwd)
 
@@ -29,7 +30,7 @@ def test_password_found(passwd, run_mode, brute_mode):
     st.text(min_size=1, max_size=1, alphabet="smg"),
     st.text(min_size=1, max_size=1, alphabet="iry"),
 )
-@settings(deadline=timedelta(seconds=5))
+@settings(deadline=timedelta(seconds=5), phases=phases)
 def test_corner_cases(run_mode, brute_mode):
     long_alph = gen_str(5)
     short_password = gen_str(5, long_alph)

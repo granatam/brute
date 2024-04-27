@@ -5,6 +5,8 @@ import sys
 import tempfile
 import time
 
+from hypothesis import Phase
+
 # to suppress the DeprecationWarning by crypt.crypt()
 import warnings
 
@@ -14,6 +16,9 @@ with warnings.catch_warnings():
 import os
 
 CPU_COUNT = os.cpu_count()
+
+
+phases = (Phase.explicit, Phase.reuse, Phase.generate, Phase.target)
 
 
 def get_output(cmd):
