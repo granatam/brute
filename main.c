@@ -203,13 +203,13 @@ main (int argc, char *argv[])
       is_found = run_server (&task, &config);
       break;
     case RM_ASYNC_CLIENT:
-      run_async_client (&task, &config);
+      run_async_client (&config);
       break;
     case RM_CLIENT:
-      run_client (&task, &config, find_password);
+      run_client (&config, find_password);
       break;
     case RM_LOAD_CLIENT:
-      spawn_clients (&task, &config, NULL);
+      spawn_clients (&config, NULL);
       break;
     }
 

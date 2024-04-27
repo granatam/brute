@@ -120,7 +120,7 @@ result_sender (void *arg)
 }
 
 bool
-run_async_client (task_t *task, config_t *config)
+run_async_client (config_t *config)
 {
   async_client_context_t ctx;
 
@@ -177,7 +177,7 @@ run_async_client (task_t *task, config_t *config)
   pthread_cleanup_pop (!0);
 
   thread_pool_cancel (&ctx.thread_pool);
-end:
+
   shutdown (ctx.socket_fd, SHUT_RDWR);
   close (ctx.socket_fd);
   return (false);

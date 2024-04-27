@@ -13,6 +13,36 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+static acl_context_t *
+acl_context_init (acl_context_t *global_ctx)
+{
+  acl_context_t *ctx = malloc (sizeof (acl_context_t));
+  memcpy (ctx, &global_ctx, sizeof (acl_context_t));
+
+  if (queue_init (&ctx->registry_idx, sizeof (size_t)) != QS_SUCCESS)
+    {
+      print_error ("Could not initialize registry indices queue\n");
+      return (NULL);
+    }
+  for (size_t i = 0; i < QUEUE_SIZE; ++i)
+    if (queue_push (&ctx->registry_idx, &i) != QS_SUCCESS)
+      {
+        print_error ("Could not push index to registry indices queue\n");
+        return (NULL);
+      }
+
+  mt_context_t *mt_ctx = &ctx->context->context;
+  if (send_hash (ctx->socket_fd, mt_ctx) == S_FAILURE)
+    return (NULL);
+  print_error ("[server sender] Sent hash\n");
+
+  if (send_alph (ctx->socket_fd, mt_ctx) == S_FAILURE)
+    return (NULL);
+  print_error ("[server sender] Sent alph\n");
+
+  return ctx;
+}
+
 static void *
 result_receiver (void *arg)
 {
@@ -58,14 +88,6 @@ task_sender (void *arg)
 {
   acl_context_t *cl_ctx = *(acl_context_t **)arg;
   mt_context_t *mt_ctx = &cl_ctx->context->context;
-
-  if (send_hash (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
-    return (NULL);
-  print_error ("[server sender] Sent hash\n");
-
-  if (send_alph (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
-    return (NULL);
-  print_error ("[server sender] Sent alph\n");
 
   while (true)
     {
@@ -128,13 +150,9 @@ handle_clients (void *arg)
           continue;
         }
 
-      // TODO: status checks
-      queue_init (&cl_ctx.registry_idx, sizeof (size_t));
-      for (size_t i = 0; i < QUEUE_SIZE; ++i)
-        queue_push (&cl_ctx.registry_idx, &i);
-
-      acl_context_t *ctx_copy = malloc (sizeof (acl_context_t));
-      ctx_copy = &cl_ctx;
+      acl_context_t *ctx_copy = acl_context_init (&cl_ctx);
+      if (!ctx_copy)
+        continue;
 
       // FIXME: shared cl_ctx for these 2 threads
       if (thread_create (&mt_ctx->thread_pool, task_sender, &ctx_copy,

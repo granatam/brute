@@ -12,8 +12,7 @@
 
 // TODO: Should it return status_t now?
 status_t
-find_password (int socket_fd, task_t *task, config_t *config,
-               st_context_t *ctx)
+find_password (task_t *task, config_t *config, st_context_t *ctx)
 {
   if (brute (task, config, st_password_check, ctx))
     task->task.is_correct = true;
@@ -35,10 +34,8 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
   print_error ("Received task\n");
 
   if (task_callback != NULL)
-    {
-      if (task_callback (socket_fd, task, config, ctx) == S_FAILURE)
-        return (S_FAILURE);
-    }
+    if (task_callback (task, config, ctx) == S_FAILURE)
+      return (S_FAILURE);
 
   result_t task_result = task->task;
   if (send_wrapper (socket_fd, &task_result, sizeof (task_result), 0)
@@ -53,7 +50,7 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
 }
 
 bool
-run_client (task_t *task, config_t *config, task_callback_t task_callback)
+run_client (config_t *config, task_callback_t task_callback)
 {
   int socket_fd = socket (AF_INET, SOCK_STREAM, 0);
   if (socket_fd == -1)
@@ -75,6 +72,7 @@ run_client (task_t *task, config_t *config, task_callback_t task_callback)
 
   char hash[HASH_LENGTH];
   char alph[MAX_ALPH_LENGTH];
+  task_t task;
 
   st_context_t st_context = {
     .data = { .initialized = 0 },
@@ -109,7 +107,8 @@ run_client (task_t *task, config_t *config, task_callback_t task_callback)
         case CMD_EXIT:
           goto end;
         case CMD_TASK:
-          if (handle_task (socket_fd, task, config, &st_context, task_callback)
+          if (handle_task (socket_fd, &task, config, &st_context,
+                           task_callback)
               == S_FAILURE)
             goto end;
           break;
@@ -126,17 +125,13 @@ static void *
 client_thread_helper (void *arg)
 {
   client_context_t *ctx = *(client_context_t **)arg;
-
-  task_t task;
-  ctx->task = &task;
-
-  run_client (ctx->task, ctx->config, ctx->task_callback);
+  run_client (ctx->config, ctx->task_callback);
 
   return (NULL);
 }
 
 void
-spawn_clients (task_t *task, config_t *config, task_callback_t task_callback)
+spawn_clients (config_t *config, task_callback_t task_callback)
 {
   thread_pool_t thread_pool;
   if (thread_pool_init (&thread_pool) == S_FAILURE)
@@ -146,7 +141,6 @@ spawn_clients (task_t *task, config_t *config, task_callback_t task_callback)
     }
 
   client_context_t context = {
-    .task = task,
     .config = config,
     .task_callback = task_callback,
   };

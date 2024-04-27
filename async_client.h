@@ -9,9 +9,6 @@
 
 #include <stdbool.h>
 
-typedef status_t (*task_callback_t) (int, task_t *, config_t *,
-                                     st_context_t *);
-
 typedef struct async_client_context_t
 {
   int socket_fd;
@@ -24,7 +21,6 @@ typedef struct async_client_context_t
   pthread_cond_t cond_sem;
 } async_client_context_t;
 
-bool run_async_client (task_t *, config_t *);
-status_t find_password (int socket_fd, task_t *, config_t *, st_context_t *);
+bool run_async_client (config_t *);
 
 #endif // ASYNC_CLIENT_H
