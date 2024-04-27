@@ -17,7 +17,7 @@ static acl_context_t *
 acl_context_init (acl_context_t *global_ctx)
 {
   acl_context_t *ctx = malloc (sizeof (acl_context_t));
-  memcpy (ctx, &global_ctx, sizeof (acl_context_t));
+  memcpy (ctx, global_ctx, sizeof (acl_context_t));
 
   if (queue_init (&ctx->registry_idx, sizeof (size_t)) != QS_SUCCESS)
     {
