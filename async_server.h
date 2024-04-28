@@ -14,6 +14,8 @@ typedef struct acl_context_t
   task_t registry[QUEUE_SIZE];
   queue_t registry_idx;
   int socket_fd;
+  unsigned char ref_count;
+  pthread_mutex_t mutex;
 } acl_context_t;
 
 bool run_async_server (task_t *, config_t *);

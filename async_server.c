@@ -31,6 +31,13 @@ acl_context_init (acl_context_t *global_ctx)
         return (NULL);
       }
 
+  ctx->ref_count = 2;
+  if (pthread_mutex_init (&ctx->mutex, NULL) != 0)
+    {
+      print_error ("Could not initialize mutex\n");
+      return (NULL);
+    }
+
   return ctx;
 }
 
@@ -49,7 +56,7 @@ result_receiver (void *arg)
           print_error ("Could not receive result from client\n");
           return (NULL);
         }
-      print_error ("Received result\n");
+      print_error ("[server receiver] Received result\n");
 
       if (task.is_correct)
         {
@@ -59,6 +66,8 @@ result_receiver (void *arg)
               return (NULL);
             }
           memcpy (mt_ctx->password, task.password, sizeof (task.password));
+          print_error ("[server receiver] Received correct result %s\n",
+                       task.password);
         }
 
       if (queue_push (&cl_ctx->registry_idx, &task.id) != QS_SUCCESS)
@@ -202,6 +211,8 @@ run_async_server (task_t *task, config_t *config)
 
   if (wait_password (mt_ctx) == S_FAILURE)
     goto fail;
+
+  print_error("[server] After wait\n");
 
   if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
     {
