@@ -81,11 +81,11 @@ close_client (int socket_fd)
       print_error ("Could not send CMD_EXIT to client\n");
       return (S_FAILURE);
     }
-  print_error("[close client] Sent CMD_EXIT\n");
+  print_error ("[close client] Sent CMD_EXIT\n");
 
   shutdown (socket_fd, SHUT_RDWR);
   close (socket_fd);
-  print_error("[close client] Closed connection\n");
+  print_error ("[close client] Closed connection\n");
 
   return (S_SUCCESS);
 }
@@ -164,8 +164,8 @@ serv_signal_if_found (int socket_fd, mt_context_t *ctx)
     {
       print_error ("[server signal] Should signal on %p %p\n", &ctx->cond_sem,
                    &ctx->mutex);
-      // close_client (socket_fd);
-      // print_error ("[server signal] After close\n");
+      close_client (socket_fd);
+      print_error ("[server signal] After close\n");
 
       if (pthread_cond_signal (&ctx->cond_sem) != 0)
         {
