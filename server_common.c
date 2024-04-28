@@ -81,9 +81,11 @@ close_client (int socket_fd)
       print_error ("Could not send CMD_EXIT to client\n");
       return (S_FAILURE);
     }
+  print_error("[close client] Sent CMD_EXIT\n");
 
   shutdown (socket_fd, SHUT_RDWR);
   close (socket_fd);
+  print_error("[close client] Closed connection\n");
 
   return (S_SUCCESS);
 }
