@@ -118,7 +118,7 @@ task_sender (void *arg)
 
           return (NULL);
         }
-      print_error ("[server sender] Sent task cmd\n");
+      print_error ("[server sender] Sent CMD_TASK\n");
 
       if (send_wrapper (cl_ctx->socket_fd, task, sizeof (*task), 0)
           == S_FAILURE)
@@ -208,6 +208,8 @@ run_async_server (task_t *task, config_t *config)
   mt_context_t *mt_ctx = (mt_context_t *)&context;
 
   brute (task, config, queue_push_wrapper, mt_ctx);
+
+  print_error("[server] After brute\n");
 
   if (wait_password (mt_ctx) == S_FAILURE)
     goto fail;
