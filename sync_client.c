@@ -111,6 +111,8 @@ run_client (config_t *config, task_callback_t task_callback)
                            task_callback)
               == S_FAILURE)
             goto end;
+          if (task.task.is_correct)
+            goto end;
           break;
         }
     }
