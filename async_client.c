@@ -72,12 +72,12 @@ task_receiver (void *arg)
               goto end;
             }
           print_error (
-              "[receiver] Received hash %s at %p, ctx->config->hash is %p\n",
+              "[acl receiver] Received hash %s at %p, ctx->config->hash is %p\n",
               hash, hash, ctx->config->hash);
           ctx->config->hash = hash;
           break;
         case CMD_EXIT:
-          print_error ("[receiver] Received exit\n");
+          print_error ("[acl receiver] Received exit\n");
           goto end;
         case CMD_TASK:
           if (recv_wrapper (ctx->socket_fd, &task, sizeof (task_t), 0)
@@ -86,19 +86,23 @@ task_receiver (void *arg)
               print_error ("Could not receive task from server\n");
               goto end;
             }
-          print_error ("[receiver] Received task\n");
+          print_error ("[acl receiver] Received task\n");
           queue_push (&ctx->task_queue, &task);
-          print_error ("[receiver] Pushed task to queue\n");
+          print_error ("[acl receiver] Pushed task to queue\n");
           break;
         }
     }
 
 end:
+  print_error("[acl receiver] end mark\n");
   ctx->done = true;
   pthread_cond_signal (&ctx->cond_sem);
 
+  print_error("[acl receiver] after signal\n");
+
   shutdown (ctx->socket_fd, SHUT_RDWR);
   close (ctx->socket_fd);
+  print_error("[acl receiver] after shutdown & close\n");
   return (NULL);
 }
 
@@ -111,9 +115,9 @@ result_sender (void *arg)
   while (true)
     {
       queue_pop (&ctx->result_queue, &task);
-      print_error ("[sender] After result_queue pop\n");
+      print_error ("[acl sender] After result_queue pop\n");
       send_wrapper (ctx->socket_fd, &task, sizeof (task), 0);
-      print_error ("[sender] After task send\n");
+      print_error ("[acl sender] After task send\n");
     }
 
   return (NULL);
@@ -153,12 +157,12 @@ run_async_client (config_t *config)
   async_client_context_t *ctx_ptr = &ctx;
 
   thread_create (&ctx.thread_pool, task_receiver, &ctx_ptr, sizeof (ctx_ptr));
-  print_error ("[main] Created receiver thread\n");
+  print_error ("[async client] Created receiver thread\n");
   thread_create (&ctx.thread_pool, result_sender, &ctx_ptr, sizeof (ctx_ptr));
-  print_error ("[main] Created sender thread\n");
+  print_error ("[async client] Created sender thread\n");
   create_threads (&ctx.thread_pool, config->number_of_threads, client_worker,
                   &ctx_ptr, sizeof (ctx_ptr));
-  print_error ("[main] Created worker threads\n");
+  print_error ("[async client] Created worker threads\n");
 
   if (pthread_mutex_lock (&ctx.mutex) != 0)
     {
@@ -175,6 +179,8 @@ run_async_client (config_t *config)
       }
 
   pthread_cleanup_pop (!0);
+
+  print_error("[async client] After wait\n");
 
   thread_pool_cancel (&ctx.thread_pool);
 
