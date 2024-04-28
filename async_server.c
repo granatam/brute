@@ -80,7 +80,10 @@ result_receiver (void *arg)
         return (NULL);
 
       if (mt_ctx->password[0] != 0)
+      {
         print_error ("[server receiver] After signal\n");
+        return (NULL);
+      }
     }
 
   return (NULL);
