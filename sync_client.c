@@ -44,7 +44,8 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
       print_error ("Could not send result to server\n");
       return (S_FAILURE);
     }
-  print_error ("[sync client] Sent result\n");
+  print_error ("[sync client] Sent result %s with is_correct %d\n",
+               task_result.password, task_result.is_correct);
 
   return (S_SUCCESS);
 }
@@ -111,8 +112,6 @@ run_client (config_t *config, task_callback_t task_callback)
                            task_callback)
               == S_FAILURE)
             goto end;
-          // if (task.task.is_correct)
-          //   goto end;
           break;
         }
     }
