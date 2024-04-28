@@ -31,7 +31,7 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
       print_error ("Could not receive task from server\n");
       return (S_FAILURE);
     }
-  print_error ("Received task\n");
+  print_error ("[sync client] Received task\n");
 
   if (task_callback != NULL)
     if (task_callback (task, config, ctx) == S_FAILURE)
@@ -44,7 +44,7 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
       print_error ("Could not send result to server\n");
       return (S_FAILURE);
     }
-  print_error ("Sent result\n");
+  print_error ("[sync client] Sent result\n");
 
   return (S_SUCCESS);
 }
@@ -116,6 +116,8 @@ run_client (config_t *config, task_callback_t task_callback)
     }
 
 end:
+  print_error("[sync client] end mark");
+
   shutdown (socket_fd, SHUT_RDWR);
   close (socket_fd);
   return (false);
