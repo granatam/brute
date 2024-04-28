@@ -118,7 +118,7 @@ run_client (config_t *config, task_callback_t task_callback)
     }
 
 end:
-  print_error ("[sync client] end mark");
+  print_error ("[sync client] end mark\n");
 
   shutdown (socket_fd, SHUT_RDWR);
   close (socket_fd);

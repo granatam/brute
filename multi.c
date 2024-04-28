@@ -170,6 +170,8 @@ wait_password (mt_context_t *ctx)
         return (S_FAILURE);
       }
 
+  print_error ("After wait first\n");
+
   pthread_cleanup_pop (!0);
 
   return (S_SUCCESS);
