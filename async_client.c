@@ -100,9 +100,6 @@ end:
 
   print_error("[acl receiver] after signal\n");
 
-  shutdown (ctx->socket_fd, SHUT_RDWR);
-  close (ctx->socket_fd);
-  print_error("[acl receiver] after shutdown & close\n");
   return (NULL);
 }
 
@@ -183,6 +180,8 @@ run_async_client (config_t *config)
   print_error("[async client] After wait\n");
 
   thread_pool_cancel (&ctx.thread_pool);
+
+  print_error ("[async client] After thread pool cancel\n");
 
   shutdown (ctx.socket_fd, SHUT_RDWR);
   close (ctx.socket_fd);
