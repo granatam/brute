@@ -78,6 +78,9 @@ result_receiver (void *arg)
 
       if (serv_signal_if_found (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
         return (NULL);
+
+      if (mt_ctx->password[0] != 0)
+        print_error ("[server receiver] After signal\n");
     }
 
   return (NULL);
