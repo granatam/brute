@@ -160,7 +160,8 @@ serv_signal_if_found (int socket_fd, mt_context_t *ctx)
 
   if (--ctx->passwords_remaining == 0 || ctx->password[0] != 0)
     {
-      print_error("[server signal] Should signal");
+      print_error ("[server signal] Should signal on %p %p\n", &ctx->cond_sem,
+                   &ctx->mutex);
       close_client (socket_fd);
 
       if (pthread_cond_signal (&ctx->cond_sem) != 0)

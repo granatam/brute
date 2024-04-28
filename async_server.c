@@ -209,12 +209,12 @@ run_async_server (task_t *task, config_t *config)
 
   brute (task, config, queue_push_wrapper, mt_ctx);
 
-  print_error("[server] After brute\n");
+  print_error ("[server] After brute\n");
 
   if (wait_password (mt_ctx) == S_FAILURE)
     goto fail;
 
-  print_error("[server] After wait\n");
+  print_error ("[server] After wait\n");
 
   if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
     {

@@ -162,6 +162,7 @@ wait_password (mt_context_t *ctx)
     }
   pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
 
+  print_error ("[wait password] %p %p\n", &ctx->cond_sem, &ctx->mutex);
   while (ctx->passwords_remaining != 0 && ctx->password[0] == 0)
     if (pthread_cond_wait (&ctx->cond_sem, &ctx->mutex) != 0)
       {
