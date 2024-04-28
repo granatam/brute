@@ -109,6 +109,7 @@ task_sender (void *arg)
       print_error ("[server sender] After task queue pop\n");
 
       task->task.id = id;
+      task->task.is_correct = false;
       task->to = task->from;
       task->from = 0;
 
