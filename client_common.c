@@ -1,11 +1,7 @@
 #include "client_common.h"
 
-#include "brute.h"
-#include "thread_pool.h"
-
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
 

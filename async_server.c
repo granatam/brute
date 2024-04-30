@@ -10,7 +10,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
 #include <unistd.h>
 
 static acl_context_t *
@@ -41,12 +40,25 @@ acl_context_init (acl_context_t *global_ctx)
   return ctx;
 }
 
+static void
+thread_cleanup_helper (void *arg)
+{
+  acl_context_t *ctx = arg;
+
+  if (--ctx->ref_count == 0)
+    {
+      print_error ("freed acl_context\n");
+      free (ctx);
+    }
+}
+
 static void *
 result_receiver (void *arg)
 {
   acl_context_t *cl_ctx = *(acl_context_t **)arg;
   mt_context_t *mt_ctx = &cl_ctx->context->context;
 
+  pthread_cleanup_push (thread_cleanup_helper, cl_ctx);
   while (true)
     {
       result_t task;
@@ -85,6 +97,7 @@ result_receiver (void *arg)
           return (NULL);
         }
     }
+  pthread_cleanup_pop (!0);
 
   return (NULL);
 }
@@ -95,6 +108,7 @@ task_sender (void *arg)
   acl_context_t *cl_ctx = *(acl_context_t **)arg;
   mt_context_t *mt_ctx = &cl_ctx->context->context;
 
+  pthread_cleanup_push (thread_cleanup_helper, cl_ctx);
   if (send_config_data (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
     return (NULL);
 
@@ -138,6 +152,7 @@ task_sender (void *arg)
         }
       print_error ("[server sender] Sent task\n");
     }
+  pthread_cleanup_pop (!0);
 
   return (NULL);
 }
