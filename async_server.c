@@ -66,15 +66,29 @@ cleanup:
 }
 
 static void
+return_tasks (acl_context_t *ctx)
+{
+}
+
+static void
 thread_cleanup_helper (void *arg)
 {
   acl_context_t *ctx = arg;
+
+  if (pthread_mutex_lock(&ctx->mutex) != 0)
+  {
+    print_error ("Could not lock mutex\n");
+    return;
+  }
 
   if (--ctx->ref_count == 0)
     {
       print_error ("freed acl_context\n");
       acl_context_destroy (ctx);
     }
+
+  if (pthread_mutex_unlock(&ctx->mutex) != 0)
+    print_error ("Could not unlock mutex\n");
 }
 
 static void *
