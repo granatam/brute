@@ -41,6 +41,31 @@ acl_context_init (acl_context_t *global_ctx)
 }
 
 static void
+acl_context_destroy (acl_context_t *ctx)
+{
+  if (queue_cancel (&ctx->registry_idx) != QS_SUCCESS)
+    {
+      print_error ("Could not cancel registry indices queue\n");
+      goto cleanup;
+    }
+
+  if (queue_destroy (&ctx->registry_idx) != QS_SUCCESS)
+    {
+      print_error ("Could not destroy registry indices queue\n");
+      goto cleanup;
+    }
+
+  if (pthread_mutex_destroy (&ctx->mutex) != 0)
+    {
+      print_error ("Could not destroy mutex\n");
+      goto cleanup;
+    }
+
+cleanup:
+  free (ctx);
+}
+
+static void
 thread_cleanup_helper (void *arg)
 {
   acl_context_t *ctx = arg;
@@ -48,7 +73,7 @@ thread_cleanup_helper (void *arg)
   if (--ctx->ref_count == 0)
     {
       print_error ("freed acl_context\n");
-      free (ctx);
+      acl_context_destroy (ctx);
     }
 }
 
@@ -185,8 +210,8 @@ handle_clients (void *arg)
           == S_FAILURE)
         {
           print_error ("Could not create task sender thread\n");
-
-          close_client (cl_ctx.socket_fd);
+          close_client (ctx_copy->socket_fd);
+          acl_context_destroy (ctx_copy);
           continue;
         }
 
@@ -195,8 +220,8 @@ handle_clients (void *arg)
           == S_FAILURE)
         {
           print_error ("Could not create result receiver thread\n");
-
-          close_client (cl_ctx.socket_fd);
+          close_client (ctx_copy->socket_fd);
+          acl_context_destroy (ctx_copy);
           continue;
         }
     }
