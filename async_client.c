@@ -213,11 +213,6 @@ run_async_client (config_t *config)
 
   print_error ("[async client] After wait\n");
 
-  if (thread_pool_cancel (&ctx.thread_pool) == S_FAILURE)
-    {
-      print_error ("Could not cancel thread pool\n");
-      return (false);
-    }
   if (queue_cancel (&ctx.task_queue) != QS_SUCCESS)
     {
       print_error ("Could not cancel task queue\n");
@@ -226,6 +221,11 @@ run_async_client (config_t *config)
   if (queue_cancel (&ctx.result_queue) != QS_SUCCESS)
     {
       print_error ("Could not cancel result queue\n");
+      return (false);
+    }
+  if (thread_pool_cancel (&ctx.thread_pool) == S_FAILURE)
+    {
+      print_error ("Could not cancel thread pool\n");
       return (false);
     }
 
