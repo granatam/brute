@@ -75,11 +75,11 @@ thread_cleanup_helper (void *arg)
 {
   acl_context_t *ctx = arg;
 
-  if (pthread_mutex_lock(&ctx->mutex) != 0)
-  {
-    print_error ("Could not lock mutex\n");
-    return;
-  }
+  if (pthread_mutex_lock (&ctx->mutex) != 0)
+    {
+      print_error ("Could not lock mutex\n");
+      return;
+    }
 
   if (--ctx->ref_count == 0)
     {
@@ -87,7 +87,7 @@ thread_cleanup_helper (void *arg)
       acl_context_destroy (ctx);
     }
 
-  if (pthread_mutex_unlock(&ctx->mutex) != 0)
+  if (pthread_mutex_unlock (&ctx->mutex) != 0)
     print_error ("Could not unlock mutex\n");
 }
 

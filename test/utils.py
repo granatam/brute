@@ -120,7 +120,7 @@ def capture_client_server_log(
 
         f.flush()
         if result != f"Password found: {passwd}\n":
-            sys.stderr.write("Test failed. Captured stderr for this test:\n")
+            sys.stderr.write(f"Test failed. Output is {result}. Captured stderr for this test:\n")
             with open(f.name, "rb") as output:
                 for line in output:
                     sys.stderr.write(line.decode())
