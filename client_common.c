@@ -21,8 +21,6 @@ handle_alph (int socket_fd, config_t *config, char *alph)
       return (S_FAILURE);
     }
 
-  config->alph = alph;
-
   return (S_SUCCESS);
 }
 

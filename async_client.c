@@ -28,9 +28,8 @@ client_worker (void *arg)
       if (queue_pop (&ctx->task_queue, &task) != QS_SUCCESS)
         return (NULL);
       print_error ("[worker] After task_queue pop\n");
-      bool is_found
+      task.task.is_correct
           = brute (&task, ctx->config, st_password_check, &st_context);
-      task.task.is_correct = is_found;
 
       if (queue_push (&ctx->result_queue, &task.task) != QS_SUCCESS)
         return (NULL);
@@ -43,9 +42,6 @@ static void *
 task_receiver (void *arg)
 {
   async_client_context_t *ctx = *(async_client_context_t **)arg;
-
-  char hash[HASH_LENGTH];
-  char alph[MAX_ALPH_LENGTH];
 
   task_t task;
   while (true)
@@ -60,7 +56,8 @@ task_receiver (void *arg)
       switch (cmd)
         {
         case CMD_ALPH:
-          if (handle_alph (ctx->socket_fd, ctx->config, alph) == S_FAILURE)
+          if (handle_alph (ctx->socket_fd, ctx->config, ctx->alph)
+              == S_FAILURE)
             {
               print_error ("Could not handle alphabet\n");
               goto end;
@@ -68,15 +65,14 @@ task_receiver (void *arg)
           print_error ("[receiver] Received alph\n");
           break;
         case CMD_HASH:
-          if (handle_hash (ctx->socket_fd, hash) == S_FAILURE)
+          if (handle_hash (ctx->socket_fd, ctx->hash) == S_FAILURE)
             {
               print_error ("Could not handle hash\n");
               goto end;
             }
           print_error ("[acl receiver] Received hash %s at %p, "
                        "ctx->config->hash is %p\n",
-                       hash, hash, ctx->config->hash);
-          ctx->config->hash = hash;
+                       ctx->hash, ctx->hash, ctx->config->hash);
           break;
         case CMD_EXIT:
           print_error ("[acl receiver] Received exit\n");
@@ -116,14 +112,15 @@ result_sender (void *arg)
 {
   async_client_context_t *ctx = *(async_client_context_t **)arg;
 
-  result_t task;
+  result_t result;
   while (true)
     {
-      if (queue_pop (&ctx->result_queue, &task) != QS_SUCCESS)
+      if (queue_pop (&ctx->result_queue, &result) != QS_SUCCESS)
         return (NULL);
       print_error ("[acl sender] After result_queue pop\n");
 
-      if (send_wrapper (ctx->socket_fd, &task, sizeof (task), 0) == S_FAILURE)
+      if (send_wrapper (ctx->socket_fd, &result, sizeof (result), 0)
+          == S_FAILURE)
         {
           print_error ("Could not send result to server\n");
           return (NULL);
@@ -138,6 +135,7 @@ bool
 run_async_client (config_t *config)
 {
   async_client_context_t ctx;
+  memset (&ctx, 0, sizeof (ctx));
 
   if (thread_pool_init (&ctx.thread_pool) == S_FAILURE)
     {
@@ -166,6 +164,8 @@ run_async_client (config_t *config)
     }
   ctx.config = config;
   ctx.done = false;
+  ctx.config->hash = ctx.hash;
+  ctx.config->alph = ctx.alph;
 
   ctx.socket_fd = socket (AF_INET, SOCK_STREAM, 0);
   if (ctx.socket_fd == -1)
@@ -216,6 +216,16 @@ run_async_client (config_t *config)
   if (thread_pool_cancel (&ctx.thread_pool) == S_FAILURE)
     {
       print_error ("Could not cancel thread pool\n");
+      return (false);
+    }
+  if (queue_cancel (&ctx.task_queue) != QS_SUCCESS)
+    {
+      print_error ("Could not cancel task queue\n");
+      return (false);
+    }
+  if (queue_cancel (&ctx.result_queue) != QS_SUCCESS)
+    {
+      print_error ("Could not cancel result queue\n");
       return (false);
     }
 

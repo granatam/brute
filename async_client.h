@@ -19,6 +19,8 @@ typedef struct async_client_context_t
   config_t *config;
   bool done;
   pthread_cond_t cond_sem;
+  char hash[HASH_LENGTH];
+  char alph[MAX_ALPH_LENGTH];
 } async_client_context_t;
 
 bool run_async_client (config_t *);
