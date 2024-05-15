@@ -91,6 +91,9 @@ task_receiver (void *arg)
           print_error ("[acl receiver] Pushed task to queue\n");
 
           break;
+        default:
+          print_error ("Unknown command\n");
+          break;
         }
     }
 
