@@ -155,21 +155,24 @@ def capture_client_server_log(
         second_client_log.flush()
 
     if result != f"Password found: {passwd}\n":
-        sys.stderr.write(
-            f"Test failed. Output is {result}. Captured server log:\n"
-        )
+        sys.stderr.write(f"Test failed. Output is {result}.\n")
+        
+        sys.stderr.write(f"Captured server log:\n")
         with open(server_log.name, "r") as output:
             sys.stderr.write(output.read())
         sys.stderr.write("End of captured server log.\n")
+        sys.stderr.write(f"{'-' * 30}\n")
 
         sys.stderr.write("Captured client log:\n")
         with open(first_client_log.name, "r") as output:
             sys.stderr.write(output.read())
         sys.stderr.write("End of captured client log.\n")
+        sys.stderr.write(f"{'-' * 30}\n")
 
         if num_of_clients > 1:
             sys.stderr.write("Captured second client log:\n")
             with open(second_client_log.name, "r") as output:
                 sys.stderr.write(output.read())
+            sys.stderr.write("End of captured second client log.\n")
 
     assert f"Password found: {passwd}\n" == result
