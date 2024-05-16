@@ -32,7 +32,7 @@ def test_sync_client_sync_server(passwd, brute_mode):
 def test_two_sync_clients_sync_server(passwd, brute_mode):
     alph = shuffle_password(passwd)
     capture_client_server_log(
-        passwd, alph, brute_mode, "c", "S", run_two_clients_server
+        passwd, alph, brute_mode, "c", "S", run_two_clients_server, 2
     )
 
 
@@ -58,7 +58,7 @@ def test_sync_client_async_server(passwd, brute_mode):
 def test_two_sync_clients_async_server(passwd, brute_mode):
     alph = shuffle_password(passwd)
     capture_client_server_log(
-        passwd, alph, brute_mode, "c", "w", run_two_clients_server
+        passwd, alph, brute_mode, "c", "w", run_two_clients_server, 2
     )
 
 
@@ -84,7 +84,7 @@ def test_async_client_async_server(passwd, brute_mode):
 def test_two_async_clients_async_server(passwd, brute_mode):
     alph = shuffle_password(passwd)
     capture_client_server_log(
-        passwd, alph, brute_mode, "v", "w", run_two_clients_server
+        passwd, alph, brute_mode, "v", "w", run_two_clients_server, 2
     )
 
 
@@ -110,5 +110,5 @@ def test_async_client_sync_server(passwd, brute_mode):
 def test_two_async_clients_sync_server(passwd, brute_mode):
     alph = shuffle_password(passwd)
     capture_client_server_log(
-        passwd, alph, brute_mode, "v", "S", run_two_clients_server
+        passwd, alph, brute_mode, "v", "S", run_two_clients_server, 2
     )

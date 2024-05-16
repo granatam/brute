@@ -21,15 +21,24 @@
 __attribute__ ((format (printf, 3, 4))) status_t
 print_error_impl (const char *func_name, int line, const char *msg, ...)
 {
+  static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+  if (pthread_mutex_lock (&mutex) != 0)
+    return (S_FAILURE);
+  
   fprintf (stderr, "(%s %d) ", func_name, line);
 
   va_list args;
   va_start (args, msg);
 
-  if (vfprintf (stderr, msg, args) != 0)
+  int vfprintf_result = vfprintf(stderr, msg, args);
+  va_end(args);
+
+  if (pthread_mutex_unlock(&mutex) != 0)
     return (S_FAILURE);
 
-  va_end (args);
+  if (vfprintf_result < 0)
+    return (S_FAILURE);
 
   return (S_SUCCESS);
 }

@@ -52,17 +52,21 @@ def run_valgrind(passwd, alph, run_mode, brute_mode):
     )
 
 
-def run_client_server(passwd, alph, brute_mode, client_flag, server_flag, file):
+def run_client_server_process(cmd, log_file):
+    return subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=log_file, shell=True
+    )
+
+
+def run_client_server(
+    passwd, alph, brute_mode, client_flag, server_flag, client_log, server_log
+):
     client_cmd = brute_cmd(passwd, alph, client_flag, brute_mode)
     server_cmd = brute_cmd(passwd, alph, server_flag, brute_mode)
 
-    server_proc = subprocess.Popen(
-        server_cmd, stdout=subprocess.PIPE, stderr=file, shell=True
-    )
+    server_proc = run_client_server_process(server_cmd, server_log)
     time.sleep(0.05)
-    client_proc = subprocess.Popen(
-        client_cmd, stdout=subprocess.PIPE, stderr=file, shell=True
-    )
+    client_proc = run_client_server_process(client_cmd, client_log)
     try:
         client_proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
@@ -79,21 +83,24 @@ def run_client_server(passwd, alph, brute_mode, client_flag, server_flag, file):
 
 
 def run_two_clients_server(
-    passwd, alph, brute_mode, client_flag, server_flag, file
+    passwd,
+    alph,
+    brute_mode,
+    client_flag,
+    server_flag,
+    first_client_log,
+    second_client_log,
+    server_log,
 ):
     client_cmd = brute_cmd(passwd, alph, client_flag, brute_mode)
     server_cmd = brute_cmd(passwd, alph, server_flag, brute_mode)
 
-    server_proc = subprocess.Popen(
-        server_cmd, stdout=subprocess.PIPE, stderr=file, shell=True
-    )
+    server_proc = run_client_server_process(server_cmd, server_log)
     time.sleep(0.05)
-    first_client_proc = subprocess.Popen(
-        client_cmd, stdout=subprocess.PIPE, stderr=file, shell=True
-    )
+    first_client_proc = run_client_server_process(client_cmd, first_client_log)
     time.sleep(0.05)
-    second_client_proc = subprocess.Popen(
-        client_cmd, stdout=subprocess.PIPE, stderr=file, shell=True
+    second_client_proc = run_client_server_process(
+        client_cmd, second_client_log
     )
     try:
         first_client_proc.wait(timeout=5)
@@ -113,17 +120,56 @@ def run_two_clients_server(
 
 
 def capture_client_server_log(
-    passwd, alph, brute_mode, client_flag, server_flag, func
+    passwd, alph, brute_mode, client_flag, server_flag, func, num_of_clients=1
 ):
-    with tempfile.NamedTemporaryFile() as f:
-        result = func(passwd, alph, brute_mode, client_flag, server_flag, f)
+    first_client_log = tempfile.NamedTemporaryFile()
+    server_log = tempfile.NamedTemporaryFile()
+    if num_of_clients > 1:
+        second_client_log = tempfile.NamedTemporaryFile()
 
-        f.flush()
-        if result != f"Password found: {passwd}\n":
-            sys.stderr.write(f"Test failed. Output is {result}. Captured stderr for this test:\n")
-            with open(f.name, "rb") as output:
-                for line in output:
-                    sys.stderr.write(line.decode())
-            sys.stderr.write("End of captured stderr.\n")
+    if num_of_clients == 1:
+        result = func(
+            passwd,
+            alph,
+            brute_mode,
+            client_flag,
+            server_flag,
+            first_client_log,
+            server_log,
+        )
+    else:
+        result = func(
+            passwd,
+            alph,
+            brute_mode,
+            client_flag,
+            server_flag,
+            first_client_log,
+            second_client_log,
+            server_log,
+        )
 
-        assert f"Password found: {passwd}\n" == result
+    first_client_log.flush()
+    server_log.flush()
+    if num_of_clients > 1:
+        second_client_log.flush()
+
+    if result != f"Password found: {passwd}\n":
+        sys.stderr.write(
+            f"Test failed. Output is {result}. Captured server log:\n"
+        )
+        with open(server_log.name, "r") as output:
+            sys.stderr.write(output.read())
+        sys.stderr.write("End of captured server log.\n")
+
+        sys.stderr.write("Captured client log:\n")
+        with open(first_client_log.name, "r") as output:
+            sys.stderr.write(output.read())
+        sys.stderr.write("End of captured client log.\n")
+
+        if num_of_clients > 1:
+            sys.stderr.write("Captured second client log:\n")
+            with open(second_client_log.name, "r") as output:
+                sys.stderr.write(output.read())
+
+    assert f"Password found: {passwd}\n" == result
