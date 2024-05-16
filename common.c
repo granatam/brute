@@ -25,16 +25,16 @@ print_error_impl (const char *func_name, int line, const char *msg, ...)
 
   if (pthread_mutex_lock (&mutex) != 0)
     return (S_FAILURE);
-  
+
   fprintf (stderr, "(%s %d) ", func_name, line);
 
   va_list args;
   va_start (args, msg);
 
-  int vfprintf_result = vfprintf(stderr, msg, args);
-  va_end(args);
+  int vfprintf_result = vfprintf (stderr, msg, args);
+  va_end (args);
 
-  if (pthread_mutex_unlock(&mutex) != 0)
+  if (pthread_mutex_unlock (&mutex) != 0)
     return (S_FAILURE);
 
   if (vfprintf_result < 0)
