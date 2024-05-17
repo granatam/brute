@@ -105,8 +105,6 @@ run_client (config_t *config, task_callback_t task_callback)
             }
           st_context.hash = hash;
           break;
-        case CMD_EXIT:
-          goto end;
         case CMD_TASK:
           if (handle_task (socket_fd, &task, config, &st_context,
                            task_callback)

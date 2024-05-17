@@ -74,9 +74,6 @@ task_receiver (void *arg)
                        "ctx->config->hash is %p\n",
                        ctx->hash, ctx->hash, ctx->config->hash);
           break;
-        case CMD_EXIT:
-          print_error ("[acl receiver] Received exit\n");
-          goto end;
         case CMD_TASK:
           if (recv_wrapper (ctx->socket_fd, &task, sizeof (task_t), 0)
               == S_FAILURE)

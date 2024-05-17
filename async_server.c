@@ -4,6 +4,7 @@
 #include "common.h"
 #include "multi.h"
 
+#include <errno.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <pthread.h>
@@ -210,7 +211,7 @@ handle_clients (void *arg)
     {
       if ((cl_ctx.socket_fd = accept (serv_ctx->socket_fd, NULL, NULL)) == -1)
         {
-          print_error ("Could not accept new connection\n");
+          print_error ("Could not accept new connection: %s\n", strerror(errno));
           continue;
         }
 

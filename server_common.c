@@ -75,14 +75,6 @@ serv_context_destroy (serv_context_t *context)
 status_t
 close_client (int socket_fd)
 {
-  command_t cmd = CMD_EXIT;
-  if (send_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
-    {
-      print_error ("Could not send CMD_EXIT to client\n");
-      return (S_FAILURE);
-    }
-  print_error ("[close client] Sent CMD_EXIT\n");
-
   shutdown (socket_fd, SHUT_RDWR);
   close (socket_fd);
   print_error ("[close client] Closed connection\n");
