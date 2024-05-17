@@ -12,7 +12,10 @@
   (__extension__ ({                                                           \
     long int __result;                                                        \
     do                                                                        \
-      __result = (long int)(expression);                                      \
+      {                                                                       \
+        errno = 0;                                                            \
+        __result = (long int)(expression);                                    \
+      }                                                                       \
     while (__result == -1L && errno == EINTR);                                \
     __result;                                                                 \
   }))
