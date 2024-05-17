@@ -156,7 +156,7 @@ serv_signal_if_found (int socket_fd, mt_context_t *ctx)
     {
       print_error ("[server signal] Should signal on %p %p\n", &ctx->cond_sem,
                    &ctx->mutex);
-      close_client (socket_fd);
+      // close_client (socket_fd);
       print_error ("[server signal] After close\n");
 
       if (pthread_cond_signal (&ctx->cond_sem) != 0)
