@@ -3,6 +3,7 @@
 #include "brute.h"
 #include "common.h"
 #include "multi.h"
+#include "server_common.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -63,6 +64,7 @@ acl_context_destroy (acl_context_t *ctx)
     }
 
 cleanup:
+  close_client (ctx->socket_fd);
   free (ctx);
 }
 
@@ -98,7 +100,6 @@ result_receiver (void *arg)
   acl_context_t *cl_ctx = *(acl_context_t **)arg;
   mt_context_t *mt_ctx = &cl_ctx->context->context;
 
-  pthread_cleanup_push (thread_cleanup_helper, cl_ctx);
   while (true)
     {
       result_t task;
@@ -106,7 +107,7 @@ result_receiver (void *arg)
           == S_FAILURE)
         {
           print_error ("Could not receive result from client\n");
-          return (NULL);
+          break;
         }
       print_error ("[server receiver] Received result\n");
 
@@ -115,7 +116,7 @@ result_receiver (void *arg)
           if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
             {
               print_error ("Could not cancel a queue\n");
-              return (NULL);
+              break;
             }
           memcpy (mt_ctx->password, task.password, sizeof (task.password));
           print_error ("[server receiver] Received correct result %s\n",
@@ -125,19 +126,20 @@ result_receiver (void *arg)
       if (queue_push (&cl_ctx->registry_idx, &task.id) != QS_SUCCESS)
         {
           print_error ("Could not return id to a queue\n");
-          return (NULL);
+          break;
         }
 
       if (serv_signal_if_found (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
-        return (NULL);
+        break;
 
       if (mt_ctx->password[0] != 0)
         {
           print_error ("[server receiver] After signal\n");
-          return (NULL);
+          break;
         }
     }
-  pthread_cleanup_pop (!0);
+
+  thread_cleanup_helper (cl_ctx);
 
   return (NULL);
 }
@@ -148,21 +150,20 @@ task_sender (void *arg)
   acl_context_t *cl_ctx = *(acl_context_t **)arg;
   mt_context_t *mt_ctx = &cl_ctx->context->context;
 
-  pthread_cleanup_push (thread_cleanup_helper, cl_ctx);
   if (send_config_data (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
-    return (NULL);
+    goto cleanup;
 
   while (true)
     {
       size_t id;
       if (queue_pop (&cl_ctx->registry_idx, &id) != QS_SUCCESS)
-        return (NULL);
+        break;
       print_error ("[server sender] After registry_idx pop\n");
 
       task_t *task = &cl_ctx->registry[id];
 
       if (queue_pop (&mt_ctx->queue, task) != QS_SUCCESS)
-        return (NULL);
+        break;
       print_error ("[server sender] After task queue pop\n");
 
       task->task.id = id;
@@ -176,8 +177,7 @@ task_sender (void *arg)
           print_error ("Could not send CMD_TASK to client\n");
           // TODO: status check
           queue_push (&cl_ctx->registry_idx, &id);
-
-          return (NULL);
+          break;
         }
       print_error ("[server sender] Sent CMD_TASK\n");
 
@@ -187,12 +187,13 @@ task_sender (void *arg)
           print_error ("Could not send task to client\n");
           // TODO: status check
           queue_push (&cl_ctx->registry_idx, &id);
-
-          return (NULL);
+          break;
         }
       print_error ("[server sender] Sent task\n");
     }
-  pthread_cleanup_pop (!0);
+
+cleanup:
+  thread_cleanup_helper (cl_ctx);
 
   return (NULL);
 }
