@@ -286,15 +286,21 @@ run_async_server (task_t *task, config_t *config)
       goto fail;
     }
 
+  print_error ("Cancelled queue\n");
+
   if (mt_ctx->password[0] != 0)
     memcpy (task->task.password, mt_ctx->password, sizeof (mt_ctx->password));
 
   if (serv_context_destroy (&context) == S_FAILURE)
     print_error ("Could not destroy server context\n");
 
+  print_error ("Destroyed context\n");
+
   return (mt_ctx->password[0] != 0);
 
 fail:
+  print_error ("Fail mark\n");
+
   if (serv_context_destroy (&context) == S_FAILURE)
     print_error ("Could not destroy server context\n");
 
