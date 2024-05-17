@@ -226,7 +226,7 @@ run_async_client (config_t *config)
       print_error ("Could not cancel result queue\n");
       return (false);
     }
-  if (thread_pool_cancel (&ctx.thread_pool) == S_FAILURE)
+  if (thread_pool_join (&ctx.thread_pool) == S_FAILURE)
     {
       print_error ("Could not cancel thread pool\n");
       return (false);
