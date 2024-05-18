@@ -13,6 +13,7 @@ typedef struct acl_context_t
   serv_context_t *context;
   task_t registry[QUEUE_SIZE];
   queue_t registry_idx;
+  bool registry_used[QUEUE_SIZE]; /* TODO */
   int socket_fd;
   unsigned char ref_count;
   pthread_mutex_t mutex;

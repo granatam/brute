@@ -1,6 +1,7 @@
 #include "multi.h"
 
 #include "brute.h"
+#include "common.h"
 #include "log.h"
 #include "queue.h"
 #include "single.h"
@@ -82,18 +83,19 @@ signal_if_found (mt_context_t *ctx)
       error ("Could not lock a mutex\n");
       return (S_FAILURE);
     }
+  status_t status = S_SUCCESS;
   pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
 
   if (--ctx->passwords_remaining == 0 || ctx->password[0] != 0)
     if (pthread_cond_signal (&ctx->cond_sem) != 0)
       {
         error ("Could not signal a condition\n");
-        return (S_FAILURE);
+        status = S_FAILURE;
       }
 
   pthread_cleanup_pop (!0);
 
-  return (S_SUCCESS);
+  return (status);
 }
 
 void *
@@ -162,6 +164,7 @@ wait_password (mt_context_t *ctx)
       error ("Could not lock a mutex\n");
       return (S_FAILURE);
     }
+  status_t status = S_SUCCESS;
   pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
 
   error ("[wait password] %p %p\n", &ctx->cond_sem, &ctx->mutex);
@@ -169,14 +172,14 @@ wait_password (mt_context_t *ctx)
     if (pthread_cond_wait (&ctx->cond_sem, &ctx->mutex) != 0)
       {
         error ("Could not wait on a condition\n");
-        return (S_FAILURE);
+        status = S_FAILURE;
       }
 
   error ("After wait first\n");
 
   pthread_cleanup_pop (!0);
 
-  return (S_SUCCESS);
+  return (status);
 }
 
 bool

@@ -4,6 +4,8 @@
 #include <pthread.h>
 #include <stdbool.h>
 
+#include <sys/uio.h>
+
 #define MAX_PASSWORD_LENGTH (7)
 #define MAX_ALPH_LENGTH (20)
 #define HASH_LENGTH (14)
@@ -47,6 +49,6 @@ typedef enum command_t
 void cleanup_mutex_unlock (void *mutex);
 
 status_t recv_wrapper (int socket_fd, void *buf, int len, int flags);
-status_t send_wrapper (int socket_fd, void *buf, int len, int flags);
+status_t send_wrapper (int socket_fd, struct iovec *vec, int iovcnt);
 
 #endif // COMMON_H

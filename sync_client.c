@@ -7,6 +7,7 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -39,7 +40,9 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
       return (S_FAILURE);
 
   result_t task_result = task->task;
-  if (send_wrapper (socket_fd, &task_result, sizeof (task_result), 0)
+  struct iovec vec[]
+      = { { .iov_base = &task_result, .iov_len = sizeof (task_result) } };
+  if (send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
       == S_FAILURE)
     {
       error ("Could not send result to server\n");
@@ -62,8 +65,7 @@ run_client (config_t *config, task_callback_t task_callback)
     }
 
   int option = 1;
-  setsockopt (socket_fd, SOL_SOCKET, SO_KEEPALIVE, &option,
-              sizeof (option));
+  setsockopt (socket_fd, SOL_SOCKET, SO_KEEPALIVE, &option, sizeof (option));
 
   struct sockaddr_in addr;
   addr.sin_family = AF_INET;
@@ -75,6 +77,8 @@ run_client (config_t *config, task_callback_t task_callback)
       error ("Could not connect to server\n");
       return (false);
     }
+
+  setsockopt (socket_fd, SOL_SOCKET, TCP_NODELAY, &option, sizeof (option));
 
   char hash[HASH_LENGTH];
   char alph[MAX_ALPH_LENGTH];

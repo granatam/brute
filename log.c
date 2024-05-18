@@ -30,7 +30,7 @@ message_impl (const char *file_name, const char *func_name, int line,
   int vfprintf_result;
   if (pthread_mutex_lock (&mutex) != 0)
     return (S_FAILURE);
-  pthread_cleanup_push(cleanup_mutex_unlock, &mutex);
+  pthread_cleanup_push (cleanup_mutex_unlock, &mutex);
 
   fprintf (stderr, "(%s %s %d) ", file_name, func_name, line);
 
@@ -40,9 +40,9 @@ message_impl (const char *file_name, const char *func_name, int line,
   vfprintf_result = vfprintf (stderr, msg, args);
   va_end (args);
 
-  fflush(stderr);
+  fflush (stderr);
 
-  pthread_cleanup_pop(!0);
+  pthread_cleanup_pop (!0);
 
   if (vfprintf_result < 0)
     return (S_FAILURE);

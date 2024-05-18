@@ -9,6 +9,7 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -120,7 +121,11 @@ result_sender (void *arg)
         return (NULL);
       error ("[acl sender] After result_queue pop\n");
 
-      if (send_wrapper (ctx->socket_fd, &result, sizeof (result), 0)
+      struct iovec vec[] = {
+        { .iov_base = &result, .iov_len = sizeof (result) },
+      };
+
+      if (send_wrapper (ctx->socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
           == S_FAILURE)
         {
           error ("Could not send result to server\n");
@@ -190,6 +195,9 @@ run_async_client (config_t *config)
       return (false);
     }
 
+  setsockopt (ctx.socket_fd, SOL_SOCKET, TCP_NODELAY, &option,
+              sizeof (option));
+
   async_client_context_t *ctx_ptr = &ctx;
 
   thread_create (&ctx.thread_pool, task_receiver, &ctx_ptr, sizeof (ctx_ptr));
@@ -205,16 +213,21 @@ run_async_client (config_t *config)
       error ("Could not lock a mutex\n");
       return (S_FAILURE);
     }
+  status_t status = S_SUCCESS;
   pthread_cleanup_push (cleanup_mutex_unlock, &ctx.mutex);
 
   while (!ctx.done)
     if (pthread_cond_wait (&ctx.cond_sem, &ctx.mutex) != 0)
       {
         error ("Could not wait on a condition\n");
-        return (S_FAILURE);
+        status = S_FAILURE;
+        break;
       }
 
   pthread_cleanup_pop (!0);
+
+  if (S_FAILURE == status)
+    return (S_FAILURE);
 
   error ("[async client] After wait\n");
 

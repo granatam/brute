@@ -106,12 +106,9 @@ thread_run (void *arg)
   pthread_cleanup_push (thread_cleanup, &tcc);
 
   if (pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL) != 0)
-    {
-      error ("Could not set cancel state for a thread\n");
-      return (NULL);
-    }
-
-  local_ctx.func (args);
+    error ("Could not set cancel state for a thread\n");
+  else
+    local_ctx.func (args);
 
   pthread_cleanup_pop (!0);
 
@@ -156,9 +153,12 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg,
       error ("Could not lock a mutex\n");
       return (S_FAILURE);
     }
-  pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
   ++thread_pool->count;
-  pthread_cleanup_pop (!0);
+  if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
+    {
+      error ("Could not unlock a mutex\n");
+      return (S_FAILURE);
+    }
 
   if (pthread_create (&thread, &attr, &thread_run, &context) != 0)
     {
@@ -171,12 +171,9 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg,
       pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
       --thread_pool->count;
-
       if (pthread_cond_signal (&thread_pool->cond) != 0)
-        {
-          error ("Could not signal a conditional semaphore\n");
-          return (S_FAILURE);
-        }
+        error ("Could not signal a conditional semaphore\n");
+
       pthread_cleanup_pop (!0);
 
       return (S_FAILURE);
@@ -225,23 +222,28 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
           error ("Could not lock a mutex\n");
           return (S_FAILURE);
         }
+      status_t status = S_SUCCESS;
       pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
       if (cancel)
         if (pthread_cancel (thread) != 0)
           {
             error ("Could not cancel a thread\n");
-            return (S_FAILURE);
+            status = S_FAILURE;
           }
 
       while (thread_pool->threads.next->thread == thread)
         if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
           {
             error ("Could not wait for a conditional semaphore\n");
-            return (S_FAILURE);
+            status = S_FAILURE;
+            break;
           }
 
       pthread_cleanup_pop (!0);
+
+      if (S_FAILURE == status)
+        return (S_FAILURE);
     }
 
   if (pthread_mutex_lock (&thread_pool->mutex) != 0)
@@ -249,15 +251,20 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
       error ("Could not lock a mutex\n");
       return (S_FAILURE);
     }
+  status_t status = S_SUCCESS;
   pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
   while (thread_pool->count != 0)
     if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
       {
         error ("Could not wait for a conditional semaphore\n");
-        return (S_FAILURE);
+        status = S_FAILURE;
+        break;
       }
   pthread_cleanup_pop (!0);
+
+  if (S_FAILURE == status)
+    return (S_FAILURE);
 
   /* Valgrind tests are returning false positive result, since it doesn't
    * wait until all memory allocated for threads is cleared, so we need to

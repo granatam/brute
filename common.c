@@ -5,6 +5,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <unistd.h>
 
 #ifndef TEMP_FAILURE_RETRY
@@ -30,7 +31,6 @@ recv_wrapper (int socket_fd, void *buf, int len, int flags)
   char *bytes = (char *)buf;
   while (len > 0)
     {
-      flags = MSG_NOSIGNAL;
       int bytes_read
           = TEMP_FAILURE_RETRY (recv (socket_fd, bytes, len, flags));
       if (bytes_read <= 0)
@@ -43,18 +43,26 @@ recv_wrapper (int socket_fd, void *buf, int len, int flags)
 }
 
 status_t
-send_wrapper (int socket_fd, void *buf, int len, int flags)
+send_wrapper (int socket_fd, struct iovec *vec, int iovcnt)
 {
-  char *bytes = (char *)buf;
-  while (len > 0)
+  while (iovcnt > 0)
     {
-      flags = MSG_NOSIGNAL;
-      int bytes_written
-          = TEMP_FAILURE_RETRY (send (socket_fd, bytes, len, flags));
+      int bytes_written = TEMP_FAILURE_RETRY (writev (socket_fd, vec, iovcnt));
       if (bytes_written <= 0)
         return (S_FAILURE);
-      len -= bytes_written;
-      bytes += bytes_written;
+
+      while (bytes_written >= vec[0].iov_len)
+        {
+          bytes_written -= vec[0].iov_len;
+          ++vec;
+          --iovcnt;
+        }
+      if ((iovcnt > 0) && (bytes_written > 0))
+        {
+          vec[0].iov_len -= bytes_written;
+          char *base = vec[0].iov_base;
+          vec[0].iov_base = base + bytes_written;
+        }
     }
 
   return (S_SUCCESS);

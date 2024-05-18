@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -173,16 +174,12 @@ task_sender (void *arg)
       task->from = 0;
 
       command_t cmd = CMD_TASK;
-      if (send_wrapper (cl_ctx->socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
-        {
-          error ("Could not send CMD_TASK to client\n");
-          // TODO: status check
-          queue_push (&cl_ctx->registry_idx, &id);
-          break;
-        }
-      error ("[server sender] Sent CMD_TASK\n");
+      struct iovec vec[] = {
+        { .iov_base = &cmd, .iov_len = sizeof (cmd) },
+        { .iov_base = task, .iov_len = sizeof (*task) },
+      };
 
-      if (send_wrapper (cl_ctx->socket_fd, task, sizeof (*task), 0)
+      if (send_wrapper (cl_ctx->socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
           == S_FAILURE)
         {
           error ("Could not send task to client\n");
@@ -216,6 +213,10 @@ handle_clients (void *arg)
           error ("Could not accept new connection: %s\n", strerror (errno));
           continue;
         }
+
+      int option = 1;
+      setsockopt (cl_ctx.socket_fd, SOL_SOCKET, TCP_NODELAY, &option,
+                  sizeof (option));
 
       acl_context_t *ctx_copy = acl_context_init (&cl_ctx);
       if (!ctx_copy)

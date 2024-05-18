@@ -87,13 +87,13 @@ status_t
 send_hash (int socket_fd, mt_context_t *mt_ctx)
 {
   command_t cmd = CMD_HASH;
-  if (send_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
-    {
-      error ("Could not send CMD_HASH to client\n");
-      return (S_FAILURE);
-    }
 
-  if (send_wrapper (socket_fd, mt_ctx->config->hash, HASH_LENGTH, 0)
+  struct iovec vec[] = {
+    { .iov_base = &cmd, .iov_len = sizeof (cmd) },
+    { .iov_base = mt_ctx->config->hash, .iov_len = HASH_LENGTH },
+  };
+
+  if (send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
       == S_FAILURE)
     {
       error ("Could not send hash to client\n");
@@ -107,20 +107,16 @@ status_t
 send_alph (int socket_fd, mt_context_t *mt_ctx)
 {
   command_t cmd = CMD_ALPH;
-  if (send_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
-    {
-      error ("Could not send CMD_ALPH to client\n");
-      return (S_FAILURE);
-    }
-
   int32_t length = strlen (mt_ctx->config->alph);
-  if (send_wrapper (socket_fd, &length, sizeof (length), 0) == S_FAILURE)
-    {
-      error ("Could not send alphabet length to client\n");
-      return (S_FAILURE);
-    }
 
-  if (send_wrapper (socket_fd, mt_ctx->config->alph, length, 0) == S_FAILURE)
+  struct iovec vec[] = {
+    { .iov_base = &cmd, .iov_len = sizeof (cmd) },
+    { .iov_base = &length, .iov_len = sizeof (length) },
+    { .iov_base = mt_ctx->config->alph, .iov_len = length },
+  };
+
+  if (send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
+      == S_FAILURE)
     {
       error ("Could not send alphabet to client\n");
       return (S_FAILURE);
@@ -151,6 +147,7 @@ serv_signal_if_found (int socket_fd, mt_context_t *ctx)
       error ("Could not lock a mutex\n");
       return (S_FAILURE);
     }
+  status_t status = S_SUCCESS;
   pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
 
   if (--ctx->passwords_remaining == 0 || ctx->password[0] != 0)
@@ -162,12 +159,12 @@ serv_signal_if_found (int socket_fd, mt_context_t *ctx)
       if (pthread_cond_signal (&ctx->cond_sem) != 0)
         {
           error ("Could not signal a condition\n");
-          return (S_FAILURE);
+          status = S_FAILURE;
         }
       error ("[server signal] After signal\n");
     }
 
   pthread_cleanup_pop (!0);
 
-  return (S_SUCCESS);
+  return (status);
 }
