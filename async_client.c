@@ -175,6 +175,10 @@ run_async_client (config_t *config)
       return (false);
     }
 
+  int option = 1;
+  setsockopt (ctx.socket_fd, SOL_SOCKET, SO_KEEPALIVE, &option,
+              sizeof (option));
+
   struct sockaddr_in addr;
   addr.sin_family = AF_INET;
   addr.sin_addr.s_addr = inet_addr (config->addr);
