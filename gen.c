@@ -15,7 +15,7 @@ gen_context_init (gen_context_t *context, config_t *config, task_t *task)
 {
   if (pthread_mutex_init (&context->mutex, NULL) != 0)
     {
-      error ("Could not initialize a mutex\n");
+      error ("Could not initialize a mutex");
       return (S_FAILURE);
     }
 
@@ -43,7 +43,7 @@ gen_context_init (gen_context_t *context, config_t *config, task_t *task)
 
   if (thread_pool_init (&context->thread_pool) == S_FAILURE)
     {
-      error ("Could not initialize a thread pool\n");
+      error ("Could not initialize a thread pool");
       return (S_FAILURE);
     }
 
@@ -54,7 +54,7 @@ gen_context_init (gen_context_t *context, config_t *config, task_t *task)
   return (S_SUCCESS);
 
 alloc_fail:
-  error ("Could not allocate memory for context state\n");
+  error ("Could not allocate memory for context state");
   return (S_FAILURE);
 }
 
@@ -65,13 +65,13 @@ gen_context_destroy (gen_context_t *context)
 
   if (thread_pool_join (&context->thread_pool) == S_FAILURE)
     {
-      error ("Could not cancel a thread pool\n");
+      error ("Could not join a thread pool");
       return (S_FAILURE);
     }
 
   if (pthread_mutex_destroy (&context->mutex) != 0)
     {
-      error ("Could not destroy a mutex\n");
+      error ("Could not destroy a mutex");
       return (S_FAILURE);
     }
 
@@ -95,7 +95,7 @@ gen_worker (void *context)
     {
       if (pthread_mutex_lock (&gen_ctx->mutex) != 0)
         {
-          error ("Could not lock a mutex\n");
+          error ("Could not lock a mutex");
           return (NULL);
         }
 
@@ -106,7 +106,7 @@ gen_worker (void *context)
 
       if (pthread_mutex_unlock (&gen_ctx->mutex) != 0)
         {
-          error ("Could not unlock a mutex\n");
+          error ("Could not unlock a mutex");
           return (NULL);
         }
 
@@ -149,7 +149,7 @@ run_generator (task_t *task, config_t *config)
 
   if (gen_context_destroy (&context) == S_FAILURE)
     {
-      error ("Could not destroy generator context\n");
+      error ("Could not destroy generator context");
       return (false);
     }
 
@@ -160,7 +160,7 @@ run_generator (task_t *task, config_t *config)
 
 fail:
   if (gen_context_destroy (&context) == S_FAILURE)
-    error ("Could not return generator context\n");
+    error ("Could not return generator context");
 
   return (false);
 }

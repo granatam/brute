@@ -66,7 +66,7 @@ parse_params (config_t *config, int argc, char *argv[])
           config->length = atoi (optarg);
           if (config->length <= 0 || config->length > MAX_PASSWORD_LENGTH)
             {
-              error ("Password's length must be a number between 0 and %d\n",
+              error ("Password's length must be a number between 0 and %d",
                      MAX_PASSWORD_LENGTH);
               return (S_FAILURE);
             }
@@ -76,7 +76,7 @@ parse_params (config_t *config, int argc, char *argv[])
           if (strlen (config->alph) <= 0
               || strlen (config->alph) > MAX_ALPH_LENGTH)
             {
-              error ("Alphabet's length must be between 0 and %d\n",
+              error ("Alphabet's length must be between 0 and %d",
                      MAX_ALPH_LENGTH);
               return (S_FAILURE);
             }
@@ -101,7 +101,7 @@ parse_params (config_t *config, int argc, char *argv[])
           config->port = atoi (optarg);
           if (config->length <= 0 || config->length > MAX_TCP_PORT)
             {
-              error ("Port must be a number between 0 and %d\n", MAX_TCP_PORT);
+              error ("Port must be a number between 0 and %d", MAX_TCP_PORT);
               return (S_FAILURE);
             }
           break;
@@ -125,7 +125,7 @@ parse_params (config_t *config, int argc, char *argv[])
           if (config->number_of_threads < 1)
             {
               error ("Number of load clients to spawn must be a number "
-                     "greater than 1\n");
+                     "greater than 1");
               return (S_FAILURE);
             }
           config->run_mode = RM_LOAD_CLIENT;

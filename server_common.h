@@ -22,6 +22,6 @@ status_t send_hash (int socket_fd, mt_context_t *);
 status_t send_alph (int socket_fd, mt_context_t *);
 status_t send_config_data (int socket_fd, mt_context_t *);
 
-status_t serv_signal_if_found (int socket_fd, mt_context_t *ctx);
+status_t serv_signal_if_found (mt_context_t *ctx);
 
 #endif // SERVER_COMMON_H

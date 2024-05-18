@@ -7,7 +7,7 @@
 
 #include <stdbool.h>
 
-status_t handle_alph (int socket_fd, config_t *config, char *alph);
+status_t handle_alph (int socket_fd, char *alph);
 status_t handle_hash (int socket_fd, char *hash);
 
 #endif // CLIENT_COMMON_H

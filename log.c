@@ -40,6 +40,8 @@ message_impl (const char *file_name, const char *func_name, int line,
   vfprintf_result = vfprintf (stderr, msg, args);
   va_end (args);
 
+  fprintf (stderr, "\n");
+
   fflush (stderr);
 
   pthread_cleanup_pop (!0);

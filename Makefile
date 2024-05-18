@@ -1,5 +1,5 @@
 .PHONY: clean
-CFLAGS=-O2 -Wall -Wpedantic -Wextra -pthread -gdwarf-4 -DLOG_LEVEL=TRACE
+CFLAGS=-O2 -Wall -Wpedantic -Wextra -pthread -gdwarf-4 -DLOG_LEVEL=DEBUG
 OBJ=brute.o iter.o rec.o common.o main.o multi.o queue.o single.o gen.o semaphore.o async_client.o client_common.o sync_client.o async_server.o sync_server.o server_common.o thread_pool.o log.o
 TARGET=brute
 LIBS+=crypt/libcrypt.a
@@ -18,6 +18,8 @@ ifeq (${WITH_PERF_TEST}, true)
 endif
 
 all: ${TARGET}
+
+# TODO: debug, release and dev recipes with differnet log levels
 
 ${TARGET}: ${OBJ} ${LIBS}
 	@${CC} ${CFLAGS} ${OBJ} ${LIBS} -o ${TARGET}

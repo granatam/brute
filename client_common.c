@@ -8,18 +8,18 @@
 #include <unistd.h>
 
 status_t
-handle_alph (int socket_fd, config_t *config, char *alph)
+handle_alph (int socket_fd, char *alph)
 {
   int32_t length;
   if (recv_wrapper (socket_fd, &length, sizeof (length), 0) == S_FAILURE)
     {
-      error ("Could not receive alphabet length from server\n");
+      error ("Could not receive alphabet length from server");
       return (S_FAILURE);
     }
 
   if (recv_wrapper (socket_fd, alph, length, 0) == S_FAILURE)
     {
-      error ("Could not receive alphabet from server\n");
+      error ("Could not receive alphabet from server");
       return (S_FAILURE);
     }
 
@@ -31,7 +31,7 @@ handle_hash (int socket_fd, char *hash)
 {
   if (recv_wrapper (socket_fd, hash, HASH_LENGTH, 0) == S_FAILURE)
     {
-      error ("Could not receive hash from server\n");
+      error ("Could not receive hash from server");
       return (S_FAILURE);
     }
   hash[HASH_LENGTH - 1] = 0;

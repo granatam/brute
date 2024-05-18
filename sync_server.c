@@ -28,7 +28,7 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
   if (send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
       == S_FAILURE)
     {
-      error ("Could not send task to client\n");
+      error ("Could not send task to client");
       return (S_FAILURE);
     }
 
@@ -36,7 +36,7 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
   if (recv_wrapper (socket_fd, &task_result, sizeof (task_result), 0)
       == S_FAILURE)
     {
-      error ("Could not receive result from client\n");
+      error ("Could not receive result from client");
       return (S_FAILURE);
     }
 
@@ -44,7 +44,7 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
     {
       if (queue_cancel (&ctx->queue) == QS_FAILURE)
         {
-          error ("Could not cancel a queue\n");
+          error ("Could not cancel a queue");
           return (S_FAILURE);
         }
       memcpy (ctx->password, task_result.password,
@@ -75,12 +75,12 @@ handle_client (void *arg)
       if (delegate_task (cl_ctx->socket_fd, &task, mt_ctx) == S_FAILURE)
         {
           if (queue_push (&mt_ctx->queue, &task) == QS_FAILURE)
-            error ("Could not push to the queue\n");
+            error ("Could not push to the queue");
 
           return (NULL);
         }
 
-      if (serv_signal_if_found (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
+      if (serv_signal_if_found (mt_ctx) == S_FAILURE)
         return (NULL);
     }
 
@@ -101,9 +101,10 @@ handle_clients (void *arg)
     {
       if ((cl_ctx.socket_fd = accept (serv_ctx->socket_fd, NULL, NULL)) == -1)
         {
-          error ("Could not accept new connection\n");
+          error ("Could not accept new connection");
           continue;
         }
+      trace ("Accepted new connection");
 
       int option = 1;
       setsockopt (cl_ctx.socket_fd, SOL_SOCKET, TCP_NODELAY, &option,
@@ -113,7 +114,7 @@ handle_clients (void *arg)
                          sizeof (cl_ctx))
           == S_FAILURE)
         {
-          error ("Could not create client thread\n");
+          error ("Could not create client thread");
 
           close_client (cl_ctx.socket_fd);
           continue;
@@ -131,7 +132,7 @@ run_server (task_t *task, config_t *config)
 
   if (serv_context_init (&context, config) == S_FAILURE)
     {
-      error ("Could not initialize server context\n");
+      error ("Could not initialize server context");
       return (false);
     }
 
@@ -139,7 +140,7 @@ run_server (task_t *task, config_t *config)
                      &context_ptr, sizeof (context_ptr))
       == S_FAILURE)
     {
-      error ("Could not create clients thread\n");
+      error ("Could not create clients thread");
       goto fail;
     }
 
@@ -155,7 +156,7 @@ run_server (task_t *task, config_t *config)
 
   if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
     {
-      error ("Could not cancel a queue\n");
+      error ("Could not cancel a queue");
       goto fail;
     }
 
@@ -163,13 +164,13 @@ run_server (task_t *task, config_t *config)
     memcpy (task->task.password, mt_ctx->password, sizeof (mt_ctx->password));
 
   if (serv_context_destroy (&context) == S_FAILURE)
-    error ("Could not destroy server context\n");
+    error ("Could not destroy server context");
 
   return (mt_ctx->password[0] != 0);
 
 fail:
   if (serv_context_destroy (&context) == S_FAILURE)
-    error ("Could not destroy server context\n");
+    error ("Could not destroy server context");
 
   return (false);
 }

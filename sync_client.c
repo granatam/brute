@@ -30,10 +30,10 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
 {
   if (recv_wrapper (socket_fd, task, sizeof (task_t), 0) == S_FAILURE)
     {
-      error ("Could not receive task from server\n");
+      error ("Could not receive task from server");
       return (S_FAILURE);
     }
-  error ("[sync client] Received task\n");
+  trace ("Received task from server");
 
   if (task_callback != NULL)
     if (task_callback (task, config, ctx) == S_FAILURE)
@@ -45,11 +45,13 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
   if (send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
       == S_FAILURE)
     {
-      error ("Could not send result to server\n");
+      error ("Could not send result to server");
       return (S_FAILURE);
     }
-  error ("[sync client] Sent result %s with is_correct %d\n",
-         task_result.password, task_result.is_correct);
+
+  trace ("Sent %s result %s to server",
+         task_result.is_correct ? "correct" : "incorrect",
+         task_result.password);
 
   return (S_SUCCESS);
 }
@@ -60,7 +62,7 @@ run_client (config_t *config, task_callback_t task_callback)
   int socket_fd = socket (AF_INET, SOCK_STREAM, 0);
   if (socket_fd == -1)
     {
-      error ("Could not initialize client socket\n");
+      error ("Could not initialize client socket");
       return (false);
     }
 
@@ -74,7 +76,7 @@ run_client (config_t *config, task_callback_t task_callback)
 
   if (connect (socket_fd, (struct sockaddr *)&addr, sizeof (addr)) == -1)
     {
-      error ("Could not connect to server\n");
+      error ("Could not connect to server");
       return (false);
     }
 
@@ -90,35 +92,38 @@ run_client (config_t *config, task_callback_t task_callback)
 
   while (true)
     {
-      trace ("Before cmd\n");
+      trace ("Waiting for a command");
 
       command_t cmd;
       if (recv_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
         {
-          error ("Could not receive command from server\n");
+          error ("Could not receive command from server");
           goto end;
         }
 
-      trace ("After cmd\n");
+      trace ("Received command from server");
 
       switch (cmd)
         {
         case CMD_ALPH:
-          if (handle_alph (socket_fd, config, alph) == S_FAILURE)
+          if (handle_alph (socket_fd, alph) == S_FAILURE)
             {
-              error ("Could not handle alphabet\n");
+              error ("Could not handle alphabet");
               goto end;
             }
+          trace ("Received alphabet from server");
           break;
         case CMD_HASH:
           if (handle_hash (socket_fd, hash) == S_FAILURE)
             {
-              error ("Could not handle hash\n");
+              error ("Could not handle hash");
               goto end;
             }
           st_context.hash = hash;
+          trace ("Received hash from server");
           break;
         case CMD_TASK:
+          trace ("Received task command from server");
           if (handle_task (socket_fd, &task, config, &st_context,
                            task_callback)
               == S_FAILURE)
@@ -128,10 +133,12 @@ run_client (config_t *config, task_callback_t task_callback)
     }
 
 end:
-  error ("[sync client] end mark\n");
+  trace ("Disconnected from server, not receiving anything from now");
 
   shutdown (socket_fd, SHUT_RDWR);
   close (socket_fd);
+  trace ("Closed connection with server");
+
   return (false);
 }
 
@@ -150,7 +157,7 @@ spawn_clients (config_t *config, task_callback_t task_callback)
   thread_pool_t thread_pool;
   if (thread_pool_init (&thread_pool) == S_FAILURE)
     {
-      error ("Could not initialize a thread pool\n");
+      error ("Could not initialize a thread pool");
       return;
     }
 
@@ -167,5 +174,7 @@ spawn_clients (config_t *config, task_callback_t task_callback)
     return;
 
   if (thread_pool_join (&thread_pool) == S_FAILURE)
-    error ("Could not wait for a thread pool to end\n");
+    error ("Could not wait for all threads to end");
+
+  trace ("Waited for all threads to end");
 }

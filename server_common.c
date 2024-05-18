@@ -23,7 +23,7 @@ serv_context_init (serv_context_t *context, config_t *config)
 
   if ((context->socket_fd = socket (AF_INET, SOCK_STREAM, 0)) == -1)
     {
-      error ("Could not initialize server socket\n");
+      error ("Could not initialize server socket");
       return (S_FAILURE);
     }
 
@@ -40,13 +40,13 @@ serv_context_init (serv_context_t *context, config_t *config)
             sizeof (serv_addr))
       == -1)
     {
-      error ("Could not bind socket\n");
+      error ("Could not bind socket");
       goto fail;
     }
 
   if (listen (context->socket_fd, 10) == -1)
     {
-      error ("Could not start listening connections\n");
+      error ("Could not start listening to incoming connections");
       goto fail;
     }
 
@@ -66,7 +66,7 @@ serv_context_destroy (serv_context_t *context)
   shutdown (context->socket_fd, SHUT_RDWR);
   if (close (context->socket_fd) != 0)
     {
-      error ("Could not close server socket\n");
+      error ("Could not close server socket");
       return (S_FAILURE);
     }
 
@@ -78,7 +78,8 @@ close_client (int socket_fd)
 {
   shutdown (socket_fd, SHUT_RDWR);
   close (socket_fd);
-  error ("[close client] Closed connection\n");
+
+  trace ("Closed connection with client");
 
   return (S_SUCCESS);
 }
@@ -96,7 +97,7 @@ send_hash (int socket_fd, mt_context_t *mt_ctx)
   if (send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
       == S_FAILURE)
     {
-      error ("Could not send hash to client\n");
+      error ("Could not send hash to client");
       return (S_FAILURE);
     }
 
@@ -118,7 +119,7 @@ send_alph (int socket_fd, mt_context_t *mt_ctx)
   if (send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
       == S_FAILURE)
     {
-      error ("Could not send alphabet to client\n");
+      error ("Could not send alphabet to client");
       return (S_FAILURE);
     }
 
@@ -130,21 +131,21 @@ send_config_data (int socket_fd, mt_context_t *ctx)
 {
   if (send_hash (socket_fd, ctx) == S_FAILURE)
     return (S_FAILURE);
-  error ("[server sender] Sent hash\n");
+  trace ("Sent hash to client");
 
   if (send_alph (socket_fd, ctx) == S_FAILURE)
     return (S_FAILURE);
-  error ("[server sender] Sent alph\n");
+  trace ("Sent alphabet to client");
 
   return (S_SUCCESS);
 }
 
 status_t
-serv_signal_if_found (int socket_fd, mt_context_t *ctx)
+serv_signal_if_found (mt_context_t *ctx)
 {
   if (pthread_mutex_lock (&ctx->mutex) != 0)
     {
-      error ("Could not lock a mutex\n");
+      error ("Could not lock a mutex");
       return (S_FAILURE);
     }
   status_t status = S_SUCCESS;
@@ -152,16 +153,13 @@ serv_signal_if_found (int socket_fd, mt_context_t *ctx)
 
   if (--ctx->passwords_remaining == 0 || ctx->password[0] != 0)
     {
-      error ("[server signal] Should signal on %p %p\n", &ctx->cond_sem,
-             &ctx->mutex);
-      error ("[server signal] After close\n");
-
+      trace ("No passwords are left or password is found, signaling now");
       if (pthread_cond_signal (&ctx->cond_sem) != 0)
         {
-          error ("Could not signal a condition\n");
+          error ("Could not signal a condition");
           status = S_FAILURE;
         }
-      error ("[server signal] After signal\n");
+      trace ("Signaled on conditional semaphore");
     }
 
   pthread_cleanup_pop (!0);
