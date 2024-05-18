@@ -26,8 +26,8 @@ message_impl (const char *file_name, const char *func_name, int line,
   if (level < log_level)
     return (S_SUCCESS);
 
-  if (pthread_mutex_lock (&mutex) != 0)
-    return (S_FAILURE);
+  // if (pthread_mutex_lock (&mutex) != 0)
+  //   return (S_FAILURE);
 
   fprintf (stderr, "(%s %s %d) ", file_name, func_name, line);
 
@@ -39,8 +39,8 @@ message_impl (const char *file_name, const char *func_name, int line,
 
   fflush(stderr);
 
-  if (pthread_mutex_unlock (&mutex) != 0)
-    return (S_FAILURE);
+  // if (pthread_mutex_unlock (&mutex) != 0)
+  //   return (S_FAILURE);
 
   if (vfprintf_result < 0)
     return (S_FAILURE);
