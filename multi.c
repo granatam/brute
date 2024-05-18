@@ -45,18 +45,19 @@ mt_context_init (mt_context_t *context, config_t *config)
 status_t
 mt_context_destroy (mt_context_t *context)
 {
+  trace ("Before cancel\n");
   if (thread_pool_cancel (&context->thread_pool) == S_FAILURE)
     {
       error ("Could not cancel a thread pool\n");
       return (S_FAILURE);
     }
-
+  trace ("Before queue destroy\n");
   if (queue_destroy (&context->queue) == QS_FAILURE)
     {
       error ("Could not destroy a queue\n");
       return (S_FAILURE);
     }
-
+  trace ("Before cond and mutex destroy\n");
   if (pthread_cond_destroy (&context->cond_sem) != 0)
     {
       error ("Could not destroy a condition variable\n");
@@ -68,7 +69,7 @@ mt_context_destroy (mt_context_t *context)
       error ("Could not destroy a mutex\n");
       return (S_FAILURE);
     }
-
+  trace ("After cancel\n");
   return (S_SUCCESS);
 }
 

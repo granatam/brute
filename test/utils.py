@@ -108,6 +108,11 @@ def run_two_clients_server(
     except subprocess.TimeoutExpired:
         first_client_proc.kill()
         second_client_proc.kill()
+        try:
+            output, _ = server_proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            server_proc.kill()
+            return "Server timeout + client timeout"
         return "Client timeout"
 
     try:

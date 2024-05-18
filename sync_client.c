@@ -86,12 +86,16 @@ run_client (config_t *config, task_callback_t task_callback)
 
   while (true)
     {
+      trace ("Before cmd\n");
+
       command_t cmd;
       if (recv_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
         {
           error ("Could not receive command from server\n");
           goto end;
         }
+
+      trace ("After cmd\n");
 
       switch (cmd)
         {
