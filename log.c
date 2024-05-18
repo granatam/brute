@@ -8,14 +8,11 @@ __attribute__ ((format (printf, 5, 6))) status_t
 message_impl (const char *file_name, const char *func_name, int line,
               log_level_t level, const char *msg, ...)
 {
-#ifndef LOG_LEVEL
   static log_level_t log_level = LL_OFF;
-#else
+#ifdef LOG_LEVEL
 #define LOG_LEVEL_MACRO(str) LL_##str
 #define EXPAND_LOG_LEVEL_MACRO(str) LOG_LEVEL_MACRO (str)
-  static log_level_t log_level = EXPAND_LOG_LEVEL_MACRO (LOG_LEVEL);
-#undef LOG_LEVEL_MACRO
-#undef EXPAND_LOG_LEVEL_MACRO
+  log_level = EXPAND_LOG_LEVEL_MACRO (LOG_LEVEL);
 #endif
 
   if (msg == NULL)
@@ -39,6 +36,8 @@ message_impl (const char *file_name, const char *func_name, int line,
 
   int vfprintf_result = vfprintf (stderr, msg, args);
   va_end (args);
+
+  fflush(stderr);
 
   if (pthread_mutex_unlock (&mutex) != 0)
     return (S_FAILURE);
