@@ -1,4 +1,5 @@
 #include "log.h"
+#include "common.h"
 
 #include <pthread.h>
 #include <stdarg.h>
@@ -26,21 +27,22 @@ message_impl (const char *file_name, const char *func_name, int line,
   if (level < log_level)
     return (S_SUCCESS);
 
-  // if (pthread_mutex_lock (&mutex) != 0)
-  //   return (S_FAILURE);
+  int vfprintf_result;
+  if (pthread_mutex_lock (&mutex) != 0)
+    return (S_FAILURE);
+  pthread_cleanup_push(cleanup_mutex_unlock, &mutex);
 
   fprintf (stderr, "(%s %s %d) ", file_name, func_name, line);
 
   va_list args;
   va_start (args, msg);
 
-  int vfprintf_result = vfprintf (stderr, msg, args);
+  vfprintf_result = vfprintf (stderr, msg, args);
   va_end (args);
 
   fflush(stderr);
 
-  // if (pthread_mutex_unlock (&mutex) != 0)
-  //   return (S_FAILURE);
+  pthread_cleanup_pop(!0);
 
   if (vfprintf_result < 0)
     return (S_FAILURE);
