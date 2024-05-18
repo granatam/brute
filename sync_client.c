@@ -2,6 +2,7 @@
 
 #include "brute.h"
 #include "client_common.h"
+#include "log.h"
 #include "thread_pool.h"
 
 #include <arpa/inet.h>
@@ -28,10 +29,10 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
 {
   if (recv_wrapper (socket_fd, task, sizeof (task_t), 0) == S_FAILURE)
     {
-      print_error ("Could not receive task from server\n");
+      error ("Could not receive task from server\n");
       return (S_FAILURE);
     }
-  print_error ("[sync client] Received task\n");
+  error ("[sync client] Received task\n");
 
   if (task_callback != NULL)
     if (task_callback (task, config, ctx) == S_FAILURE)
@@ -41,11 +42,11 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
   if (send_wrapper (socket_fd, &task_result, sizeof (task_result), 0)
       == S_FAILURE)
     {
-      print_error ("Could not send result to server\n");
+      error ("Could not send result to server\n");
       return (S_FAILURE);
     }
-  print_error ("[sync client] Sent result %s with is_correct %d\n",
-               task_result.password, task_result.is_correct);
+  error ("[sync client] Sent result %s with is_correct %d\n",
+         task_result.password, task_result.is_correct);
 
   return (S_SUCCESS);
 }
@@ -56,7 +57,7 @@ run_client (config_t *config, task_callback_t task_callback)
   int socket_fd = socket (AF_INET, SOCK_STREAM, 0);
   if (socket_fd == -1)
     {
-      print_error ("Could not initialize client socket\n");
+      error ("Could not initialize client socket\n");
       return (false);
     }
 
@@ -67,7 +68,7 @@ run_client (config_t *config, task_callback_t task_callback)
 
   if (connect (socket_fd, (struct sockaddr *)&addr, sizeof (addr)) == -1)
     {
-      print_error ("Could not connect to server\n");
+      error ("Could not connect to server\n");
       return (false);
     }
 
@@ -84,7 +85,7 @@ run_client (config_t *config, task_callback_t task_callback)
       command_t cmd;
       if (recv_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
         {
-          print_error ("Could not receive command from server\n");
+          error ("Could not receive command from server\n");
           goto end;
         }
 
@@ -93,14 +94,14 @@ run_client (config_t *config, task_callback_t task_callback)
         case CMD_ALPH:
           if (handle_alph (socket_fd, config, alph) == S_FAILURE)
             {
-              print_error ("Could not handle alphabet\n");
+              error ("Could not handle alphabet\n");
               goto end;
             }
           break;
         case CMD_HASH:
           if (handle_hash (socket_fd, hash) == S_FAILURE)
             {
-              print_error ("Could not handle hash\n");
+              error ("Could not handle hash\n");
               goto end;
             }
           st_context.hash = hash;
@@ -115,7 +116,7 @@ run_client (config_t *config, task_callback_t task_callback)
     }
 
 end:
-  print_error ("[sync client] end mark\n");
+  error ("[sync client] end mark\n");
 
   shutdown (socket_fd, SHUT_RDWR);
   close (socket_fd);
@@ -137,7 +138,7 @@ spawn_clients (config_t *config, task_callback_t task_callback)
   thread_pool_t thread_pool;
   if (thread_pool_init (&thread_pool) == S_FAILURE)
     {
-      print_error ("Could not initialize a thread pool\n");
+      error ("Could not initialize a thread pool\n");
       return;
     }
 
@@ -154,5 +155,5 @@ spawn_clients (config_t *config, task_callback_t task_callback)
     return;
 
   if (thread_pool_join (&thread_pool) == S_FAILURE)
-    print_error ("Could not wait for a thread pool to end\n");
+    error ("Could not wait for a thread pool to end\n");
 }

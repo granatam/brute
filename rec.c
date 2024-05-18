@@ -9,7 +9,7 @@ brute_rec_gen_handler (task_t *task, void *context)
 
   if (swapcontext (&state->rec_context, &state->main_context) != 0)
     {
-      print_error ("Could not swap contexts\n");
+      error ("Could not swap contexts\n");
       state->cancelled = true;
     }
 
@@ -32,7 +32,7 @@ rec_state_init (rec_state_t *state, task_t *task, char *alph)
 
   if (getcontext (&state->main_context) != 0)
     {
-      print_error ("Could not get context\n");
+      error ("Could not get context\n");
       state->cancelled = true;
       return;
     }
@@ -46,7 +46,7 @@ rec_state_init (rec_state_t *state, task_t *task, char *alph)
 
   if (swapcontext (&state->main_context, &state->rec_context) != 0)
     {
-      print_error ("Could not swap contexts\n");
+      error ("Could not swap contexts\n");
       state->cancelled = true;
     }
 }
@@ -57,7 +57,7 @@ rec_state_next (rec_state_t *state)
   if (!state->cancelled)
     if (swapcontext (&state->main_context, &state->rec_context) != 0)
       {
-        print_error ("Could not swap contexts\n");
+        error ("Could not swap contexts\n");
         return (false);
       }
   return (!state->cancelled);
@@ -85,7 +85,7 @@ brute_rec (task_t *task, char *alph, password_handler_t password_handler,
 {
   if (pos == task->to)
     {
-      // print_error ("%s\n", task->password);
+      // error ("%s\n", task->password);
       return (password_handler (task, context));
     }
   else

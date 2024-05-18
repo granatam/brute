@@ -2,6 +2,7 @@
 
 #include "brute.h"
 #include "common.h"
+#include "log.h"
 #include "multi.h"
 #include "server_common.h"
 
@@ -22,20 +23,20 @@ acl_context_init (acl_context_t *global_ctx)
 
   if (queue_init (&ctx->registry_idx, sizeof (size_t)) != QS_SUCCESS)
     {
-      print_error ("Could not initialize registry indices queue\n");
+      error ("Could not initialize registry indices queue\n");
       return (NULL);
     }
   for (size_t i = 0; i < QUEUE_SIZE; ++i)
     if (queue_push (&ctx->registry_idx, &i) != QS_SUCCESS)
       {
-        print_error ("Could not push index to registry indices queue\n");
+        error ("Could not push index to registry indices queue\n");
         return (NULL);
       }
 
   ctx->ref_count = 2;
   if (pthread_mutex_init (&ctx->mutex, NULL) != 0)
     {
-      print_error ("Could not initialize mutex\n");
+      error ("Could not initialize mutex\n");
       return (NULL);
     }
 
@@ -47,19 +48,19 @@ acl_context_destroy (acl_context_t *ctx)
 {
   if (queue_cancel (&ctx->registry_idx) != QS_SUCCESS)
     {
-      print_error ("Could not cancel registry indices queue\n");
+      error ("Could not cancel registry indices queue\n");
       goto cleanup;
     }
 
   if (queue_destroy (&ctx->registry_idx) != QS_SUCCESS)
     {
-      print_error ("Could not destroy registry indices queue\n");
+      error ("Could not destroy registry indices queue\n");
       goto cleanup;
     }
 
   if (pthread_mutex_destroy (&ctx->mutex) != 0)
     {
-      print_error ("Could not destroy mutex\n");
+      error ("Could not destroy mutex\n");
       goto cleanup;
     }
 
@@ -80,18 +81,18 @@ thread_cleanup_helper (void *arg)
 
   if (pthread_mutex_lock (&ctx->mutex) != 0)
     {
-      print_error ("Could not lock mutex\n");
+      error ("Could not lock mutex\n");
       return;
     }
 
   if (--ctx->ref_count == 0)
     {
-      print_error ("freed acl_context\n");
+      error ("freed acl_context\n");
       acl_context_destroy (ctx);
     }
 
   if (pthread_mutex_unlock (&ctx->mutex) != 0)
-    print_error ("Could not unlock mutex\n");
+    error ("Could not unlock mutex\n");
 }
 
 static void *
@@ -106,26 +107,26 @@ result_receiver (void *arg)
       if (recv_wrapper (cl_ctx->socket_fd, &task, sizeof (task), 0)
           == S_FAILURE)
         {
-          print_error ("Could not receive result from client\n");
+          error ("Could not receive result from client\n");
           break;
         }
-      print_error ("[server receiver] Received result\n");
+      error ("[server receiver] Received result\n");
 
       if (task.is_correct)
         {
           if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
             {
-              print_error ("Could not cancel a queue\n");
+              error ("Could not cancel a queue\n");
               break;
             }
           memcpy (mt_ctx->password, task.password, sizeof (task.password));
-          print_error ("[server receiver] Received correct result %s\n",
-                       task.password);
+          error ("[server receiver] Received correct result %s\n",
+                 task.password);
         }
 
       if (queue_push (&cl_ctx->registry_idx, &task.id) != QS_SUCCESS)
         {
-          print_error ("Could not return id to a queue\n");
+          error ("Could not return id to a queue\n");
           break;
         }
 
@@ -134,7 +135,7 @@ result_receiver (void *arg)
 
       if (mt_ctx->password[0] != 0)
         {
-          print_error ("[server receiver] After signal\n");
+          error ("[server receiver] After signal\n");
           break;
         }
     }
@@ -158,13 +159,13 @@ task_sender (void *arg)
       size_t id;
       if (queue_pop (&cl_ctx->registry_idx, &id) != QS_SUCCESS)
         break;
-      print_error ("[server sender] After registry_idx pop\n");
+      error ("[server sender] After registry_idx pop\n");
 
       task_t *task = &cl_ctx->registry[id];
 
       if (queue_pop (&mt_ctx->queue, task) != QS_SUCCESS)
         break;
-      print_error ("[server sender] After task queue pop\n");
+      error ("[server sender] After task queue pop\n");
 
       task->task.id = id;
       task->task.is_correct = false;
@@ -174,22 +175,22 @@ task_sender (void *arg)
       command_t cmd = CMD_TASK;
       if (send_wrapper (cl_ctx->socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
         {
-          print_error ("Could not send CMD_TASK to client\n");
+          error ("Could not send CMD_TASK to client\n");
           // TODO: status check
           queue_push (&cl_ctx->registry_idx, &id);
           break;
         }
-      print_error ("[server sender] Sent CMD_TASK\n");
+      error ("[server sender] Sent CMD_TASK\n");
 
       if (send_wrapper (cl_ctx->socket_fd, task, sizeof (*task), 0)
           == S_FAILURE)
         {
-          print_error ("Could not send task to client\n");
+          error ("Could not send task to client\n");
           // TODO: status check
           queue_push (&cl_ctx->registry_idx, &id);
           break;
         }
-      print_error ("[server sender] Sent task\n");
+      error ("[server sender] Sent task\n");
     }
 
 cleanup:
@@ -212,8 +213,7 @@ handle_clients (void *arg)
     {
       if ((cl_ctx.socket_fd = accept (serv_ctx->socket_fd, NULL, NULL)) == -1)
         {
-          print_error ("Could not accept new connection: %s\n",
-                       strerror (errno));
+          error ("Could not accept new connection: %s\n", strerror (errno));
           continue;
         }
 
@@ -226,7 +226,7 @@ handle_clients (void *arg)
                          sizeof (ctx_copy))
           == S_FAILURE)
         {
-          print_error ("Could not create task sender thread\n");
+          error ("Could not create task sender thread\n");
           close_client (ctx_copy->socket_fd);
           acl_context_destroy (ctx_copy);
           continue;
@@ -236,7 +236,7 @@ handle_clients (void *arg)
                          sizeof (ctx_copy))
           == S_FAILURE)
         {
-          print_error ("Could not create result receiver thread\n");
+          error ("Could not create result receiver thread\n");
           close_client (ctx_copy->socket_fd);
           acl_context_destroy (ctx_copy);
           continue;
@@ -254,7 +254,7 @@ run_async_server (task_t *task, config_t *config)
 
   if (serv_context_init (&context, config) == S_FAILURE)
     {
-      print_error ("Could not initialize server context\n");
+      error ("Could not initialize server context\n");
       return (false);
     }
 
@@ -262,7 +262,7 @@ run_async_server (task_t *task, config_t *config)
                      &context_ptr, sizeof (context_ptr))
       == S_FAILURE)
     {
-      print_error ("Could not create clients thread\n");
+      error ("Could not create clients thread\n");
       goto fail;
     }
 
@@ -273,36 +273,36 @@ run_async_server (task_t *task, config_t *config)
 
   brute (task, config, queue_push_wrapper, mt_ctx);
 
-  print_error ("[server] After brute\n");
+  error ("[server] After brute\n");
 
   if (wait_password (mt_ctx) == S_FAILURE)
     goto fail;
 
-  print_error ("[server] After wait\n");
+  error ("[server] After wait\n");
 
   if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
     {
-      print_error ("Could not cancel a queue\n");
+      error ("Could not cancel a queue\n");
       goto fail;
     }
 
-  print_error ("Cancelled queue\n");
+  error ("Cancelled queue\n");
 
   if (mt_ctx->password[0] != 0)
     memcpy (task->task.password, mt_ctx->password, sizeof (mt_ctx->password));
 
   if (serv_context_destroy (&context) == S_FAILURE)
-    print_error ("Could not destroy server context\n");
+    error ("Could not destroy server context\n");
 
-  print_error ("Destroyed context\n");
+  error ("Destroyed context\n");
 
   return (mt_ctx->password[0] != 0);
 
 fail:
-  print_error ("Fail mark\n");
+  error ("Fail mark\n");
 
   if (serv_context_destroy (&context) == S_FAILURE)
-    print_error ("Could not destroy server context\n");
+    error ("Could not destroy server context\n");
 
   return (false);
 }

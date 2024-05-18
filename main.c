@@ -4,6 +4,7 @@
 #include "common.h"
 #include "config.h"
 #include "gen.h"
+#include "log.h"
 #include "multi.h"
 #include "queue.h"
 #include "single.h"
@@ -65,9 +66,8 @@ parse_params (config_t *config, int argc, char *argv[])
           config->length = atoi (optarg);
           if (config->length <= 0 || config->length > MAX_PASSWORD_LENGTH)
             {
-              print_error (
-                  "Password's length must be a number between 0 and %d\n",
-                  MAX_PASSWORD_LENGTH);
+              error ("Password's length must be a number between 0 and %d\n",
+                     MAX_PASSWORD_LENGTH);
               return (S_FAILURE);
             }
           break;
@@ -76,8 +76,8 @@ parse_params (config_t *config, int argc, char *argv[])
           if (strlen (config->alph) <= 0
               || strlen (config->alph) > MAX_ALPH_LENGTH)
             {
-              print_error ("Alphabet's length must be between 0 and %d\n",
-                           MAX_ALPH_LENGTH);
+              error ("Alphabet's length must be between 0 and %d\n",
+                     MAX_ALPH_LENGTH);
               return (S_FAILURE);
             }
           break;
@@ -91,9 +91,8 @@ parse_params (config_t *config, int argc, char *argv[])
             if (config->number_of_threads < 1
                 || config->number_of_threads > number_of_cpus)
               {
-                print_error (
-                    "Number of threads must be a number between 1 and %d",
-                    number_of_cpus);
+                error ("Number of threads must be a number between 1 and %d",
+                       number_of_cpus);
                 return (S_FAILURE);
               }
             break;
@@ -102,8 +101,7 @@ parse_params (config_t *config, int argc, char *argv[])
           config->port = atoi (optarg);
           if (config->length <= 0 || config->length > MAX_TCP_PORT)
             {
-              print_error ("Port must be a number between 0 and %d\n",
-                           MAX_TCP_PORT);
+              error ("Port must be a number between 0 and %d\n", MAX_TCP_PORT);
               return (S_FAILURE);
             }
           break;
@@ -126,8 +124,8 @@ parse_params (config_t *config, int argc, char *argv[])
           config->number_of_threads = atoi (optarg);
           if (config->number_of_threads < 1)
             {
-              print_error ("Number of load clients to spawn must be a number "
-                           "greater than 1\n");
+              error ("Number of load clients to spawn must be a number "
+                     "greater than 1\n");
               return (S_FAILURE);
             }
           config->run_mode = RM_LOAD_CLIENT;

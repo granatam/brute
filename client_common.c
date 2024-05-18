@@ -1,5 +1,7 @@
 #include "client_common.h"
 
+#include "log.h"
+
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -11,13 +13,13 @@ handle_alph (int socket_fd, config_t *config, char *alph)
   int32_t length;
   if (recv_wrapper (socket_fd, &length, sizeof (length), 0) == S_FAILURE)
     {
-      print_error ("Could not receive alphabet length from server\n");
+      error ("Could not receive alphabet length from server\n");
       return (S_FAILURE);
     }
 
   if (recv_wrapper (socket_fd, alph, length, 0) == S_FAILURE)
     {
-      print_error ("Could not receive alphabet from server\n");
+      error ("Could not receive alphabet from server\n");
       return (S_FAILURE);
     }
 
@@ -29,7 +31,7 @@ handle_hash (int socket_fd, char *hash)
 {
   if (recv_wrapper (socket_fd, hash, HASH_LENGTH, 0) == S_FAILURE)
     {
-      print_error ("Could not receive hash from server\n");
+      error ("Could not receive hash from server\n");
       return (S_FAILURE);
     }
   hash[HASH_LENGTH - 1] = 0;

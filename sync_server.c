@@ -2,6 +2,7 @@
 
 #include "brute.h"
 #include "common.h"
+#include "log.h"
 #include "multi.h"
 #include "thread_pool.h"
 
@@ -21,14 +22,14 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
 
   if (send_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
     {
-      print_error ("Could not send CMD_TASK to client\n");
+      error ("Could not send CMD_TASK to client\n");
       return (S_FAILURE);
     }
 
   task->task.is_correct = false;
   if (send_wrapper (socket_fd, task, sizeof (*task), 0) == S_FAILURE)
     {
-      print_error ("Could not send task to client\n");
+      error ("Could not send task to client\n");
       return (S_FAILURE);
     }
 
@@ -36,7 +37,7 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
   if (recv_wrapper (socket_fd, &task_result, sizeof (task_result), 0)
       == S_FAILURE)
     {
-      print_error ("Could not receive result from client\n");
+      error ("Could not receive result from client\n");
       return (S_FAILURE);
     }
 
@@ -44,7 +45,7 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
     {
       if (queue_cancel (&ctx->queue) == QS_FAILURE)
         {
-          print_error ("Could not cancel a queue\n");
+          error ("Could not cancel a queue\n");
           return (S_FAILURE);
         }
       memcpy (ctx->password, task_result.password,
@@ -75,7 +76,7 @@ handle_client (void *arg)
       if (delegate_task (cl_ctx->socket_fd, &task, mt_ctx) == S_FAILURE)
         {
           if (queue_push (&mt_ctx->queue, &task) == QS_FAILURE)
-            print_error ("Could not push to the queue\n");
+            error ("Could not push to the queue\n");
 
           return (NULL);
         }
@@ -101,7 +102,7 @@ handle_clients (void *arg)
     {
       if ((cl_ctx.socket_fd = accept (serv_ctx->socket_fd, NULL, NULL)) == -1)
         {
-          print_error ("Could not accept new connection\n");
+          error ("Could not accept new connection\n");
           continue;
         }
 
@@ -109,7 +110,7 @@ handle_clients (void *arg)
                          sizeof (cl_ctx))
           == S_FAILURE)
         {
-          print_error ("Could not create client thread\n");
+          error ("Could not create client thread\n");
 
           close_client (cl_ctx.socket_fd);
           continue;
@@ -127,7 +128,7 @@ run_server (task_t *task, config_t *config)
 
   if (serv_context_init (&context, config) == S_FAILURE)
     {
-      print_error ("Could not initialize server context\n");
+      error ("Could not initialize server context\n");
       return (false);
     }
 
@@ -135,7 +136,7 @@ run_server (task_t *task, config_t *config)
                      &context_ptr, sizeof (context_ptr))
       == S_FAILURE)
     {
-      print_error ("Could not create clients thread\n");
+      error ("Could not create clients thread\n");
       goto fail;
     }
 
@@ -151,7 +152,7 @@ run_server (task_t *task, config_t *config)
 
   if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
     {
-      print_error ("Could not cancel a queue\n");
+      error ("Could not cancel a queue\n");
       goto fail;
     }
 
@@ -159,13 +160,13 @@ run_server (task_t *task, config_t *config)
     memcpy (task->task.password, mt_ctx->password, sizeof (mt_ctx->password));
 
   if (serv_context_destroy (&context) == S_FAILURE)
-    print_error ("Could not destroy server context\n");
+    error ("Could not destroy server context\n");
 
   return (mt_ctx->password[0] != 0);
 
 fail:
   if (serv_context_destroy (&context) == S_FAILURE)
-    print_error ("Could not destroy server context\n");
+    error ("Could not destroy server context\n");
 
   return (false);
 }

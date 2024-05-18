@@ -2,6 +2,7 @@
 
 #include "brute.h"
 #include "common.h"
+#include "log.h"
 #include "multi.h"
 #include "thread_pool.h"
 
@@ -22,7 +23,7 @@ serv_context_init (serv_context_t *context, config_t *config)
 
   if ((context->socket_fd = socket (AF_INET, SOCK_STREAM, 0)) == -1)
     {
-      print_error ("Could not initialize server socket\n");
+      error ("Could not initialize server socket\n");
       return (S_FAILURE);
     }
 
@@ -39,13 +40,13 @@ serv_context_init (serv_context_t *context, config_t *config)
             sizeof (serv_addr))
       == -1)
     {
-      print_error ("Could not bind socket\n");
+      error ("Could not bind socket\n");
       goto fail;
     }
 
   if (listen (context->socket_fd, 10) == -1)
     {
-      print_error ("Could not start listening connections\n");
+      error ("Could not start listening connections\n");
       goto fail;
     }
 
@@ -65,7 +66,7 @@ serv_context_destroy (serv_context_t *context)
   shutdown (context->socket_fd, SHUT_RDWR);
   if (close (context->socket_fd) != 0)
     {
-      print_error ("Could not close server socket\n");
+      error ("Could not close server socket\n");
       return (S_FAILURE);
     }
 
@@ -77,7 +78,7 @@ close_client (int socket_fd)
 {
   shutdown (socket_fd, SHUT_RDWR);
   close (socket_fd);
-  print_error ("[close client] Closed connection\n");
+  error ("[close client] Closed connection\n");
 
   return (S_SUCCESS);
 }
@@ -88,14 +89,14 @@ send_hash (int socket_fd, mt_context_t *mt_ctx)
   command_t cmd = CMD_HASH;
   if (send_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
     {
-      print_error ("Could not send CMD_HASH to client\n");
+      error ("Could not send CMD_HASH to client\n");
       return (S_FAILURE);
     }
 
   if (send_wrapper (socket_fd, mt_ctx->config->hash, HASH_LENGTH, 0)
       == S_FAILURE)
     {
-      print_error ("Could not send hash to client\n");
+      error ("Could not send hash to client\n");
       return (S_FAILURE);
     }
 
@@ -108,20 +109,20 @@ send_alph (int socket_fd, mt_context_t *mt_ctx)
   command_t cmd = CMD_ALPH;
   if (send_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
     {
-      print_error ("Could not send CMD_ALPH to client\n");
+      error ("Could not send CMD_ALPH to client\n");
       return (S_FAILURE);
     }
 
   int32_t length = strlen (mt_ctx->config->alph);
   if (send_wrapper (socket_fd, &length, sizeof (length), 0) == S_FAILURE)
     {
-      print_error ("Could not send alphabet length to client\n");
+      error ("Could not send alphabet length to client\n");
       return (S_FAILURE);
     }
 
   if (send_wrapper (socket_fd, mt_ctx->config->alph, length, 0) == S_FAILURE)
     {
-      print_error ("Could not send alphabet to client\n");
+      error ("Could not send alphabet to client\n");
       return (S_FAILURE);
     }
 
@@ -133,11 +134,11 @@ send_config_data (int socket_fd, mt_context_t *ctx)
 {
   if (send_hash (socket_fd, ctx) == S_FAILURE)
     return (S_FAILURE);
-  print_error ("[server sender] Sent hash\n");
+  error ("[server sender] Sent hash\n");
 
   if (send_alph (socket_fd, ctx) == S_FAILURE)
     return (S_FAILURE);
-  print_error ("[server sender] Sent alph\n");
+  error ("[server sender] Sent alph\n");
 
   return (S_SUCCESS);
 }
@@ -147,23 +148,23 @@ serv_signal_if_found (int socket_fd, mt_context_t *ctx)
 {
   if (pthread_mutex_lock (&ctx->mutex) != 0)
     {
-      print_error ("Could not lock a mutex\n");
+      error ("Could not lock a mutex\n");
       return (S_FAILURE);
     }
   pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
 
   if (--ctx->passwords_remaining == 0 || ctx->password[0] != 0)
     {
-      print_error ("[server signal] Should signal on %p %p\n", &ctx->cond_sem,
-                   &ctx->mutex);
-      print_error ("[server signal] After close\n");
+      error ("[server signal] Should signal on %p %p\n", &ctx->cond_sem,
+             &ctx->mutex);
+      error ("[server signal] After close\n");
 
       if (pthread_cond_signal (&ctx->cond_sem) != 0)
         {
-          print_error ("Could not signal a condition\n");
+          error ("Could not signal a condition\n");
           return (S_FAILURE);
         }
-      print_error ("[server signal] After signal\n");
+      error ("[server signal] After signal\n");
     }
 
   pthread_cleanup_pop (!0);

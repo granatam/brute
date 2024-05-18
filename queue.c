@@ -1,5 +1,7 @@
 #include "queue.h"
 
+#include "log.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -104,12 +106,12 @@ queue_cancel (queue_t *queue)
   if (sem_post (&queue->full) != 0)
     return (QS_FAILURE);
 
-  print_error ("sem_post queue->full\n");
+  error ("sem_post queue->full\n");
 
   if (sem_post (&queue->empty) != 0)
     return (QS_FAILURE);
 
-  print_error ("sem_post queue->empty\n");
+  error ("sem_post queue->empty\n");
 
   return (QS_SUCCESS);
 }

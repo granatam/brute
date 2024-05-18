@@ -4,8 +4,6 @@
 #include <pthread.h>
 #include <stdbool.h>
 
-#define print_error(...) print_error_impl (__func__, __LINE__, __VA_ARGS__)
-
 #define MAX_PASSWORD_LENGTH (7)
 #define MAX_ALPH_LENGTH (20)
 #define HASH_LENGTH (14)
@@ -46,8 +44,6 @@ typedef enum command_t
   CMD_TASK,
 } command_t;
 
-status_t print_error_impl (const char *func_name, int line, const char *msg,
-                           ...);
 void cleanup_mutex_unlock (void *mutex);
 
 status_t recv_wrapper (int socket_fd, void *buf, int len, int flags);
