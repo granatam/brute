@@ -30,6 +30,7 @@ recv_wrapper (int socket_fd, void *buf, int len, int flags)
   char *bytes = (char *)buf;
   while (len > 0)
     {
+      flags = MSG_NOSIGNAL;
       int bytes_read
           = TEMP_FAILURE_RETRY (recv (socket_fd, bytes, len, flags));
       if (bytes_read <= 0)
@@ -47,6 +48,7 @@ send_wrapper (int socket_fd, void *buf, int len, int flags)
   char *bytes = (char *)buf;
   while (len > 0)
     {
+      flags = MSG_NOSIGNAL;
       int bytes_written
           = TEMP_FAILURE_RETRY (send (socket_fd, bytes, len, flags));
       if (bytes_written <= 0)
