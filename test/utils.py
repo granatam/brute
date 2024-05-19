@@ -44,6 +44,12 @@ def run_brute(passwd, alph, run_mode, brute_mode):
     return get_output(brute_cmd(passwd, alph, run_mode, brute_mode))
 
 
+def run_client_server_process(cmd, log_file):
+    return subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=log_file, shell=True
+    )
+
+
 def run_valgrind(passwd, alph, run_mode, brute_mode):
     cmd = brute_cmd(passwd, alph, run_mode, brute_mode)
 
@@ -52,10 +58,14 @@ def run_valgrind(passwd, alph, run_mode, brute_mode):
     )
 
 
-def run_client_server_process(cmd, log_file):
-    return subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=log_file, shell=True
-    )
+def run_valgrind_client_server(
+    passwd, alph, brute_mode, client_flag, server_flag
+):
+    server_valgrind_check = run_valgrind(passwd, alph, server_flag, brute_mode)
+    time.sleep(0.05)
+    client_valgrind_check = run_valgrind(passwd, alph, client_flag, brute_mode)
+    
+    return server_valgrind_check and client_valgrind_check
 
 
 def run_client_server(
@@ -161,7 +171,7 @@ def capture_client_server_log(
 
     if result != f"Password found: {passwd}\n":
         sys.stderr.write(f"Test failed. Output is {result}.\n")
-        
+
         sys.stderr.write(f"Captured server log:\n")
         with open(server_log.name, "r") as output:
             sys.stderr.write(output.read())
