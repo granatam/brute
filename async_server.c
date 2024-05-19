@@ -4,6 +4,7 @@
 #include "common.h"
 #include "log.h"
 #include "multi.h"
+#include "queue.h"
 #include "server_common.h"
 
 #include <arpa/inet.h>
@@ -70,9 +71,36 @@ cleanup:
   free (ctx);
 }
 
-static void
+static status_t
 return_tasks (acl_context_t *ctx)
 {
+  mt_context_t *mt_ctx = &ctx->context->context;
+  if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
+    {
+      error ("Could not lock mutex");
+      return (S_FAILURE);
+    }
+  status_t status = S_SUCCESS;
+  pthread_cleanup_push (cleanup_mutex_unlock, &ctx->context->context.mutex);
+
+  for (size_t i = 0; i < QUEUE_SIZE; ++i)
+    {
+      if (ctx->registry_used[i])
+        {
+          if (queue_push (&mt_ctx->queue, &ctx->registry[i]) != QS_SUCCESS)
+            {
+              error ("Could not push back task to global queue");
+              status = S_FAILURE;
+              break;
+            }
+
+          ctx->registry_used[i] = false;
+        }
+    }
+
+  pthread_cleanup_pop (!0);
+
+  return (status);
 }
 
 static void
@@ -89,6 +117,7 @@ thread_cleanup_helper (void *arg)
   if (--ctx->ref_count == 0)
     {
       trace ("No more active threads for client, destroying client context");
+
       acl_context_destroy (ctx);
     }
 
@@ -131,12 +160,19 @@ result_receiver (void *arg)
           break;
         }
 
+      cl_ctx->registry_used[task.id] = false;
+
+      trace ("Set id status as free in registry");
+
       if (serv_signal_if_found (mt_ctx) == S_FAILURE)
         break;
 
       if (mt_ctx->password[0] != 0)
         break;
     }
+
+  if (return_tasks (cl_ctx) == S_FAILURE)
+    error ("Could not return used tasks to global queue");
 
   thread_cleanup_helper (cl_ctx);
 
@@ -163,9 +199,17 @@ task_sender (void *arg)
       task_t *task = &cl_ctx->registry[id];
 
       if (queue_pop (&mt_ctx->queue, task) != QS_SUCCESS)
-        break;
+        {
+          if (queue_push (&cl_ctx->registry_idx, &id) != QS_SUCCESS)
+            error ("Could not push back id to registry indices queue");
+          break;
+        }
 
       trace ("Got task from global queue");
+
+      cl_ctx->registry_used[id] = true;
+
+      trace ("Set id status as used in registry");
 
       task->task.id = id;
       task->task.is_correct = false;
@@ -182,8 +226,10 @@ task_sender (void *arg)
           == S_FAILURE)
         {
           error ("Could not send task to client");
-          // TODO: status check
-          queue_push (&cl_ctx->registry_idx, &id);
+          if (queue_push (&cl_ctx->registry_idx, &id) != QS_SUCCESS)
+            error ("Could not push back id to registry indices queue");
+
+          cl_ctx->registry_used[id] = false;
           break;
         }
 
@@ -191,6 +237,9 @@ task_sender (void *arg)
     }
 
 cleanup:
+  if (return_tasks (cl_ctx) == S_FAILURE)
+    error ("Could not return used tasks to global queue");
+
   thread_cleanup_helper (cl_ctx);
 
   return (NULL);
