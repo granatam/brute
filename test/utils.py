@@ -45,9 +45,7 @@ def run_brute(passwd, alph, run_mode, brute_mode):
 
 
 def run_client_server_process(cmd, log_file):
-    return subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=log_file, shell=True
-    )
+    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=log_file, shell=True)
 
 
 def run_valgrind(passwd, alph, run_mode, brute_mode):
@@ -58,13 +56,28 @@ def run_valgrind(passwd, alph, run_mode, brute_mode):
     )
 
 
-def run_valgrind_client_server(
-    passwd, alph, brute_mode, client_flag, server_flag
-):
-    server_valgrind_check = run_valgrind(passwd, alph, server_flag, brute_mode)
+def run_valgrind_client_server(passwd, alph, brute_mode, client_flag, server_flag):
+    client_cmd = brute_cmd(passwd, alph, client_flag, brute_mode)
+    server_cmd = brute_cmd(passwd, alph, server_flag, brute_mode)
+
+    client_valgrind_cmd = f"valgrind --leak-check=full --error-exitcode=1 --trace-children=yes --quiet {client_cmd}"
+    server_valgrind_cmd = f"valgrind --leak-check=full --error-exitcode=1 --trace-children=yes --quiet {server_cmd}"
+
+    server_valgrind_check = run_client_server_process(server_valgrind_cmd, sys.stderr)
     time.sleep(0.05)
-    client_valgrind_check = run_valgrind(passwd, alph, client_flag, brute_mode)
-    
+    client_valgrind_check = run_client_server_process(client_valgrind_cmd, sys.stderr)
+    try:
+        client_valgrind_check.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        client_valgrind_check.kill()
+        return False
+
+    try:
+        _, _ = server_valgrind_check.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        server_valgrind_check.kill()
+        return False
+
     return server_valgrind_check and client_valgrind_check
 
 
@@ -109,9 +122,7 @@ def run_two_clients_server(
     time.sleep(0.05)
     first_client_proc = run_client_server_process(client_cmd, first_client_log)
     time.sleep(0.05)
-    second_client_proc = run_client_server_process(
-        client_cmd, second_client_log
-    )
+    second_client_proc = run_client_server_process(client_cmd, second_client_log)
     try:
         first_client_proc.wait(timeout=5)
         second_client_proc.wait(timeout=5)
