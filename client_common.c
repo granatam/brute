@@ -38,3 +38,20 @@ handle_hash (int socket_fd, char *hash)
 
   return (S_SUCCESS);
 }
+
+int
+ms_sleep (long milliseconds)
+{
+  struct timespec time, time2;
+  if (milliseconds >= 1000)
+    {
+      time.tv_sec = milliseconds / 1000;
+      time.tv_nsec = (milliseconds % 1000) * 1000000;
+    }
+  else
+    {
+      time.tv_sec = 0;
+      time.tv_nsec = milliseconds * 1000000;
+    }
+  return nanosleep (&time, &time2);
+}

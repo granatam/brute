@@ -36,12 +36,8 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
   trace ("Received task from server");
 
   if (config->timeout > 0)
-    {
-      struct timespec time, time2;
-      time.tv_sec = 0;
-      time.tv_nsec = config->timeout * 1000L;
-      nanosleep (&time, &time2);
-    }
+    if (ms_sleep (config->timeout) != 0)
+      error ("Could not sleep");
 
   if (task_callback != NULL)
     if (task_callback (task, config, ctx) == S_FAILURE)

@@ -35,7 +35,8 @@ usage (char *first_arg)
            "\t-t number    number of threads\n"
            "\t-p port      server port\n"
            "\t-A addr      server address\n"
-           "\t-T timeout   timeout between task receiving and its processing\n"
+           "\t-T timeout   timeout between task receiving and its processing "
+           "in milliseconds\n"
            "run modes:\n"
            "\t-s           singlethreaded mode\n"
            "\t-m           multithreaded mode\n"
@@ -110,7 +111,7 @@ parse_params (config_t *config, int argc, char *argv[])
           config->addr = optarg;
           break;
         case 'T':
-          config->timeout = atoi(optarg);
+          config->timeout = atoi (optarg);
           if (config->timeout < 0)
             {
               error ("Timeout must be a number greater than 0");

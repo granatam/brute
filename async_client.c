@@ -26,6 +26,10 @@ client_worker (void *arg)
 
   while (true)
     {
+      if (ctx->config->timeout > 0)
+        if (ms_sleep (ctx->config->timeout) != 0)
+          error ("Could not sleep");
+
       task_t task;
       if (queue_pop (&ctx->task_queue, &task) != QS_SUCCESS)
         return (NULL);
