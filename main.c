@@ -22,8 +22,8 @@ usage (char *first_arg)
 {
   fprintf (stderr,
            "usage: %s [-l length] [-a alphabet] [-h hash] [-t number] "
-           "[-p port] [-A addr] [-s | -m | -g | -c | -L number | -S | -v | -w]"
-           " [-i | -r"
+           "[-p port] [-A addr] [-T timeout] "
+           "[-s | -m | -g | -c | -L number | -S | -v | -w] [-i | -r"
 #ifndef __APPLE__
            " | -y"
 #endif
@@ -35,6 +35,7 @@ usage (char *first_arg)
            "\t-t number    number of threads\n"
            "\t-p port      server port\n"
            "\t-A addr      server address\n"
+           "\t-T timeout   timeout between task receiving and its processing\n"
            "run modes:\n"
            "\t-s           singlethreaded mode\n"
            "\t-m           multithreaded mode\n"
@@ -58,7 +59,7 @@ static status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
-  while ((opt = getopt (argc, argv, "l:a:H:t:p:A:L:smgcSvwiryh")) != -1)
+  while ((opt = getopt (argc, argv, "l:a:H:t:p:A:L:T:smgcSvwiryh")) != -1)
     {
       switch (opt)
         {
@@ -107,6 +108,14 @@ parse_params (config_t *config, int argc, char *argv[])
           break;
         case 'A':
           config->addr = optarg;
+          break;
+        case 'T':
+          config->timeout = atoi(optarg);
+          if (config->timeout < 0)
+            {
+              error ("Timeout must be a number greater than 0");
+              return (S_FAILURE);
+            }
           break;
         case 's':
           config->run_mode = RM_SINGLE;
@@ -171,6 +180,7 @@ main (int argc, char *argv[])
     .hash = "abFZSxKKdq5s6", /* crypt ("abc", "abc"); */
     .port = 9000,
     .addr = "127.0.0.1",
+    .timeout = 0,
   };
 
   if (parse_params (&config, argc, argv) == S_FAILURE)

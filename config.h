@@ -32,6 +32,7 @@ typedef struct config_t
   char *hash;
   char *addr;
   int port;
+  int timeout;
 } config_t;
 
 #endif // CONFIG_H
