@@ -17,8 +17,8 @@ jobs:
         run: pip install pytest hypothesis
       - name: update ubuntu packages
         run: sudo apt-get update -y
-      - name: install valgrind
-        run: sudo apt-get install valgrind -y
+      - name: install valgrind and netcat
+        run: sudo apt-get install valgrind netcat -y
       - name: make
         run: CC=${{matrix.cc}} make 
       - name: make check

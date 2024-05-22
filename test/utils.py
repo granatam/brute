@@ -16,6 +16,8 @@ with warnings.catch_warnings():
 import os
 
 CPU_COUNT = os.cpu_count()
+VALGRIND_FLAGS = "--leak-check=full --error-exitcode=1 --trace-children=yes --quiet"
+DEFAULT_PORT = 9000
 
 
 phases = (Phase.explicit, Phase.reuse, Phase.generate, Phase.target)
@@ -51,17 +53,15 @@ def run_client_server_process(cmd, log_file):
 def run_valgrind(passwd, alph, run_mode, brute_mode):
     cmd = brute_cmd(passwd, alph, run_mode, brute_mode)
 
-    return get_output(
-        f"valgrind --leak-check=full --error-exitcode=1 --trace-children=yes --quiet {cmd}"
-    )
+    return get_output(f"valgrind {VALGRIND_FLAGS} {cmd}")
 
 
 def run_valgrind_client_server(passwd, alph, brute_mode, client_flag, server_flag):
     client_cmd = brute_cmd(passwd, alph, client_flag, brute_mode)
     server_cmd = brute_cmd(passwd, alph, server_flag, brute_mode)
 
-    client_valgrind_cmd = f"valgrind --leak-check=full --error-exitcode=1 --trace-children=yes --quiet {client_cmd}"
-    server_valgrind_cmd = f"valgrind --leak-check=full --error-exitcode=1 --trace-children=yes --quiet {server_cmd}"
+    client_valgrind_cmd = f"valgrind {VALGRIND_FLAGS} {client_cmd}"
+    server_valgrind_cmd = f"valgrind {VALGRIND_FLAGS} {server_cmd}"
 
     server_valgrind_check = run_client_server_process(server_valgrind_cmd, sys.stderr)
     time.sleep(0.05)
@@ -79,6 +79,36 @@ def run_valgrind_client_server(passwd, alph, brute_mode, client_flag, server_fla
         return False
 
     return server_valgrind_check and client_valgrind_check
+
+
+def run_valgrind_netcat_server(passwd, alph, brute_mode, client_flag, server_flag):
+    client_cmd = brute_cmd(passwd, alph, client_flag, brute_mode)
+    server_cmd = brute_cmd(passwd, alph, server_flag, brute_mode)
+
+    server_valgrind_cmd = f"valgrind {VALGRIND_FLAGS} {server_cmd}"
+
+    server_valgrind_check = run_client_server_process(server_valgrind_cmd, sys.stderr)
+    time.sleep(0.05)
+    netcat_process = run_client_server_process(
+        f"nc localhost {DEFAULT_PORT}", sys.stderr
+    )
+    time.sleep(0.5)
+    netcat_process.kill()
+
+    client_proc = run_client_server_process(client_cmd, sys.stderr)
+    try:
+        client_proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        client_proc.kill()
+        return False
+
+    try:
+        _, _ = server_valgrind_check.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        server_valgrind_check.kill()
+        return False
+
+    return server_valgrind_check
 
 
 def run_client_server(
