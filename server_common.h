@@ -21,6 +21,7 @@ status_t close_client (int socket_fd);
 status_t send_hash (int socket_fd, mt_context_t *);
 status_t send_alph (int socket_fd, mt_context_t *);
 status_t send_config_data (int socket_fd, mt_context_t *);
+status_t send_task (int socket_fd, task_t *task);
 
 status_t serv_signal_if_found (mt_context_t *ctx);
 

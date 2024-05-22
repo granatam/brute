@@ -19,18 +19,8 @@
 static status_t
 delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
 {
-  command_t cmd = CMD_TASK;
-
-  task->task.is_correct = false;
-  struct iovec vec[] = { { .iov_base = &cmd, .iov_len = sizeof (cmd) },
-                         { .iov_base = task, .iov_len = sizeof (*task) } };
-
-  if (send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
-      == S_FAILURE)
-    {
-      error ("Could not send task to client");
-      return (S_FAILURE);
-    }
+  if (send_task (socket_fd, task) == S_FAILURE)
+    return (S_FAILURE);
 
   result_t task_result;
   if (recv_wrapper (socket_fd, &task_result, sizeof (task_result), 0)
@@ -76,6 +66,8 @@ handle_client (void *arg)
         {
           if (queue_push (&mt_ctx->queue, &task) == QS_FAILURE)
             error ("Could not push to the queue");
+
+          trace ("Pushed task back to queue because of client failure");
 
           return (NULL);
         }

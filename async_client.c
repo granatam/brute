@@ -130,7 +130,8 @@ result_sender (void *arg)
           error ("Could not send result to server");
           return (NULL);
         }
-      trace ("Sent result to server");
+      trace ("Sent %s result %s to server",
+             result.is_correct ? "correct" : "incorrect", result.password);
     }
 
   return (NULL);

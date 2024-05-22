@@ -2,6 +2,7 @@
 
 #include "brute.h"
 #include "common.h"
+#include "linked_list.h"
 #include "log.h"
 #include "multi.h"
 #include "queue.h"
@@ -74,27 +75,29 @@ cleanup:
 static status_t
 return_tasks (acl_context_t *ctx)
 {
-  mt_context_t *mt_ctx = &ctx->context->context;
+  mt_context_t *mt_ctx = &ctx->context->context->context;
   if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
     {
       error ("Could not lock mutex");
       return (S_FAILURE);
     }
   status_t status = S_SUCCESS;
-  pthread_cleanup_push (cleanup_mutex_unlock, &ctx->context->context.mutex);
+  pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
 
   for (size_t i = 0; i < QUEUE_SIZE; ++i)
     {
       if (ctx->registry_used[i])
         {
-          if (queue_push (&mt_ctx->queue, &ctx->registry[i]) != QS_SUCCESS)
+          if (linked_list_push (&ctx->context->returned_tasks,
+                                &ctx->registry[i])
+              == S_FAILURE)
             {
-              error ("Could not push back task to global queue");
+              error ("Could not push back task to returned tasks list");
               status = S_FAILURE;
               break;
             }
 
-          ctx->registry_used[i] = false;
+          trace ("Returned task back to list");
         }
     }
 
@@ -118,6 +121,9 @@ thread_cleanup_helper (void *arg)
     {
       trace ("No more active threads for client, destroying client context");
 
+      if (return_tasks (ctx) == S_FAILURE)
+        error ("Could not return used tasks to global queue");
+
       acl_context_destroy (ctx);
     }
 
@@ -129,7 +135,7 @@ static void *
 result_receiver (void *arg)
 {
   acl_context_t *cl_ctx = *(acl_context_t **)arg;
-  mt_context_t *mt_ctx = &cl_ctx->context->context;
+  mt_context_t *mt_ctx = &cl_ctx->context->context->context;
 
   while (true)
     {
@@ -160,6 +166,8 @@ result_receiver (void *arg)
           break;
         }
 
+      trace ("After queue push");
+
       cl_ctx->registry_used[task.id] = false;
 
       trace ("Set id status as free in registry");
@@ -167,12 +175,13 @@ result_receiver (void *arg)
       if (serv_signal_if_found (mt_ctx) == S_FAILURE)
         break;
 
+      trace ("After signal");
+
       if (mt_ctx->password[0] != 0)
         break;
     }
 
-  if (return_tasks (cl_ctx) == S_FAILURE)
-    error ("Could not return used tasks to global queue");
+  trace ("Cleaning up receiver thread");
 
   thread_cleanup_helper (cl_ctx);
 
@@ -183,62 +192,69 @@ static void *
 task_sender (void *arg)
 {
   acl_context_t *cl_ctx = *(acl_context_t **)arg;
-  mt_context_t *mt_ctx = &cl_ctx->context->context;
+  mt_context_t *mt_ctx = &cl_ctx->context->context->context;
 
   if (send_config_data (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
     goto cleanup;
 
   while (true)
     {
-      size_t id;
-      if (queue_pop (&cl_ctx->registry_idx, &id) != QS_SUCCESS)
-        break;
-
-      trace ("Got index from registry");
-
-      task_t *task = &cl_ctx->registry[id];
-
-      if (queue_pop (&mt_ctx->queue, task) != QS_SUCCESS)
+      task_t *task = NULL;
+      if (linked_list_pop (&cl_ctx->context->returned_tasks, (void **)&task)
+          == S_FAILURE)
         {
-          if (queue_push (&cl_ctx->registry_idx, &id) != QS_SUCCESS)
-            error ("Could not push back id to registry indices queue");
+          error ("Could not pop task from returned tasks list");
           break;
         }
 
-      trace ("Got task from global queue");
+      if (task == NULL)
+        {
+          size_t id;
+          if (queue_pop (&cl_ctx->registry_idx, &id) != QS_SUCCESS)
+            break;
 
-      cl_ctx->registry_used[id] = true;
+          trace ("Got index from registry");
+
+          task = &cl_ctx->registry[id];
+
+          if (queue_pop (&mt_ctx->queue, task) != QS_SUCCESS)
+            {
+              if (queue_push (&cl_ctx->registry_idx, &id) != QS_SUCCESS)
+                error ("Could not push back id to registry indices queue");
+              break;
+            }
+
+          trace ("Got task from global queue");
+
+          cl_ctx->registry_used[id] = true;
+
+          task->task.id = id;
+          task->to = task->from;
+          task->from = 0;
+        }
+      else
+        {
+          trace ("New task: id %d, password %s, is_correct %d, from %d, to %d",
+                 task->task.id, task->task.password, task->task.is_correct,
+                 task->from, task->to);
+          cl_ctx->registry_used[task->task.id] = true;
+        }
 
       trace ("Set id status as used in registry");
 
-      task->task.id = id;
-      task->task.is_correct = false;
-      task->to = task->from;
-      task->from = 0;
-
-      command_t cmd = CMD_TASK;
-      struct iovec vec[] = {
-        { .iov_base = &cmd, .iov_len = sizeof (cmd) },
-        { .iov_base = task, .iov_len = sizeof (*task) },
-      };
-
-      if (send_wrapper (cl_ctx->socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
-          == S_FAILURE)
+      if (send_task (cl_ctx->socket_fd, task) == S_FAILURE)
         {
           error ("Could not send task to client");
-          if (queue_push (&cl_ctx->registry_idx, &id) != QS_SUCCESS)
+          if (queue_push (&cl_ctx->registry_idx, &task->task.id) != QS_SUCCESS)
             error ("Could not push back id to registry indices queue");
 
-          cl_ctx->registry_used[id] = false;
+          cl_ctx->registry_used[task->task.id] = false;
           break;
         }
-
-      trace ("Sent task to client");
     }
 
 cleanup:
-  if (return_tasks (cl_ctx) == S_FAILURE)
-    error ("Could not return used tasks to global queue");
+  trace ("Cleaning up sender thread");
 
   thread_cleanup_helper (cl_ctx);
 
@@ -248,16 +264,18 @@ cleanup:
 static void *
 handle_clients (void *arg)
 {
-  serv_context_t *serv_ctx = *(serv_context_t **)arg;
-  mt_context_t *mt_ctx = &serv_ctx->context;
+  asrv_context_t *asrv_ctx = *(asrv_context_t **)arg;
+  mt_context_t *mt_ctx = &asrv_ctx->context->context;
 
   acl_context_t cl_ctx = {
-    .context = serv_ctx,
+    .context = asrv_ctx,
   };
 
   while (true)
     {
-      if ((cl_ctx.socket_fd = accept (serv_ctx->socket_fd, NULL, NULL)) == -1)
+      if ((cl_ctx.socket_fd
+           = accept (asrv_ctx->context->socket_fd, NULL, NULL))
+          == -1)
         {
           error ("Could not accept new connection: %s", strerror (errno));
           continue;
@@ -273,7 +291,8 @@ handle_clients (void *arg)
       if (!ctx_copy)
         continue;
 
-      // FIXME: shared cl_ctx for these 2 threads
+      trace ("Copied client context");
+
       if (thread_create (&mt_ctx->thread_pool, task_sender, &ctx_copy,
                          sizeof (ctx_copy))
           == S_FAILURE)
@@ -284,6 +303,8 @@ handle_clients (void *arg)
           continue;
         }
 
+      trace ("Created a sender thread");
+
       if (thread_create (&mt_ctx->thread_pool, result_receiver, &ctx_copy,
                          sizeof (ctx_copy))
           == S_FAILURE)
@@ -293,6 +314,8 @@ handle_clients (void *arg)
           acl_context_destroy (ctx_copy);
           continue;
         }
+
+      trace ("Created a receiver thread");
     }
 
   return (NULL);
@@ -302,13 +325,24 @@ bool
 run_async_server (task_t *task, config_t *config)
 {
   serv_context_t context;
-  serv_context_t *context_ptr = &context;
 
   if (serv_context_init (&context, config) == S_FAILURE)
     {
       error ("Could not initialize server context");
       return (false);
     }
+
+  asrv_context_t asrv_ctx = {
+    .context = &context,
+  };
+
+  if (linked_list_init (&asrv_ctx.returned_tasks, sizeof (task_t))
+      == S_FAILURE)
+    {
+      error ("Could not initialize list for returned tasks");
+      return (NULL);
+    }
+  asrv_context_t *context_ptr = &asrv_ctx;
 
   if (thread_create (&context.context.thread_pool, handle_clients,
                      &context_ptr, sizeof (context_ptr))

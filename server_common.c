@@ -141,6 +141,27 @@ send_config_data (int socket_fd, mt_context_t *ctx)
 }
 
 status_t
+send_task (int socket_fd, task_t *task)
+{
+  command_t cmd = CMD_TASK;
+
+  task->task.is_correct = false;
+  struct iovec vec[] = { { .iov_base = &cmd, .iov_len = sizeof (cmd) },
+                         { .iov_base = task, .iov_len = sizeof (*task) } };
+
+  if (send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
+      == S_FAILURE)
+    {
+      error ("Could not send task to client");
+      return (S_FAILURE);
+    }
+
+  trace ("Sent task %s to client", task->task.password);
+
+  return (S_SUCCESS);
+}
+
+status_t
 serv_signal_if_found (mt_context_t *ctx)
 {
   if (pthread_mutex_lock (&ctx->mutex) != 0)
