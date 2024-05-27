@@ -191,7 +191,7 @@ main (int argc, char *argv[])
     }
 
   task_t task;
-  memset (task.task.password, 0, sizeof (task.task.password));
+  memset (&task, 0, sizeof (task));
 
   bool is_found = false;
   switch (config.run_mode)

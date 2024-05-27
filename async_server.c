@@ -344,6 +344,7 @@ run_async_server (task_t *task, config_t *config)
 
   mt_context_t *mt_ctx = (mt_context_t *)&context;
 
+  // trace ("%p %d", task, task->to);
   brute (task, config, queue_push_wrapper, mt_ctx);
 
   trace ("Calculated all tasks");
