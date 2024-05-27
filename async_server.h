@@ -3,25 +3,25 @@
 
 #include "common.h"
 #include "config.h"
-#include "linked_list.h"
+// #include "linked_list.h"
 #include "queue.h"
 #include "server_common.h"
 
 #include <stdbool.h>
 
-typedef struct asrv_context_t 
-{
-  serv_context_t *context;
-  linked_list_t returned_tasks;
-} asrv_context_t;
+// typedef struct asrv_context_t
+// {
+//   serv_context_t *context;
+//   linked_list_t returned_tasks;
+// } asrv_context_t;
 
 typedef struct acl_context_t
 {
-  asrv_context_t *context;
+  serv_context_t *context;
   task_t registry[QUEUE_SIZE];
   queue_t registry_idx;
   bool registry_used[QUEUE_SIZE];
-  
+
   int socket_fd;
   unsigned char ref_count;
   pthread_mutex_t mutex;

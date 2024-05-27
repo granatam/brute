@@ -51,6 +51,24 @@ sem_wait (sem_t *sem)
 }
 
 status_t
+sem_trywait (sem_t *sem)
+{
+  if (pthread_mutex_lock (&sem->mutex) != 0)
+    return (S_FAILURE);
+  status_t status = S_SUCCESS;
+  pthread_cleanup_push (cleanup_mutex_unlock, &sem->mutex);
+
+  if (sem->counter > 0)
+    --sem->counter;
+  else
+    status = S_FAILURE;
+
+  pthread_cleanup_pop (!0);
+
+  return (status);
+}
+
+status_t
 sem_destroy (sem_t *sem)
 {
   sem->counter = 0;

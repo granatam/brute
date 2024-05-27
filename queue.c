@@ -1,5 +1,6 @@
 #include "queue.h"
 
+#include "common.h"
 #include "log.h"
 
 #include <stdlib.h>
@@ -14,6 +15,8 @@ queue_init (queue_t *queue, size_t unit_size)
   queue->unit_size = unit_size;
   queue->head = queue->tail = 0;
   queue->active = true;
+  queue->list.prev = &queue->list;
+  queue->list.next = &queue->list;
 
   if (sem_init (&queue->full, 0, 0) != 0)
     goto fail;
@@ -34,12 +37,9 @@ fail:
   return (QS_FAILURE);
 }
 
-queue_status_t
-queue_push (queue_t *queue, void *task)
+static queue_status_t
+queue_push_internal (queue_t *queue, void *payload)
 {
-  if (sem_wait (&queue->empty) != 0)
-    goto fail;
-
   if (!queue->active)
     {
       sem_post (&queue->empty);
@@ -49,7 +49,7 @@ queue_push (queue_t *queue, void *task)
   if (pthread_mutex_lock (&queue->tail_mutex) != 0)
     goto fail;
 
-  memcpy ((char *)queue->queue + (queue->tail * queue->unit_size), task,
+  memcpy ((char *)queue->queue + (queue->tail * queue->unit_size), payload,
           queue->unit_size);
   queue->tail = (queue->tail + 1) % QUEUE_SIZE;
 
@@ -67,7 +67,29 @@ fail:
 }
 
 queue_status_t
-queue_pop (queue_t *queue, void *task)
+queue_push (queue_t *queue, void *payload)
+{
+  if (sem_wait (&queue->empty) != 0)
+    {
+      queue->active = false;
+      return (QS_FAILURE);
+    }
+
+  return (queue_push_internal (queue, payload));
+}
+
+static void
+cleanup_free_handler (void *ptr)
+{
+  if (*(void **)ptr)
+    {
+      free (*(void **)ptr);
+      *(void **)ptr = NULL;
+    }
+}
+
+queue_status_t
+queue_pop (queue_t *queue, void *payload)
 {
   if (sem_wait (&queue->full) != 0)
     goto fail;
@@ -78,22 +100,44 @@ queue_pop (queue_t *queue, void *task)
       return (QS_INACTIVE);
     }
 
+  ll_node_t *node_to_pop = NULL;
+  pthread_cleanup_push (cleanup_free_handler, &node_to_pop);
   if (pthread_mutex_lock (&queue->head_mutex) != 0)
     goto fail;
 
-  memcpy (task, (char *)queue->queue + (queue->head * queue->unit_size),
-          queue->unit_size);
-  queue->head = (queue->head + 1) % QUEUE_SIZE;
+  if (queue->list.next != &queue->list)
+    {
+      node_to_pop = queue->list.next;
+      memcpy (payload, node_to_pop->payload, queue->unit_size);
+
+      node_to_pop->prev->next = node_to_pop->next;
+      node_to_pop->next->prev = node_to_pop->prev;
+    }
+  else
+    {
+      memcpy (payload, (char *)queue->queue + (queue->head * queue->unit_size),
+              queue->unit_size);
+      queue->head = (queue->head + 1) % QUEUE_SIZE;
+    }
 
   if (pthread_mutex_unlock (&queue->head_mutex) != 0)
     goto fail;
 
-  if (sem_post (&queue->empty) != 0)
+  if (node_to_pop)
+    {
+      if (sem_post (&queue->full) != 0)
+        goto fail;
+    }
+  else if (sem_post (&queue->empty) != 0)
     goto fail;
+
+  pthread_cleanup_pop (!0);
 
   return (QS_SUCCESS);
 
 fail:
+  if (node_to_pop)
+    free (node_to_pop);
   queue->active = false;
   return (QS_FAILURE);
 }
@@ -134,3 +178,76 @@ queue_destroy (queue_t *queue)
 
   return (QS_SUCCESS);
 }
+
+queue_status_t
+queue_push_back (queue_t *queue, void *payload)
+{
+  ll_node_t *node = calloc (1, sizeof (*node) + queue->unit_size);
+  if (!node)
+    {
+      error ("Could not allocate memory");
+      return (QS_FAILURE);
+    }
+  memcpy (node->payload, payload, queue->unit_size);
+
+  queue_status_t status = QS_SUCCESS;
+  bool list_used = true;
+  if (pthread_mutex_lock (&queue->head_mutex) != 0)
+    {
+      return (QS_FAILURE);
+    }
+  pthread_cleanup_push (cleanup_mutex_unlock, &queue->head_mutex);
+
+  if (sem_trywait (&queue->empty) == S_SUCCESS)
+    {
+      status = queue_push_internal (queue, payload);
+      list_used = false;
+    }
+  else
+    {
+      node->next = &queue->list;
+      node->prev = queue->list.prev;
+
+      queue->list.prev->next = node;
+      queue->list.prev = node;
+    }
+  pthread_cleanup_pop (!0);
+
+  if (!list_used)
+    free (node);
+
+  return (QS_SUCCESS);
+}
+
+// status_t
+// linked_list_pop (linked_list_t *list, void **payload)
+// {
+//   if (pthread_mutex_lock (&list->mutex) != 0)
+//     {
+//       error ("Could not lock a mutex");
+//       return (S_FAILURE);
+//     }
+//   pthread_cleanup_push (&cleanup_mutex_unlock, &list->mutex);
+
+//   if (list->nodes.next == &list->nodes)
+//     goto cleanup;
+
+//   ll_node_t *node_to_pop = list->nodes.prev;
+
+//   *payload = node_to_pop->payload;
+
+//   node_to_pop->prev->next = node_to_pop->next;
+//   node_to_pop->next->prev = node_to_pop->prev;
+//   --list->count;
+
+// cleanup:
+//   pthread_cleanup_pop (!0);
+
+//   return (S_SUCCESS);
+// }
+
+// status_t
+// linked_list_destroy (linked_list_t *list)
+// {
+//   assert (0 && "not implemented yet");
+// }
