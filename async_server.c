@@ -18,17 +18,22 @@
 #include <unistd.h>
 
 static acl_context_t *
-acl_context_init (acl_context_t *global_ctx)
+acl_context_init (serv_context_t *global_ctx)
 {
-  acl_context_t *ctx = malloc (sizeof (acl_context_t));
-  memcpy (ctx, global_ctx, sizeof (acl_context_t));
+  acl_context_t *ctx = calloc (1, sizeof (*ctx));
+  if (!ctx)
+    {
+      error ("Could not allocate memory for client context");
+      return (NULL);
+    }
+  ctx->context = global_ctx;
 
-  if (queue_init (&ctx->registry_idx, sizeof (size_t)) != QS_SUCCESS)
+  if (queue_init (&ctx->registry_idx, sizeof (int)) != QS_SUCCESS)
     {
       error ("Could not initialize registry indices queue");
       return (NULL);
     }
-  for (size_t i = 0; i < QUEUE_SIZE; ++i)
+  for (int i = 0; i < QUEUE_SIZE; ++i)
     if (queue_push (&ctx->registry_idx, &i) != QS_SUCCESS)
       {
         error ("Could not push index to registry indices queue");
@@ -83,7 +88,7 @@ return_tasks (acl_context_t *ctx)
   status_t status = S_SUCCESS;
   pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
 
-  for (size_t i = 0; i < QUEUE_SIZE; ++i)
+  for (int i = 0; i < QUEUE_SIZE; ++i)
     {
       if (ctx->registry_used[i])
         {
@@ -91,6 +96,14 @@ return_tasks (acl_context_t *ctx)
               != QS_SUCCESS)
             {
               error ("Could not push back task to returned tasks list");
+              status = S_FAILURE;
+              break;
+            }
+
+          ctx->registry_used[i] = false;
+          if (queue_push (&ctx->registry_idx, &i) != QS_SUCCESS)
+            {
+              error ("Could not push back id to registry indices queue");
               status = S_FAILURE;
               break;
             }
@@ -196,7 +209,7 @@ task_sender (void *arg)
 
   while (true)
     {
-      size_t id;
+      int id;
       if (queue_pop (&cl_ctx->registry_idx, &id) != QS_SUCCESS)
         break;
 
@@ -220,6 +233,7 @@ task_sender (void *arg)
       task->to = task->from;
       task->from = 0;
 
+      trace ("%p", task);
       if (send_task (cl_ctx->socket_fd, task) == S_FAILURE)
         {
           error ("Could not send task to client");
@@ -245,49 +259,55 @@ handle_clients (void *arg)
   serv_context_t *srv_ctx = *(serv_context_t **)arg;
   mt_context_t *mt_ctx = &srv_ctx->context;
 
-  acl_context_t cl_ctx = {
-    .context = srv_ctx,
-  };
-
   while (true)
     {
-      if ((cl_ctx.socket_fd = accept (srv_ctx->socket_fd, NULL, NULL)) == -1)
+      acl_context_t *acl_ctx = acl_context_init (srv_ctx);
+      if (!acl_ctx)
+        break;
+
+      while (true)
         {
-          error ("Could not accept new connection: %s", strerror (errno));
-          continue;
+          acl_ctx->socket_fd = accept (srv_ctx->socket_fd, NULL, NULL);
+          if (acl_ctx->socket_fd == -1)
+            {
+              error ("Could not accept new connection: %s", strerror (errno));
+              if (errno == EINVAL)
+                {
+                  free (acl_ctx);
+                  return (NULL);
+                }
+              continue;
+            }
+          break;
         }
 
       trace ("Accepted new connection");
 
       int option = 1;
-      setsockopt (cl_ctx.socket_fd, SOL_SOCKET, TCP_NODELAY, &option,
+      setsockopt (acl_ctx->socket_fd, SOL_SOCKET, TCP_NODELAY, &option,
                   sizeof (option));
-
-      acl_context_t *ctx_copy = acl_context_init (&cl_ctx);
-      if (!ctx_copy)
-        continue;
 
       trace ("Copied client context");
 
-      if (thread_create (&mt_ctx->thread_pool, task_sender, &ctx_copy,
-                         sizeof (ctx_copy))
+      if (thread_create (&mt_ctx->thread_pool, task_sender, &acl_ctx,
+                         sizeof (acl_ctx))
           == S_FAILURE)
         {
           error ("Could not create task sender thread");
-          close_client (ctx_copy->socket_fd);
-          acl_context_destroy (ctx_copy);
+          close_client (acl_ctx->socket_fd);
+          acl_context_destroy (acl_ctx);
           continue;
         }
 
       trace ("Created a sender thread");
 
-      if (thread_create (&mt_ctx->thread_pool, result_receiver, &ctx_copy,
-                         sizeof (ctx_copy))
+      if (thread_create (&mt_ctx->thread_pool, result_receiver, &acl_ctx,
+                         sizeof (acl_ctx))
           == S_FAILURE)
         {
           error ("Could not create result receiver thread");
-          close_client (ctx_copy->socket_fd);
-          acl_context_destroy (ctx_copy);
+          close_client (acl_ctx->socket_fd);
+          acl_context_destroy (acl_ctx);
           continue;
         }
 
@@ -300,6 +320,7 @@ handle_clients (void *arg)
 bool
 run_async_server (task_t *task, config_t *config)
 {
+  signal (SIGPIPE, SIG_IGN);
   serv_context_t context;
   serv_context_t *context_ptr = &context;
 
