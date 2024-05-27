@@ -110,8 +110,8 @@ queue_pop (queue_t *queue, void *payload)
       node_to_pop = queue->list.next;
       memcpy (payload, node_to_pop->payload, queue->unit_size);
 
-      node_to_pop->prev->next = node_to_pop->next;
-      node_to_pop->next->prev = node_to_pop->prev;
+      queue->list.next = node_to_pop->next;
+      node_to_pop->next->prev = &queue->list;
     }
   else
     {
@@ -216,7 +216,7 @@ queue_push_back (queue_t *queue, void *payload)
   if (!list_used)
     free (node);
 
-  return (QS_SUCCESS);
+  return (status);
 }
 
 // status_t
