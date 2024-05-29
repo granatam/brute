@@ -100,6 +100,7 @@ return_tasks (acl_context_t *ctx)
               status = S_FAILURE;
               break;
             }
+          trace("mt_ctx->queue - full: %d, empty: %d", mt_ctx->queue.full.counter, mt_ctx->queue.empty.counter);
 
           ctx->registry_used[i] = false;
           if (queue_push (&ctx->registry_idx, &i) != QS_SUCCESS)
@@ -132,6 +133,8 @@ thread_cleanup_helper (void *arg)
   if (return_tasks (ctx) == S_FAILURE)
     error ("Could not return used tasks to global queue");
 
+  trace ("Returned tasks to global list");
+
   if (--ctx->ref_count == 0)
     {
       trace ("No more active threads for client, destroying client context");
@@ -157,7 +160,7 @@ result_receiver (void *arg)
           error ("Could not receive result from client");
           break;
         }
-      trace ("Received result from client");
+      trace ("Received result %s from client", task.password);
 
       if (task.is_correct)
         {
@@ -217,6 +220,7 @@ task_sender (void *arg)
       trace ("Got index from registry");
 
       task_t *task = &cl_ctx->registry[id];
+      trace("mt_ctx->queue - full: %d, empty: %d", mt_ctx->queue.full.counter, mt_ctx->queue.empty.counter);
       if (queue_pop (&mt_ctx->queue, task) != QS_SUCCESS)
         {
           if (queue_push (&cl_ctx->registry_idx, &id) != QS_SUCCESS)
@@ -234,7 +238,6 @@ task_sender (void *arg)
       task->to = task->from;
       task->from = 0;
 
-      trace ("%p", task);
       if (send_task (cl_ctx->socket_fd, task) == S_FAILURE)
         {
           error ("Could not send task to client");
@@ -344,7 +347,6 @@ run_async_server (task_t *task, config_t *config)
 
   mt_context_t *mt_ctx = (mt_context_t *)&context;
 
-  // trace ("%p %d", task, task->to);
   brute (task, config, queue_push_wrapper, mt_ctx);
 
   trace ("Calculated all tasks");
@@ -352,7 +354,7 @@ run_async_server (task_t *task, config_t *config)
   if (wait_password (mt_ctx) == S_FAILURE)
     goto fail;
 
-  error ("Got password");
+  trace ("Got password");
 
   if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
     {

@@ -18,6 +18,7 @@ find_password (task_t *task, config_t *config, st_context_t *ctx)
 {
   task->task.is_correct = brute (task, config, st_password_check, ctx);
 
+  trace ("%s", task->task.password);
   if (!task->task.is_correct)
     memset (task->task.password, 0, sizeof (task->task.password));
 

@@ -49,7 +49,7 @@ send_wrapper (int socket_fd, struct iovec *vec, int iovcnt)
     {
       size_t bytes_written
           = TEMP_FAILURE_RETRY (writev (socket_fd, vec, iovcnt));
-      if (bytes_written <= 0)
+      if ((int)bytes_written <= 0)
         return (S_FAILURE);
 
       while (bytes_written >= vec[0].iov_len)

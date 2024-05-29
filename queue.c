@@ -125,13 +125,7 @@ queue_pop (queue_t *queue, void *payload)
   if (pthread_mutex_unlock (&queue->head_mutex) != 0)
     goto fail;
 
-  if (node_to_pop)
-    {
-      if (!list_is_empty) 
-        if (sem_post (&queue->full) != 0)
-          goto fail;
-    }
-  else if (sem_post (&queue->empty) != 0)
+  if (sem_post (&queue->empty) != 0)
     goto fail;
 
   pthread_cleanup_pop (!0);
@@ -223,33 +217,6 @@ queue_push_back (queue_t *queue, void *payload)
 
   return (status);
 }
-
-// status_t
-// linked_list_pop (linked_list_t *list, void **payload)
-// {
-//   if (pthread_mutex_lock (&list->mutex) != 0)
-//     {
-//       error ("Could not lock a mutex");
-//       return (S_FAILURE);
-//     }
-//   pthread_cleanup_push (&cleanup_mutex_unlock, &list->mutex);
-
-//   if (list->nodes.next == &list->nodes)
-//     goto cleanup;
-
-//   ll_node_t *node_to_pop = list->nodes.prev;
-
-//   *payload = node_to_pop->payload;
-
-//   node_to_pop->prev->next = node_to_pop->next;
-//   node_to_pop->next->prev = node_to_pop->prev;
-//   --list->count;
-
-// cleanup:
-//   pthread_cleanup_pop (!0);
-
-//   return (S_SUCCESS);
-// }
 
 // status_t
 // linked_list_destroy (linked_list_t *list)
