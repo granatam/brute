@@ -90,7 +90,6 @@ task_receiver (void *arg)
           trace ("Received task from server");
           if (queue_push (&ctx->task_queue, &task) != QS_SUCCESS)
             goto end;
-          exit (EXIT_SUCCESS);
           trace ("Pushed received task to queue");
           break;
         default:

@@ -63,6 +63,8 @@ serv_context_destroy (serv_context_t *context)
   if (mt_context_destroy ((mt_context_t *)context) == S_FAILURE)
     return (S_FAILURE);
 
+  trace ("After mt context destroy");
+
   shutdown (context->socket_fd, SHUT_RDWR);
   if (close (context->socket_fd) != 0)
     {
@@ -149,6 +151,8 @@ send_task (int socket_fd, task_t *task)
   struct iovec vec[] = { { .iov_base = &cmd, .iov_len = sizeof (cmd) },
                          { .iov_base = task, .iov_len = sizeof (*task) } };
 
+  trace ("Sending task with from = %d and to = %d", task->from, task->to);
+
   if (send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
       == S_FAILURE)
     {
@@ -172,6 +176,7 @@ serv_signal_if_found (mt_context_t *ctx)
   status_t status = S_SUCCESS;
   pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
 
+  trace ("%d %s", ctx->passwords_remaining, ctx->password);
   if (--ctx->passwords_remaining == 0 || ctx->password[0] != 0)
     {
       trace ("No passwords are left or password is found, signaling now");

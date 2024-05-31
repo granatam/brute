@@ -109,6 +109,7 @@ thread_run (void *arg)
   thread_cleanup_context_t tcc = { .thread_pool = thread_pool, .node = &node };
   pthread_cleanup_push (thread_cleanup, &tcc);
 
+  pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
   if (pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL) != 0)
     error ("Could not set cancel state for a thread");
   else
@@ -182,6 +183,7 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg,
 
       return (S_FAILURE);
     }
+  trace ("Created %08x", thread);
 
   if (pthread_mutex_lock (&context.mutex) != 0)
     {
@@ -197,6 +199,7 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
 {
   pthread_t self_id = pthread_self ();
 
+  status_t status = S_SUCCESS;
   for (;;)
     {
       if (pthread_mutex_lock (&thread_pool->mutex) != 0)
@@ -226,7 +229,6 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
           error ("Could not lock a mutex");
           return (S_FAILURE);
         }
-      status_t status = S_SUCCESS;
       pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
       if (cancel)
@@ -236,6 +238,8 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
             status = S_FAILURE;
           }
 
+      trace ("Cancelled thread %08x", thread);
+
       while (thread_pool->threads.next->thread == thread)
         if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
           {
@@ -243,6 +247,8 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
             status = S_FAILURE;
             break;
           }
+      
+      trace ("After thread pool wait");
 
       pthread_cleanup_pop (!0);
 
@@ -255,7 +261,6 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
       error ("Could not lock a mutex");
       return (S_FAILURE);
     }
-  status_t status = S_SUCCESS;
   pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
   while (thread_pool->count != 0)

@@ -93,6 +93,7 @@ return_tasks (acl_context_t *ctx)
     {
       if (ctx->registry_used[i])
         {
+          trace ("Before queue_push_back full: %d", mt_ctx->queue.full.counter);
           if (queue_push_back (&mt_ctx->queue, &ctx->registry[i])
               != QS_SUCCESS)
             {
@@ -100,7 +101,7 @@ return_tasks (acl_context_t *ctx)
               status = S_FAILURE;
               break;
             }
-          trace("mt_ctx->queue - full: %d, empty: %d", mt_ctx->queue.full.counter, mt_ctx->queue.empty.counter);
+          trace ("After queue_push_back full: %d", mt_ctx->queue.full.counter);
 
           ctx->registry_used[i] = false;
           if (queue_push (&ctx->registry_idx, &i) != QS_SUCCESS)
@@ -220,13 +221,14 @@ task_sender (void *arg)
       trace ("Got index from registry");
 
       task_t *task = &cl_ctx->registry[id];
-      trace("mt_ctx->queue - full: %d, empty: %d", mt_ctx->queue.full.counter, mt_ctx->queue.empty.counter);
+      trace ("Before queue_pop full: %d", mt_ctx->queue.full.counter);
       if (queue_pop (&mt_ctx->queue, task) != QS_SUCCESS)
         {
           if (queue_push (&cl_ctx->registry_idx, &id) != QS_SUCCESS)
             error ("Could not push back id to registry indices queue");
           break;
         }
+      trace ("After queue_pop full: %d", mt_ctx->queue.full.counter);
 
       trace ("Got task from global queue");
 
@@ -234,15 +236,16 @@ task_sender (void *arg)
 
       trace ("Set id status as used in registry");
 
-      task->task.id = id;
-      task->to = task->from;
-      task->from = 0;
+      task_t task_copy = *task;
+      task_copy.task.id = id;
+      task_copy.to = task->from;
+      task_copy.from = 0;
 
-      if (send_task (cl_ctx->socket_fd, task) == S_FAILURE)
+      if (send_task (cl_ctx->socket_fd, &task_copy) == S_FAILURE)
         {
           error ("Could not send task to client");
-          if (queue_push (&cl_ctx->registry_idx, &task->task.id) != QS_SUCCESS)
-            error ("Could not push back id to registry indices queue");
+          if (queue_push_back (&mt_ctx->queue, &task) != QS_SUCCESS)
+            error ("Could not push back task to global queue");
 
           cl_ctx->registry_used[task->task.id] = false;
           break;

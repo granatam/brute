@@ -30,6 +30,8 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
       return (S_FAILURE);
     }
 
+  trace ("Received result from client");
+
   if (task_result.is_correct)
     {
       if (queue_cancel (&ctx->queue) == QS_FAILURE)
@@ -39,6 +41,8 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
         }
       memcpy (ctx->password, task_result.password,
               sizeof (task_result.password));
+      
+      trace ("Received result is correct");
     }
 
   return (S_SUCCESS);
@@ -146,17 +150,23 @@ run_server (task_t *task, config_t *config)
   if (wait_password (mt_ctx) == S_FAILURE)
     goto fail;
 
+  trace ("After wait");
+
   if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
     {
       error ("Could not cancel a queue");
       goto fail;
     }
 
+  trace ("After cancel");
+
   if (mt_ctx->password[0] != 0)
     memcpy (task->task.password, mt_ctx->password, sizeof (mt_ctx->password));
-
+  
   if (serv_context_destroy (&context) == S_FAILURE)
     error ("Could not destroy server context");
+
+  trace ("After serv_context_destroy");
 
   return (mt_ctx->password[0] != 0);
 
