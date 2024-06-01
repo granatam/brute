@@ -68,15 +68,67 @@ fail:
 }
 
 queue_status_t
-queue_push (queue_t *queue, void *payload)
+queue_push (queue_t *queue, void *task)
 {
   if (sem_wait (&queue->empty) != 0)
+    goto fail;
+
+  if (!queue->active)
     {
-      queue->active = false;
-      return (QS_FAILURE);
+      sem_post (&queue->empty);
+      return (QS_INACTIVE);
     }
 
-  return (queue_push_internal (queue, payload));
+  if (pthread_mutex_lock (&queue->tail_mutex) != 0)
+    goto fail;
+
+  memcpy ((char *)queue->queue + (queue->tail * queue->unit_size), task,
+          queue->unit_size);
+  queue->tail = (queue->tail + 1) % QUEUE_SIZE;
+
+  if (pthread_mutex_unlock (&queue->tail_mutex) != 0)
+    goto fail;
+
+  if (sem_post (&queue->full) != 0)
+    goto fail;
+
+  return (QS_SUCCESS);
+
+fail:
+  queue->active = false;
+  return (QS_FAILURE);
+}
+
+queue_status_t
+queue_pop (queue_t *queue, void *task)
+{
+  if (sem_wait (&queue->full) != 0)
+    goto fail;
+
+  if (!queue->active)
+    {
+      sem_post (&queue->full);
+      return (QS_INACTIVE);
+    }
+
+  if (pthread_mutex_lock (&queue->head_mutex) != 0)
+    goto fail;
+
+  memcpy (task, (char *)queue->queue + (queue->head * queue->unit_size),
+          queue->unit_size);
+  queue->head = (queue->head + 1) % QUEUE_SIZE;
+
+  if (pthread_mutex_unlock (&queue->head_mutex) != 0)
+    goto fail;
+
+  if (sem_post (&queue->empty) != 0)
+    goto fail;
+
+  return (QS_SUCCESS);
+
+fail:
+  queue->active = false;
+  return (QS_FAILURE);
 }
 
 static void
@@ -89,54 +141,55 @@ cleanup_free_handler (void *ptr)
     }
 }
 
-queue_status_t
-queue_pop (queue_t *queue, void *payload)
-{
-  ll_node_t *node_to_pop = NULL;
-  if (sem_wait (&queue->full) != S_SUCCESS)
-    goto fail;
+// queue_status_t
+// queue_pop (queue_t *queue, void *payload)
+// {
+//   ll_node_t *node_to_pop = NULL;
+//   if (sem_wait (&queue->full) != S_SUCCESS)
+//     goto fail;
 
-  if (!queue->active)
-    {
-      sem_post (&queue->full);
-      return (QS_INACTIVE);
-    }
+//   if (!queue->active)
+//     {
+//       sem_post (&queue->full);
+//       return (QS_INACTIVE);
+//     }
 
-  pthread_cleanup_push (cleanup_free_handler, &node_to_pop);
-  if (pthread_mutex_lock (&queue->head_mutex) != 0)
-    goto fail;
+//   pthread_cleanup_push (cleanup_free_handler, &node_to_pop);
+//   if (pthread_mutex_lock (&queue->head_mutex) != 0)
+//     goto fail;
 
-  if (queue->list.next != &queue->list)
-    {
-      node_to_pop = queue->list.next;
-      memcpy (payload, node_to_pop->payload, queue->unit_size);
+//   if (queue->list.next != &queue->list)
+//     {
+//       node_to_pop = queue->list.next;
+//       memcpy (payload, node_to_pop->payload, queue->unit_size);
 
-      queue->list.next = node_to_pop->next;
-      node_to_pop->next->prev = &queue->list;
-    }
-  else
-    {
-      memcpy (payload, (char *)queue->queue + (queue->head * queue->unit_size),
-              queue->unit_size);
-      queue->head = (queue->head + 1) % QUEUE_SIZE;
-    }
+//       queue->list.next = node_to_pop->next;
+//       node_to_pop->next->prev = &queue->list;
+//     }
+//   else
+//     {
+//       memcpy (payload, (char *)queue->queue + (queue->head *
+//       queue->unit_size),
+//               queue->unit_size);
+//       queue->head = (queue->head + 1) % QUEUE_SIZE;
+//     }
 
-  if (pthread_mutex_unlock (&queue->head_mutex) != 0)
-    goto fail;
+//   if (pthread_mutex_unlock (&queue->head_mutex) != 0)
+//     goto fail;
 
-  if (sem_post (&queue->empty) != S_SUCCESS)
-    goto fail;
+//   if (sem_post (&queue->empty) != S_SUCCESS)
+//     goto fail;
 
-  pthread_cleanup_pop (!0);
+//   pthread_cleanup_pop (!0);
 
-  return (QS_SUCCESS);
+//   return (QS_SUCCESS);
 
-fail:
-  if (node_to_pop)
-    free (node_to_pop);
-  queue->active = false;
-  return (QS_FAILURE);
-}
+// fail:
+//   if (node_to_pop)
+//     free (node_to_pop);
+//   queue->active = false;
+//   return (QS_FAILURE);
+// }
 
 queue_status_t
 queue_cancel (queue_t *queue)

@@ -3,17 +3,10 @@
 
 #include "common.h"
 #include "config.h"
-// #include "linked_list.h"
 #include "queue.h"
 #include "server_common.h"
 
 #include <stdbool.h>
-
-// typedef struct asrv_context_t
-// {
-//   serv_context_t *context;
-//   linked_list_t returned_tasks;
-// } asrv_context_t;
 
 typedef struct acl_context_t
 {

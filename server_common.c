@@ -176,10 +176,13 @@ serv_signal_if_found (mt_context_t *ctx)
   status_t status = S_SUCCESS;
   pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
 
-  trace ("%d %s", ctx->passwords_remaining, ctx->password);
   if (--ctx->passwords_remaining == 0 || ctx->password[0] != 0)
     {
-      trace ("No passwords are left or password is found, signaling now");
+      if (ctx->passwords_remaining == 0)
+        trace ("No passwords are left, signaling now");
+      else
+        trace ("Password is found, signaling now");
+
       if (pthread_cond_signal (&ctx->cond_sem) != 0)
         {
           error ("Could not signal a condition");

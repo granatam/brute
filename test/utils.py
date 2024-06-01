@@ -17,7 +17,7 @@ import os
 
 CPU_COUNT = os.cpu_count()
 VALGRIND_FLAGS = "--leak-check=full --error-exitcode=1 --trace-children=yes --quiet"
-DEFAULT_PORT = 9000
+DEFAULT_PORT = 8081
 
 
 phases = (Phase.explicit, Phase.reuse, Phase.generate, Phase.target)
