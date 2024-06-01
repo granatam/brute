@@ -37,9 +37,9 @@ def gen_str(size, chars=string.ascii_uppercase + string.digits):
     return "".join(random.choice(chars) for _ in range(size))
 
 
-def brute_cmd(passwd, alph, run_mode, brute_mode, threads=CPU_COUNT):
+def brute_cmd(passwd, alph, run_mode, brute_mode, threads=CPU_COUNT, port=DEFAULT_PORT):
     hash = crypt(passwd, passwd)
-    return f"./brute -H {hash} -l {len(str(passwd))} -a {alph} -{run_mode} -{brute_mode} -t {threads}"
+    return f"./brute -H {hash} -l {len(str(passwd))} -a {alph} -{run_mode} -{brute_mode} -t {threads} -p {port}"
 
 
 def run_brute(passwd, alph, run_mode, brute_mode):
@@ -56,9 +56,9 @@ def run_valgrind(passwd, alph, run_mode, brute_mode):
     return get_output(f"valgrind {VALGRIND_FLAGS} {cmd}")
 
 
-def run_valgrind_client_server(passwd, alph, brute_mode, client_flag, server_flag):
-    client_cmd = brute_cmd(passwd, alph, client_flag, brute_mode)
-    server_cmd = brute_cmd(passwd, alph, server_flag, brute_mode)
+def run_valgrind_client_server(passwd, alph, brute_mode, client_flag, server_flag, port):
+    client_cmd = brute_cmd(passwd, alph, client_flag, brute_mode, port=port)
+    server_cmd = brute_cmd(passwd, alph, server_flag, brute_mode, port=port)
 
     client_valgrind_cmd = f"valgrind {VALGRIND_FLAGS} {client_cmd}"
     server_valgrind_cmd = f"valgrind {VALGRIND_FLAGS} {server_cmd}"
@@ -81,9 +81,9 @@ def run_valgrind_client_server(passwd, alph, brute_mode, client_flag, server_fla
     return server_valgrind_check and client_valgrind_check
 
 
-def run_valgrind_netcat_server(passwd, alph, brute_mode, client_flag, server_flag):
-    client_cmd = brute_cmd(passwd, alph, client_flag, brute_mode)
-    server_cmd = brute_cmd(passwd, alph, server_flag, brute_mode)
+def run_valgrind_netcat_server(passwd, alph, brute_mode, client_flag, server_flag, port):
+    client_cmd = brute_cmd(passwd, alph, client_flag, brute_mode, port=port)
+    server_cmd = brute_cmd(passwd, alph, server_flag, brute_mode, port=port)
 
     server_valgrind_cmd = f"valgrind {VALGRIND_FLAGS} {server_cmd}"
 
@@ -112,10 +112,10 @@ def run_valgrind_netcat_server(passwd, alph, brute_mode, client_flag, server_fla
 
 
 def run_client_server(
-    passwd, alph, brute_mode, client_flag, server_flag, client_log, server_log
+    passwd, alph, brute_mode, client_flag, server_flag, client_log, server_log, port
 ):
-    client_cmd = brute_cmd(passwd, alph, client_flag, brute_mode)
-    server_cmd = brute_cmd(passwd, alph, server_flag, brute_mode)
+    client_cmd = brute_cmd(passwd, alph, client_flag, brute_mode, port=port)
+    server_cmd = brute_cmd(passwd, alph, server_flag, brute_mode, port=port)
 
     server_proc = run_client_server_process(server_cmd, server_log)
     time.sleep(0.05)
@@ -144,9 +144,10 @@ def run_two_clients_server(
     first_client_log,
     second_client_log,
     server_log,
+    port
 ):
-    client_cmd = brute_cmd(passwd, alph, client_flag, brute_mode)
-    server_cmd = brute_cmd(passwd, alph, server_flag, brute_mode)
+    client_cmd = brute_cmd(passwd, alph, client_flag, brute_mode, port=port)
+    server_cmd = brute_cmd(passwd, alph, server_flag, brute_mode, port=port)
 
     server_proc = run_client_server_process(server_cmd, server_log)
     time.sleep(0.05)
@@ -176,7 +177,7 @@ def run_two_clients_server(
 
 
 def capture_client_server_log(
-    passwd, alph, brute_mode, client_flag, server_flag, func, num_of_clients=1
+    passwd, alph, brute_mode, client_flag, server_flag, func, num_of_clients=1, port=9000
 ):
     first_client_log = tempfile.NamedTemporaryFile()
     server_log = tempfile.NamedTemporaryFile()
@@ -192,6 +193,7 @@ def capture_client_server_log(
             server_flag,
             first_client_log,
             server_log,
+            port=port
         )
     else:
         result = func(
@@ -203,6 +205,7 @@ def capture_client_server_log(
             first_client_log,
             second_client_log,
             server_log,
+            port=port
         )
 
     first_client_log.flush()
