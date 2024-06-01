@@ -57,7 +57,7 @@ queue_push_internal (queue_t *queue, void *payload)
     goto fail;
 
   // trace ("Before sem_post full: %d", queue->full.counter);
-  if (sem_post (&queue->full) != 0)
+  if (sem_post (&queue->full) != S_SUCCESS)
     goto fail;
 
   return (QS_SUCCESS);

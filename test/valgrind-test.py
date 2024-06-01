@@ -1,12 +1,13 @@
+from datetime import timedelta
 from hypothesis import given, strategies as st, settings
-from utils import gen_str, run_valgrind, run_valgrind_client_server
+from utils import gen_str, run_valgrind, run_valgrind_client_server, phases
 
 
 @given(
     st.text(min_size=1, max_size=1, alphabet="smg"),
     st.text(min_size=1, max_size=1, alphabet="ir"),
 )
-@settings(deadline=None)
+@settings(deadline=timedelta(seconds=20), phases=phases)
 def test_valgrind(run_mode, brute_mode):
     alph = gen_str(5)
     passwd = gen_str(5, alph)
@@ -19,7 +20,7 @@ def test_valgrind(run_mode, brute_mode):
     st.text(min_size=1, max_size=1, alphabet="cv"),
     st.text(min_size=1, max_size=1, alphabet="ir"),
 )
-@settings(deadline=None)
+@settings(deadline=timedelta(seconds=20), phases=phases)
 def test_valgrind_client_server(server_flag, client_flag, brute_mode):
     alph = gen_str(5)
     passwd = gen_str(5, alph)
@@ -34,7 +35,7 @@ def test_valgrind_client_server(server_flag, client_flag, brute_mode):
     st.text(min_size=1, max_size=1, alphabet="cv"),
     st.text(min_size=1, max_size=1, alphabet="ir"),
 )
-@settings(deadline=None)
+@settings(deadline=timedelta(seconds=20), phases=phases)
 def run_valgrind_netcat_server(server_flag, client_flag, brute_mode):
     alph = gen_str(5)
     passwd = gen_str(5, alph)
