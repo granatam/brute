@@ -41,7 +41,7 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
         }
       memcpy (ctx->password, task_result.password,
               sizeof (task_result.password));
-      
+
       trace ("Received result is correct");
     }
 
@@ -162,7 +162,7 @@ run_server (task_t *task, config_t *config)
 
   if (mt_ctx->password[0] != 0)
     memcpy (task->task.password, mt_ctx->password, sizeof (mt_ctx->password));
-  
+
   if (serv_context_destroy (&context) == S_FAILURE)
     error ("Could not destroy server context");
 

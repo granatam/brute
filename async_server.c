@@ -93,7 +93,8 @@ return_tasks (acl_context_t *ctx)
     {
       if (ctx->registry_used[i])
         {
-          trace ("Before queue_push_back full: %d", mt_ctx->queue.full.counter);
+          trace ("Before queue_push_back full: %d",
+                 mt_ctx->queue.full.counter);
           if (queue_push_back (&mt_ctx->queue, &ctx->registry[i])
               != QS_SUCCESS)
             {

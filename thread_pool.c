@@ -247,7 +247,7 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
             status = S_FAILURE;
             break;
           }
-      
+
       trace ("After thread pool wait");
 
       pthread_cleanup_pop (!0);

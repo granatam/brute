@@ -27,7 +27,7 @@ typedef struct queue_t
   size_t unit_size;
   int head, tail;
   sem_t full, empty;
-  pthread_mutex_t head_mutex, tail_mutex, list_mutex;
+  pthread_mutex_t head_mutex, tail_mutex;
   bool active;
   ll_node_t list;
 } queue_t;

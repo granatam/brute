@@ -92,7 +92,8 @@ cleanup_free_handler (void *ptr)
 queue_status_t
 queue_pop (queue_t *queue, void *payload)
 {
-  if (sem_wait (&queue->full) != 0)
+  ll_node_t *node_to_pop = NULL;
+  if (sem_wait (&queue->full) != S_SUCCESS)
     goto fail;
 
   if (!queue->active)
@@ -101,7 +102,6 @@ queue_pop (queue_t *queue, void *payload)
       return (QS_INACTIVE);
     }
 
-  ll_node_t *node_to_pop = NULL;
   pthread_cleanup_push (cleanup_free_handler, &node_to_pop);
   if (pthread_mutex_lock (&queue->head_mutex) != 0)
     goto fail;
@@ -124,7 +124,7 @@ queue_pop (queue_t *queue, void *payload)
   if (pthread_mutex_unlock (&queue->head_mutex) != 0)
     goto fail;
 
-  if (sem_post (&queue->empty) != 0)
+  if (sem_post (&queue->empty) != S_SUCCESS)
     goto fail;
 
   pthread_cleanup_pop (!0);
@@ -207,7 +207,8 @@ queue_push_back (queue_t *queue, void *payload)
       queue->list.prev->next = node;
       queue->list.prev = node;
       trace ("Before sem_post full: %d", queue->full.counter);
-      status = (sem_post (&queue->full) == S_SUCCESS) ? QS_SUCCESS : QS_FAILURE;
+      status
+          = (sem_post (&queue->full) == S_SUCCESS) ? QS_SUCCESS : QS_FAILURE;
       trace ("After sem_post full: %d", queue->full.counter);
     }
   pthread_cleanup_pop (!0);

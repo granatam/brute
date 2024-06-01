@@ -42,7 +42,10 @@ sem_wait (sem_t *sem)
 
   while (sem->counter == 0)
     if (pthread_cond_wait (&sem->cond_sem, &sem->mutex) != 0)
-      status = S_FAILURE;
+      {
+        status = S_FAILURE;
+        break;
+      }
   --sem->counter;
 
   pthread_cleanup_pop (!0);
