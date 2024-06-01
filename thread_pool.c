@@ -105,6 +105,7 @@ thread_run (void *arg)
   thread_cleanup_context_t tcc = { .thread_pool = thread_pool, .node = &node };
   pthread_cleanup_push (thread_cleanup, &tcc);
 
+  pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
   if (pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL) != 0)
     {
       error ("Could not set cancel state for a thread\n");
