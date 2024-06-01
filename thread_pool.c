@@ -109,7 +109,7 @@ thread_run (void *arg)
   thread_cleanup_context_t tcc = { .thread_pool = thread_pool, .node = &node };
   pthread_cleanup_push (thread_cleanup, &tcc);
 
-  pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+  // pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
   if (pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL) != 0)
     error ("Could not set cancel state for a thread");
   else
@@ -199,7 +199,7 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
 {
   pthread_t self_id = pthread_self ();
 
-  status_t status = S_SUCCESS;
+  // status_t status = S_SUCCESS;
   for (;;)
     {
       if (pthread_mutex_lock (&thread_pool->mutex) != 0)
@@ -235,7 +235,8 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
         if (pthread_cancel (thread) != 0)
           {
             error ("Could not cancel a thread");
-            status = S_FAILURE;
+            // status = S_FAILURE;
+            return (S_FAILURE);
           }
 
       trace ("Cancelled thread %08x", thread);
@@ -244,7 +245,8 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
         if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
           {
             error ("Could not wait for a conditional semaphore");
-            status = S_FAILURE;
+            // status = S_FAILURE;
+            return (S_FAILURE);
             break;
           }
 
@@ -252,8 +254,8 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
 
       pthread_cleanup_pop (!0);
 
-      if (S_FAILURE == status)
-        return (S_FAILURE);
+      // if (S_FAILURE == status)
+      //   return (S_FAILURE);
     }
 
   if (pthread_mutex_lock (&thread_pool->mutex) != 0)
@@ -267,13 +269,14 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
     if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
       {
         error ("Could not wait for a conditional semaphore");
-        status = S_FAILURE;
+        // status = S_FAILURE;
+        return (S_FAILURE);
         break;
       }
   pthread_cleanup_pop (!0);
 
-  if (S_FAILURE == status)
-    return (S_FAILURE);
+  // if (S_FAILURE == status)
+  //   return (S_FAILURE);
 
   /* Valgrind tests are returning false positive result, since it doesn't
    * wait until all memory allocated for threads is cleared, so we need to
