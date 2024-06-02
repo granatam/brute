@@ -179,6 +179,7 @@ queue_destroy (queue_t *queue)
 queue_status_t
 queue_push_back (queue_t *queue, void *payload)
 {
+  trace ("Calling queue_push_back");
   ll_node_t *node = calloc (1, sizeof (*node) + queue->unit_size);
   if (!node)
     {

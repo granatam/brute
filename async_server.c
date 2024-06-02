@@ -91,8 +91,6 @@ return_tasks (acl_context_t *ctx)
     {
       if (ctx->registry_used[i])
         {
-          trace ("Before queue_push_back full: %d",
-                 mt_ctx->queue.full.counter);
           if (queue_push_back (&mt_ctx->queue, &ctx->registry[i])
               != QS_SUCCESS)
             {
@@ -100,11 +98,9 @@ return_tasks (acl_context_t *ctx)
               status = S_FAILURE;
               break;
             }
-          trace ("After queue_push_back full: %d", mt_ctx->queue.full.counter);
-
           ctx->registry_used[i] = false;
 
-          trace ("Returned task back to list");
+          trace ("Returned task %d back to list", i);
         }
     }
 
@@ -154,7 +150,6 @@ result_receiver (void *arg)
           error ("Could not receive result from client");
           break;
         }
-      trace ("Received result %s from client", task.password);
 
       if (task.is_correct)
         {
@@ -164,9 +159,10 @@ result_receiver (void *arg)
               break;
             }
           memcpy (mt_ctx->password, task.password, sizeof (task.password));
-
-          trace ("Received correct result %s from client", task.password);
         }
+
+      trace ("Received %s result %s from client",
+             task.is_correct ? "correct" : "incorrect", task.password);
 
       if (queue_push (&cl_ctx->registry_idx, &task.id) != QS_SUCCESS)
         {
@@ -174,16 +170,14 @@ result_receiver (void *arg)
           break;
         }
 
-      trace ("After queue push");
+      trace ("Pushed index of received task back to indices queue");
 
       cl_ctx->registry_used[task.id] = false;
-
-      trace ("Set id status as free in registry");
 
       if (serv_signal_if_found (mt_ctx) == S_FAILURE)
         break;
 
-      trace ("After signal");
+      trace ("Signaled on global conditional semaphore");
 
       if (mt_ctx->password[0] != 0)
         break;
@@ -214,20 +208,16 @@ task_sender (void *arg)
       trace ("Got index from registry");
 
       task_t *task = &cl_ctx->registry[id];
-      trace ("Before queue_pop full: %d", mt_ctx->queue.full.counter);
       if (queue_pop (&mt_ctx->queue, task) != QS_SUCCESS)
         {
           if (queue_push (&cl_ctx->registry_idx, &id) != QS_SUCCESS)
             error ("Could not push back id to registry indices queue");
           break;
         }
-      trace ("After queue_pop full: %d", mt_ctx->queue.full.counter);
 
       trace ("Got task from global queue");
 
       cl_ctx->registry_used[id] = true;
-
-      trace ("Set id status as used in registry");
 
       task_t task_copy = *task;
       task_copy.task.id = id;
@@ -239,7 +229,6 @@ task_sender (void *arg)
           error ("Could not send task to client");
           if (queue_push_back (&mt_ctx->queue, &task) != QS_SUCCESS)
             error ("Could not push back task to global queue");
-
           cl_ctx->registry_used[task->task.id] = false;
           break;
         }
