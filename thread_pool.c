@@ -36,6 +36,8 @@ thread_pool_init (thread_pool_t *thread_pool)
 static void
 thread_cleanup (void *arg)
 {
+  trace ("Starting to cleaning up thread");
+
   thread_cleanup_context_t *tcc = arg;
   node_t *node = tcc->node;
   thread_pool_t *thread_pool = tcc->thread_pool;
