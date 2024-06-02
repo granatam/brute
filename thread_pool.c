@@ -175,7 +175,6 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg,
       pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
       --thread_pool->count;
-
       if (pthread_cond_signal (&thread_pool->cond) != 0)
         error ("Could not signal a conditional semaphore");
 

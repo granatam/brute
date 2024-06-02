@@ -97,7 +97,7 @@ def test_two_async_clients_async_server(passwd, brute_mode):
 def test_async_client_sync_server(passwd, brute_mode):
     alph = shuffle_password(passwd)
     capture_client_server_log(
-        passwd, alph, brute_mode, "v", "w", run_client_server, port=9006
+        passwd, alph, brute_mode, "v", "S", run_client_server, port=9006
     )
 
 

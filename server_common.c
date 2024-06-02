@@ -151,8 +151,6 @@ send_task (int socket_fd, task_t *task)
   struct iovec vec[] = { { .iov_base = &cmd, .iov_len = sizeof (cmd) },
                          { .iov_base = task, .iov_len = sizeof (*task) } };
 
-  trace ("Sending task with from = %d and to = %d", task->from, task->to);
-
   if (send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
       == S_FAILURE)
     {
