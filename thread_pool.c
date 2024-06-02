@@ -208,6 +208,7 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
       thread_pool->cancelled = true;
       pthread_t thread = thread_pool->threads.next->thread;
       bool empty = (thread_pool->threads.next == &thread_pool->threads);
+      trace ("Cancelling thread %08x, empty == %d", thread, empty);
 
       if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
         {
@@ -235,12 +236,16 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
             return (S_FAILURE);
           }
 
+      trace ("Cancelled thread %08x", thread);
+
       while (thread_pool->threads.next->thread == thread)
         if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
           {
             error ("Could not wait for a conditional semaphore");
             return (S_FAILURE);
           }
+
+      trace ("After wait");
 
       pthread_cleanup_pop (!0);
     }
@@ -252,12 +257,16 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
     }
   pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
+  trace ("Another wait");
+
   while (thread_pool->count != 0)
     if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
       {
         error ("Could not wait for a conditional semaphore");
         return (S_FAILURE);
       }
+
+  trace ("After another wait");
   pthread_cleanup_pop (!0);
 
   /* Valgrind tests are returning false positive result, since it doesn't
