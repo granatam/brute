@@ -172,7 +172,9 @@ result_receiver (void *arg)
 
       trace ("Pushed index of received task back to indices queue");
 
+      pthread_mutex_lock (&mt_ctx->mutex);
       cl_ctx->registry_used[task.id] = false;
+      pthread_mutex_unlock (&mt_ctx->mutex);
 
       if (serv_signal_if_found (mt_ctx) == S_FAILURE)
         break;
@@ -217,7 +219,9 @@ task_sender (void *arg)
 
       trace ("Got task from global queue");
 
+      pthread_mutex_lock (&mt_ctx->mutex);
       cl_ctx->registry_used[id] = true;
+      pthread_mutex_unlock (&mt_ctx->mutex);
 
       task_t task_copy = *task;
       task_copy.task.id = id;

@@ -47,7 +47,7 @@ status_t
 mt_context_destroy (mt_context_t *context)
 {
   trace ("Destroying multithreading context");
-  if (thread_pool_cancel (&context->thread_pool) == S_FAILURE)
+  if (thread_pool_join (&context->thread_pool) == S_FAILURE)
     {
       error ("Could not cancel a thread pool");
       return (S_FAILURE);
