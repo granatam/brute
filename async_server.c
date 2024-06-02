@@ -103,7 +103,7 @@ return_tasks (acl_context_t *ctx)
           trace ("After queue_push_back full: %d", mt_ctx->queue.full.counter);
 
           ctx->registry_used[i] = false;
-          if (queue_push (&ctx->registry_idx, &i) != QS_SUCCESS)
+          if (queue_push_back (&ctx->registry_idx, &i) != QS_SUCCESS)
             {
               error ("Could not push back id to registry indices queue");
               status = S_FAILURE;

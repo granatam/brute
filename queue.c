@@ -56,7 +56,6 @@ queue_push_internal (queue_t *queue, void *payload)
   if (pthread_mutex_unlock (&queue->tail_mutex) != 0)
     goto fail;
 
-  // trace ("Before sem_post full: %d", queue->full.counter);
   if (sem_post (&queue->full) != 0)
     goto fail;
 
@@ -172,6 +171,8 @@ queue_destroy (queue_t *queue)
   if (pthread_mutex_destroy (&queue->tail_mutex) != 0)
     return (QS_FAILURE);
 
+  /* TODO: destroy linked list */
+
   return (QS_SUCCESS);
 }
 
@@ -206,10 +207,8 @@ queue_push_back (queue_t *queue, void *payload)
 
       queue->list.prev->next = node;
       queue->list.prev = node;
-      trace ("Before sem_post full: %d", queue->full.counter);
       status
           = (sem_post (&queue->full) == S_SUCCESS) ? QS_SUCCESS : QS_FAILURE;
-      trace ("After sem_post full: %d", queue->full.counter);
     }
   pthread_cleanup_pop (!0);
 
@@ -218,9 +217,3 @@ queue_push_back (queue_t *queue, void *payload)
 
   return (status);
 }
-
-// status_t
-// linked_list_destroy (linked_list_t *list)
-// {
-//   assert (0 && "not implemented yet");
-// }
