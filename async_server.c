@@ -103,12 +103,6 @@ return_tasks (acl_context_t *ctx)
           trace ("After queue_push_back full: %d", mt_ctx->queue.full.counter);
 
           ctx->registry_used[i] = false;
-          if (queue_push_back (&ctx->registry_idx, &i) != QS_SUCCESS)
-            {
-              error ("Could not push back id to registry indices queue");
-              status = S_FAILURE;
-              break;
-            }
 
           trace ("Returned task back to list");
         }
@@ -130,8 +124,8 @@ thread_cleanup_helper (void *arg)
       return;
     }
 
-  // if (return_tasks (ctx) == S_FAILURE)
-  //   error ("Could not return used tasks to global queue");
+  if (return_tasks (ctx) == S_FAILURE)
+    error ("Could not return used tasks to global queue");
 
   trace ("Returned tasks to global list");
 
