@@ -109,12 +109,9 @@ thread_run (void *arg)
 
   // pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
   if (pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL) != 0)
-    {
-      error ("Could not set cancel state for a thread");
-      return (NULL);
-    }
-
-  local_ctx.func (args);
+    error ("Could not set cancel state for a thread");
+  else
+    local_ctx.func (args);
 
   pthread_cleanup_pop (!0);
 
