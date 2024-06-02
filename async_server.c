@@ -130,8 +130,8 @@ thread_cleanup_helper (void *arg)
       return;
     }
 
-  if (return_tasks (ctx) == S_FAILURE)
-    error ("Could not return used tasks to global queue");
+  // if (return_tasks (ctx) == S_FAILURE)
+  //   error ("Could not return used tasks to global queue");
 
   trace ("Returned tasks to global list");
 
