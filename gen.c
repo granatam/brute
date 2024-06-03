@@ -140,7 +140,7 @@ run_generator (task_t *task, config_t *config)
       = (config->number_of_threads == 1) ? 1 : config->number_of_threads - 1;
   int active_threads
       = create_threads (&context.thread_pool, number_of_threads, gen_worker,
-                        &context_ptr, sizeof (context_ptr));
+                        &context_ptr, sizeof (context_ptr), "gen worker");
 
   if (active_threads == 0)
     goto fail;

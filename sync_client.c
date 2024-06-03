@@ -173,7 +173,7 @@ spawn_clients (config_t *config, task_callback_t task_callback)
 
   if (create_threads (&thread_pool, config->number_of_threads,
                       &client_thread_helper, &context_ptr,
-                      sizeof (context_ptr))
+                      sizeof (context_ptr), "sync client")
       == 0)
     return;
 

@@ -85,13 +85,7 @@ static status_t
 return_tasks (acl_context_t *ctx)
 {
   mt_context_t *mt_ctx = &ctx->context->context;
-  if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
-    {
-      error ("Could not lock mutex");
-      return (S_FAILURE);
-    }
   status_t status = S_SUCCESS;
-  pthread_cleanup_push (cleanup_mutex_unlock, &mt_ctx->mutex);
 
   for (int i = 0; i < QUEUE_SIZE; ++i)
     {
@@ -110,8 +104,6 @@ return_tasks (acl_context_t *ctx)
         }
     }
 
-  pthread_cleanup_pop (!0);
-
   return (status);
 }
 
@@ -120,11 +112,15 @@ thread_cleanup_helper (void *arg)
 {
   acl_context_t *ctx = arg;
 
+  trace ("Thread cleanup helper");
+
   if (pthread_mutex_lock (&ctx->mutex) != 0)
     {
       error ("Could not lock mutex");
       return;
     }
+  
+  trace ("Returning tasks to global list");
 
   if (return_tasks (ctx) == S_FAILURE)
     error ("Could not return used tasks to global queue");
@@ -180,10 +176,7 @@ result_receiver (void *arg)
 
       trace ("Pushed index of received task back to indices queue");
 
-      pthread_mutex_lock (&cl_ctx->mutex);
-      pthread_cleanup_push (cleanup_mutex_unlock, &cl_ctx->mutex);
       cl_ctx->registry_used[task.id] = false;
-      pthread_cleanup_pop (!0);
 
       if (serv_signal_if_found (mt_ctx) == S_FAILURE)
         break;
@@ -228,10 +221,7 @@ task_sender (void *arg)
 
       trace ("Got task from global queue");
 
-      // pthread_mutex_lock (&cl_ctx->mutex);
-      // pthread_cleanup_push (cleanup_mutex_unlock, &cl_ctx->mutex);
       cl_ctx->registry_used[id] = true;
-      // pthread_cleanup_pop (!0);
 
       task_t task_copy = *task;
       task_copy.task.id = id;
@@ -292,7 +282,7 @@ handle_clients (void *arg)
       trace ("Copied client context");
 
       if (thread_create (&mt_ctx->thread_pool, task_sender, &acl_ctx,
-                         sizeof (acl_ctx))
+                         sizeof (acl_ctx), "async sender")
           == S_FAILURE)
         {
           error ("Could not create task sender thread");
@@ -301,10 +291,10 @@ handle_clients (void *arg)
           continue;
         }
 
-      trace ("Created a sender thread");
+      trace ("Created a sender thread %08x", mt_ctx->thread_pool.threads.prev->thread);
 
       if (thread_create (&mt_ctx->thread_pool, result_receiver, &acl_ctx,
-                         sizeof (acl_ctx))
+                         sizeof (acl_ctx), "async receiver")
           == S_FAILURE)
         {
           error ("Could not create result receiver thread");
@@ -313,7 +303,7 @@ handle_clients (void *arg)
           continue;
         }
 
-      trace ("Created a receiver thread");
+      trace ("Created a receiver thread %08x", mt_ctx->thread_pool.threads.prev->thread);
     }
 
   return (NULL);
@@ -333,7 +323,7 @@ run_async_server (task_t *task, config_t *config)
     }
 
   if (thread_create (&context.context.thread_pool, handle_clients,
-                     &context_ptr, sizeof (context_ptr))
+                     &context_ptr, sizeof (context_ptr), "async accepter")
       == S_FAILURE)
     {
       error ("Could not create clients thread");

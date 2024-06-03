@@ -201,12 +201,12 @@ run_async_client (config_t *config)
 
   async_client_context_t *ctx_ptr = &ctx;
 
-  thread_create (&ctx.thread_pool, task_receiver, &ctx_ptr, sizeof (ctx_ptr));
+  thread_create (&ctx.thread_pool, task_receiver, &ctx_ptr, sizeof (ctx_ptr), "async receiver");
   trace ("Created receiver thread");
-  thread_create (&ctx.thread_pool, result_sender, &ctx_ptr, sizeof (ctx_ptr));
+  thread_create (&ctx.thread_pool, result_sender, &ctx_ptr, sizeof (ctx_ptr), "async sender");
   trace ("Created sender thread");
   create_threads (&ctx.thread_pool, config->number_of_threads, client_worker,
-                  &ctx_ptr, sizeof (ctx_ptr));
+                  &ctx_ptr, sizeof (ctx_ptr), "async worker");
   trace ("Created worker thread");
 
   if (pthread_mutex_lock (&ctx.mutex) != 0)

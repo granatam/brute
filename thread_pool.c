@@ -48,8 +48,8 @@ thread_cleanup (void *arg)
   node->next->prev = node->prev;
   --thread_pool->count;
 
-  // if (pthread_cond_signal (&thread_pool->cond) != 0)
-  //   error ("Could not signal a conditional semaphore");
+  if (pthread_cond_signal (&thread_pool->cond) != 0)
+    error ("Could not signal a conditional semaphore");
 
   pthread_cleanup_pop (!0);
 }
@@ -75,6 +75,7 @@ thread_run (void *arg)
 
   node_t node;
   node.thread = pthread_self ();
+  node.name = local_ctx.name;
 
   if (pthread_mutex_lock (&thread_pool->mutex) != 0)
     {
@@ -118,10 +119,11 @@ thread_run (void *arg)
 
 status_t
 thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg,
-               size_t arg_size)
+               size_t arg_size, char *name)
 {
   tp_context_t context = {
-    .thread_pool = thread_pool, .func = func, .arg = arg, .arg_size = arg_size
+    .thread_pool = thread_pool, .func = func, .arg = arg, .arg_size = arg_size,
+    .name = name
   };
 
   if (pthread_mutex_init (&context.mutex, NULL) != 0)
@@ -204,6 +206,7 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
 
       thread_pool->cancelled = true;
       pthread_t thread = thread_pool->threads.next->thread;
+      char *name = thread_pool->threads.next->name;
       bool empty = (thread_pool->threads.next == &thread_pool->threads);
 
       if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
@@ -225,41 +228,41 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
         }
       pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
-      if (cancel)
-      {
-        if (pthread_cancel (thread) != 0)
-          {
-            error ("Could not cancel a thread");
-            return (S_FAILURE);
-          }
-      }
+      trace ("Cancelling thread %08x %s", thread, name);
 
-      pthread_join (thread, NULL);
-      // while (thread_pool->threads.next->thread == thread)
-      //   if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
-      //     {
-      //       error ("Could not wait for a conditional semaphore");
-      //       return (S_FAILURE);
-      //     }
+      if (cancel)
+        if (pthread_cancel (thread) != 0)
+          error ("Could not cancel a thread");
+
+      // trace ("Cancelled thread %08x %s", thread, name);
+
+      while (thread_pool->threads.next->thread == thread)
+        if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
+          {
+            error ("Could not wait for a conditional semaphore");
+            break;
+          }
+
+      trace ("After wait of %08x %s", thread, name);
 
       pthread_cleanup_pop (!0);
     }
 
-  if (pthread_mutex_lock (&thread_pool->mutex) != 0)
-    {
-      error ("Could not lock a mutex");
-      return (S_FAILURE);
-    }
-  pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
+  // if (pthread_mutex_lock (&thread_pool->mutex) != 0)
+  //   {
+  //     error ("Could not lock a mutex");
+  //     return (S_FAILURE);
+  //   }
+  // pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
-  while (thread_pool->count != 0)
-    if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
-      {
-        error ("Could not wait for a conditional semaphore");
-        return (S_FAILURE);
-      }
+  // while (thread_pool->count != 0)
+  //   if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
+  //     {
+  //       error ("Could not wait for a conditional semaphore");
+  //       return (S_FAILURE);
+  //     }
 
-  pthread_cleanup_pop (!0);
+  // pthread_cleanup_pop (!0);
 
   /* Valgrind tests are returning false positive result, since it doesn't
    * wait until all memory allocated for threads is cleared, so we need to
@@ -290,12 +293,12 @@ thread_pool_join (thread_pool_t *thread_pool)
 
 int
 create_threads (thread_pool_t *thread_pool, int number_of_threads,
-                void *func (void *), void *context, size_t context_size)
+                void *func (void *), void *context, size_t context_size, char *name)
 {
   int active_threads = 0;
 
   for (int i = 0; i < number_of_threads; ++i)
-    if (thread_create (thread_pool, func, context, context_size) == S_SUCCESS)
+    if (thread_create (thread_pool, func, context, context_size, name) == S_SUCCESS)
       ++active_threads;
 
   if (active_threads == 0)
