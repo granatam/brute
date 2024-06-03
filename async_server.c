@@ -52,17 +52,23 @@ acl_context_init (serv_context_t *global_ctx)
 static void
 acl_context_destroy (acl_context_t *ctx)
 {
+  trace ("Destroying client context");
+
   if (queue_cancel (&ctx->registry_idx) != QS_SUCCESS)
     {
       error ("Could not cancel registry indices queue");
       goto cleanup;
     }
 
+  trace ("Cancelled registry indices queue");
+
   if (queue_destroy (&ctx->registry_idx) != QS_SUCCESS)
     {
       error ("Could not destroy registry indices queue");
       goto cleanup;
     }
+
+  trace ("Destroyed registry indices queue");
 
   if (pthread_mutex_destroy (&ctx->mutex) != 0)
     {
@@ -142,6 +148,7 @@ result_receiver (void *arg)
   acl_context_t *cl_ctx = *(acl_context_t **)arg;
   mt_context_t *mt_ctx = &cl_ctx->context->context;
 
+  pthread_cleanup_push (thread_cleanup_helper, cl_ctx);
   while (true)
     {
       result_t task;
@@ -173,9 +180,10 @@ result_receiver (void *arg)
 
       trace ("Pushed index of received task back to indices queue");
 
-      pthread_mutex_lock (&mt_ctx->mutex);
+      pthread_mutex_lock (&cl_ctx->mutex);
+      pthread_cleanup_push (cleanup_mutex_unlock, &cl_ctx->mutex);
       cl_ctx->registry_used[task.id] = false;
-      pthread_mutex_unlock (&mt_ctx->mutex);
+      pthread_cleanup_pop (!0);
 
       if (serv_signal_if_found (mt_ctx) == S_FAILURE)
         break;
@@ -187,8 +195,7 @@ result_receiver (void *arg)
     }
 
   trace ("Cleaning up receiver thread");
-
-  thread_cleanup_helper (cl_ctx);
+  pthread_cleanup_pop (!0);
 
   return (NULL);
 }
@@ -199,6 +206,7 @@ task_sender (void *arg)
   acl_context_t *cl_ctx = *(acl_context_t **)arg;
   mt_context_t *mt_ctx = &cl_ctx->context->context;
 
+  pthread_cleanup_push (thread_cleanup_helper, cl_ctx);
   if (send_config_data (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
     goto cleanup;
 
@@ -220,9 +228,10 @@ task_sender (void *arg)
 
       trace ("Got task from global queue");
 
-      pthread_mutex_lock (&mt_ctx->mutex);
+      pthread_mutex_lock (&cl_ctx->mutex);
+      pthread_cleanup_push (cleanup_mutex_unlock, &cl_ctx->mutex);
       cl_ctx->registry_used[id] = true;
-      pthread_mutex_unlock (&mt_ctx->mutex);
+      pthread_cleanup_pop (!0);
 
       task_t task_copy = *task;
       task_copy.task.id = id;
@@ -241,8 +250,7 @@ task_sender (void *arg)
 
 cleanup:
   trace ("Cleaning up sender thread");
-
-  thread_cleanup_helper (cl_ctx);
+  pthread_cleanup_pop(!0);
 
   return (NULL);
 }
@@ -267,7 +275,7 @@ handle_clients (void *arg)
               error ("Could not accept new connection: %s", strerror (errno));
               if (errno == EINVAL)
                 {
-                  free (acl_ctx);
+                  acl_context_destroy (acl_ctx);
                   return (NULL);
                 }
               continue;
