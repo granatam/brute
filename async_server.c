@@ -232,7 +232,7 @@ task_sender (void *arg)
       if (send_task (cl_ctx->socket_fd, &task_copy) == S_FAILURE)
         {
           error ("Could not send task to client");
-          if (queue_push_back (&mt_ctx->queue, &task) != QS_SUCCESS)
+          if (queue_push_back (&mt_ctx->queue, task) != QS_SUCCESS)
             error ("Could not push back task to global queue");
           cl_ctx->registry_used[task->task.id] = false;
           break;
