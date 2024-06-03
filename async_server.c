@@ -228,10 +228,10 @@ task_sender (void *arg)
 
       trace ("Got task from global queue");
 
-      pthread_mutex_lock (&cl_ctx->mutex);
-      pthread_cleanup_push (cleanup_mutex_unlock, &cl_ctx->mutex);
+      // pthread_mutex_lock (&cl_ctx->mutex);
+      // pthread_cleanup_push (cleanup_mutex_unlock, &cl_ctx->mutex);
       cl_ctx->registry_used[id] = true;
-      pthread_cleanup_pop (!0);
+      // pthread_cleanup_pop (!0);
 
       task_t task_copy = *task;
       task_copy.task.id = id;
