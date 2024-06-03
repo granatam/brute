@@ -48,8 +48,8 @@ thread_cleanup (void *arg)
   node->next->prev = node->prev;
   --thread_pool->count;
 
-  if (pthread_cond_signal (&thread_pool->cond) != 0)
-    error ("Could not signal a conditional semaphore");
+  // if (pthread_cond_signal (&thread_pool->cond) != 0)
+  //   error ("Could not signal a conditional semaphore");
 
   pthread_cleanup_pop (!0);
 }
@@ -226,18 +226,21 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
       pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
       if (cancel)
+      {
         if (pthread_cancel (thread) != 0)
           {
             error ("Could not cancel a thread");
             return (S_FAILURE);
           }
+      }
 
-      while (thread_pool->threads.next->thread == thread)
-        if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
-          {
-            error ("Could not wait for a conditional semaphore");
-            return (S_FAILURE);
-          }
+      pthread_join (thread, NULL);
+      // while (thread_pool->threads.next->thread == thread)
+      //   if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
+      //     {
+      //       error ("Could not wait for a conditional semaphore");
+      //       return (S_FAILURE);
+      //     }
 
       pthread_cleanup_pop (!0);
     }
