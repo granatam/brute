@@ -18,7 +18,7 @@ typedef struct ll_node_t
 {
   struct ll_node_t *prev;
   struct ll_node_t *next;
-  char payload[0];
+  char payload[1];
 } ll_node_t;
 
 typedef struct queue_t

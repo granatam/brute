@@ -129,6 +129,7 @@ thread_cleanup_helper (void *arg)
     {
       trace ("No more active threads for client, destroying client context");
       acl_context_destroy (ctx);
+      return;
     }
 
   if (pthread_mutex_unlock (&ctx->mutex) != 0)
