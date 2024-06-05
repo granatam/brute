@@ -40,22 +40,15 @@ thread_cleanup (void *arg)
   node_t *node = tcc->node;
   thread_pool_t *thread_pool = tcc->thread_pool;
 
-  trace ("Cleaning up thread %s", node->name);
-
-  if (pthread_mutex_lock (&thread_pool->mutex) != 0)
-    error ("Could not lock a mutex");
+  pthread_mutex_lock (&thread_pool->mutex);
   pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
   node->prev->next = node->next;
   node->next->prev = node->prev;
   --thread_pool->count;
 
-  if (pthread_cond_signal (&thread_pool->cond) != 0)
-    error ("Could not signal a conditional semaphore");
-
+  pthread_cond_signal (&thread_pool->cond);
   pthread_cleanup_pop (!0);
-
-  trace ("After signal %s", node->name);
 }
 
 static void *
