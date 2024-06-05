@@ -28,8 +28,8 @@ message_impl (const char *file_name, const char *func_name, int line,
     return (S_SUCCESS);
 
   char *log;
-  if (asprintf (&log, "(%s %s %d) ", file_name, func_name, line) < 0)
-    if (fprintf (stderr, "(%s %s %d) ", file_name, func_name, line) < 0)
+  if (asprintf (&log, "(%s %s %d)", file_name, func_name, line) < 0)
+    if (fprintf (stderr, "(%s %s %d)", file_name, func_name, line) < 0)
       return (S_FAILURE);
 
   va_list args;

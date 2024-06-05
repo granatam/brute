@@ -124,6 +124,11 @@ def run_client_server(
         client_proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
         client_proc.kill()
+        try:
+            output, _ = server_proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            server_proc.kill()
+            return "Server timeout + client timeout"
         return "Client timeout"
 
     try:

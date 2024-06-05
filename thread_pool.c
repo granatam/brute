@@ -222,8 +222,6 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
         }
       pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
-      // trace ("Cancelling thread %08x %s", thread, name);
-
       if (cancel)
         if (pthread_cancel (thread) != 0)
           error ("Could not cancel a thread");
@@ -234,8 +232,6 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
             error ("Could not wait for a conditional semaphore");
             break;
           }
-
-      // trace ("After wait of %08x %s", thread, name);
 
       pthread_cleanup_pop (!0);
     }
