@@ -200,7 +200,6 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
 
       thread_pool->cancelled = true;
       pthread_t thread = thread_pool->threads.next->thread;
-      char *name = thread_pool->threads.next->name;
       bool empty = (thread_pool->threads.next == &thread_pool->threads);
 
       if (pthread_mutex_unlock (&thread_pool->mutex) != 0)

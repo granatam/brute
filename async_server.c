@@ -54,6 +54,8 @@ cleanup:
 
   if (queue_destroy (&ctx->registry_idx) != QS_SUCCESS)
     error ("Could not destroy registry indices queue");
+
+  return NULL;
 }
 
 static void
