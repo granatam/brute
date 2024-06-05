@@ -38,7 +38,10 @@ message_impl (const char *file_name, const char *func_name, int line,
   char *message;
   if (vasprintf (&message, msg, args) < 0)
     if (vfprintf (stderr, msg, args) < 0)
-      return (S_FAILURE);
+      {
+        free (log);
+        return (S_FAILURE);
+      }
 
   va_end (args);
 
