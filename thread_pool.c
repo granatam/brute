@@ -219,7 +219,7 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
           error ("Could not lock a mutex");
           return (S_FAILURE);
         }
-      pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
+      // pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
       if (cancel)
         if (pthread_cancel (thread) != 0)
@@ -229,10 +229,12 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
         if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
           {
             error ("Could not wait for a conditional semaphore");
+            pthread_mutex_unlock (&thread_pool->mutex);
             break;
           }
 
-      pthread_cleanup_pop (!0);
+      pthread_mutex_unlock (&thread_pool->mutex);
+      // pthread_cleanup_pop (!0);
     }
 
   if (pthread_mutex_lock (&thread_pool->mutex) != 0)
