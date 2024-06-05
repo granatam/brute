@@ -60,6 +60,9 @@ fail:
 status_t
 serv_context_destroy (serv_context_t *context)
 {
+  if (mt_context_destroy ((mt_context_t *)context) == S_FAILURE)
+    return (S_FAILURE);
+
   if (context->socket_fd >= 0)
     {
       shutdown (context->socket_fd, SHUT_RDWR);
@@ -69,9 +72,6 @@ serv_context_destroy (serv_context_t *context)
           return (S_FAILURE);
         }
     }
-
-  if (mt_context_destroy ((mt_context_t *)context) == S_FAILURE)
-    return (S_FAILURE);
 
   return (S_SUCCESS);
 }
