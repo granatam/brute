@@ -117,16 +117,14 @@ sender_receiver_cleanup (void *arg)
 
   if (pthread_mutex_lock (&ctx->mutex) != 0)
     return;
+  pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
 
   return_tasks (ctx);
 
   if (--ctx->ref_count == 0)
-    {
-      acl_context_destroy (ctx);
-      return;
-    }
+    acl_context_destroy (ctx);
 
-  pthread_mutex_unlock (&ctx->mutex);
+  pthread_cleanup_pop (!0);
 }
 
 static void *
