@@ -169,8 +169,6 @@ result_receiver (void *arg)
       if (serv_signal_if_found (mt_ctx) == S_FAILURE)
         break;
 
-      trace ("Signaled on global conditional semaphore");
-
       if (mt_ctx->password[0] != 0)
         break;
     }
