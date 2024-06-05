@@ -56,11 +56,32 @@ usage (char *first_arg)
            first_arg);
 }
 
+static log_level_t
+get_log_level (char *level)
+{
+  if (strcmp (level, "trace") == 0)
+    return (LL_TRACE);
+  if (strcmp (level, "debug") == 0)
+    return (LL_DEBUG);
+  if (strcmp (level, "info") == 0)
+    return (LL_INFO);
+  if (strcmp (level, "warn") == 0)
+    return (LL_WARN);
+  if (strcmp (level, "error") == 0)
+    return (LL_ERROR);
+  if (strcmp (level, "fatal") == 0)
+    return (LL_FATAL);
+  if (strcmp (level, "off") == 0)
+    return (LL_OFF);
+
+  return (LL_UNKNOWN);
+}
+
 static status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
-  while ((opt = getopt (argc, argv, "l:a:H:t:p:A:L:T:smgcSvwiryh")) != -1)
+  while ((opt = getopt (argc, argv, "l:x:a:H:t:p:A:L:T:smgcSvwiryh")) != -1)
     {
       switch (opt)
         {
@@ -72,6 +93,15 @@ parse_params (config_t *config, int argc, char *argv[])
                      MAX_PASSWORD_LENGTH);
               return (S_FAILURE);
             }
+          break;
+        case 'x':
+          log_level_t level = get_log_level (optarg);
+          if (level == LL_UNKNOWN)
+            {
+              error ("Unknown log level");
+              return (S_FAILURE);
+            }
+          set_log_level (level);
           break;
         case 'a':
           config->alph = optarg;

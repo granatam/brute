@@ -150,7 +150,7 @@ run_server (task_t *task, config_t *config)
   if (wait_password (mt_ctx) == S_FAILURE)
     goto fail;
 
-  trace ("After wait");
+  trace ("Got password");
 
   if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
     {
@@ -158,7 +158,7 @@ run_server (task_t *task, config_t *config)
       goto fail;
     }
 
-  trace ("After cancel");
+  trace ("Cancelled the global queue");
 
   if (mt_ctx->password[0] != 0)
     memcpy (task->task.password, mt_ctx->password, sizeof (mt_ctx->password));
@@ -166,7 +166,7 @@ run_server (task_t *task, config_t *config)
   if (serv_context_destroy (&context) == S_FAILURE)
     error ("Could not destroy server context");
 
-  trace ("After serv_context_destroy");
+  trace ("Destroyed the server context");
 
   return (mt_ctx->password[0] != 0);
 

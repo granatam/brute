@@ -23,7 +23,6 @@ status_t mt_context_destroy (mt_context_t *context);
 
 void *mt_password_check (void *context);
 bool queue_push_wrapper (task_t *task, void *context);
-status_t signal_if_found (mt_context_t *ctx);
 status_t wait_password (mt_context_t *ctx);
 bool run_multi (task_t *task, config_t *config);
 

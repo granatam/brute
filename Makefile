@@ -1,5 +1,6 @@
 .PHONY: clean
-CFLAGS=-O2 -Wall -Wextra -pthread -gdwarf-4 -DLOG_LEVEL=TRACE
+
+CFLAGS=-O2 -Wall -Wextra -pthread -gdwarf-4
 OBJ=brute.o iter.o rec.o common.o main.o multi.o queue.o single.o gen.o semaphore.o async_client.o client_common.o sync_client.o async_server.o sync_server.o server_common.o thread_pool.o log.o
 TARGET=brute
 LIBS+=crypt/libcrypt.a
@@ -19,8 +20,6 @@ endif
 
 all: ${TARGET}
 
-# TODO: debug, release and dev recipes with differnet log levels
-
 ${TARGET}: ${OBJ} ${LIBS}
 	@${CC} ${CFLAGS} ${OBJ} ${LIBS} -o ${TARGET}
 
@@ -32,4 +31,4 @@ clean:
 	@${MAKE} -C crypt clean
 
 check: all
-	@pytest --hypothesis-show-statistics ${TESTS}
+	@LOG_LEVEL=trace pytest --hypothesis-show-statistics ${TESTS}
