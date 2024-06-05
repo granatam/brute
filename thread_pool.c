@@ -101,16 +101,12 @@ thread_run (void *arg)
   thread_pool->threads.prev->next = &node;
   thread_pool->threads.prev = &node;
 
-  if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
-    {
-      error ("Could not unlock mutex");
-      return (NULL);
-    }
-
   thread_cleanup_context_t tcc = { .thread_pool = thread_pool, .node = &node };
   pthread_cleanup_push (thread_cleanup, &tcc);
 
-  // pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+  if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
+    error ("Could not unlock mutex");
+
   if (pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL) != 0)
     error ("Could not set cancel state for a thread");
   else
