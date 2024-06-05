@@ -38,7 +38,6 @@ thread_cleanup (void *arg)
 {
   thread_cleanup_context_t *tcc = arg;
   node_t *node = tcc->node;
-  // fprintf(stderr, "Cleaning up thread %s\n", node->name);
   thread_pool_t *thread_pool = tcc->thread_pool;
 
   pthread_mutex_lock (&thread_pool->mutex);
@@ -223,7 +222,7 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
         }
       pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
-      trace ("Cancelling thread %08x %s", thread, name);
+      // trace ("Cancelling thread %08x %s", thread, name);
 
       if (cancel)
         if (pthread_cancel (thread) != 0)
@@ -236,7 +235,7 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
             break;
           }
 
-      trace ("After wait of %08x %s", thread, name);
+      // trace ("After wait of %08x %s", thread, name);
 
       pthread_cleanup_pop (!0);
     }
