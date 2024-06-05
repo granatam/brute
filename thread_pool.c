@@ -40,6 +40,8 @@ thread_cleanup (void *arg)
   node_t *node = tcc->node;
   thread_pool_t *thread_pool = tcc->thread_pool;
 
+  trace ("Cleaning up thread %s", node->name);
+
   if (pthread_mutex_lock (&thread_pool->mutex) != 0)
     error ("Could not lock a mutex");
   pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
@@ -48,8 +50,12 @@ thread_cleanup (void *arg)
   node->next->prev = node->prev;
   --thread_pool->count;
 
+  trace ("Before signal");
+
   if (pthread_cond_signal (&thread_pool->cond) != 0)
     error ("Could not signal a conditional semaphore");
+
+  trace ("After signal %s", node->name);
 
   pthread_cleanup_pop (!0);
 }
@@ -121,10 +127,11 @@ status_t
 thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg,
                size_t arg_size, char *name)
 {
-  tp_context_t context = {
-    .thread_pool = thread_pool, .func = func, .arg = arg, .arg_size = arg_size,
-    .name = name
-  };
+  tp_context_t context = { .thread_pool = thread_pool,
+                           .func = func,
+                           .arg = arg,
+                           .arg_size = arg_size,
+                           .name = name };
 
   if (pthread_mutex_init (&context.mutex, NULL) != 0)
     {
@@ -234,8 +241,6 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
         if (pthread_cancel (thread) != 0)
           error ("Could not cancel a thread");
 
-      // trace ("Cancelled thread %08x %s", thread, name);
-
       while (thread_pool->threads.next->thread == thread)
         if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
           {
@@ -293,12 +298,14 @@ thread_pool_join (thread_pool_t *thread_pool)
 
 int
 create_threads (thread_pool_t *thread_pool, int number_of_threads,
-                void *func (void *), void *context, size_t context_size, char *name)
+                void *func (void *), void *context, size_t context_size,
+                char *name)
 {
   int active_threads = 0;
 
   for (int i = 0; i < number_of_threads; ++i)
-    if (thread_create (thread_pool, func, context, context_size, name) == S_SUCCESS)
+    if (thread_create (thread_pool, func, context, context_size, name)
+        == S_SUCCESS)
       ++active_threads;
 
   if (active_threads == 0)

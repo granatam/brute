@@ -194,9 +194,9 @@ run_multi (task_t *task, config_t *config)
   if (mt_context_init (&context, config) == S_FAILURE)
     return (false);
 
-  int active_threads
-      = create_threads (&context.thread_pool, config->number_of_threads,
-                        mt_password_check, &context_ptr, sizeof (context_ptr), "mt worker");
+  int active_threads = create_threads (
+      &context.thread_pool, config->number_of_threads, mt_password_check,
+      &context_ptr, sizeof (context_ptr), "mt worker");
 
   if (active_threads == 0)
     goto fail;

@@ -46,6 +46,7 @@ status_t thread_pool_cancel (thread_pool_t *thread_pool);
 status_t thread_pool_join (thread_pool_t *thread_pool);
 
 int create_threads (thread_pool_t *thread_pool, int number_of_threads,
-                    void *func (void *), void *context, size_t context_size, char *name);
+                    void *func (void *), void *context, size_t context_size,
+                    char *name);
 
 #endif // THREAD_POOL_H

@@ -60,14 +60,15 @@ fail:
 status_t
 serv_context_destroy (serv_context_t *context)
 {
-  if (context->socket_fd >= 0) {
-    shutdown (context->socket_fd, SHUT_RDWR);
-    if (close (context->socket_fd) != 0)
-      {
-        error ("Could not close server socket");
-        return (S_FAILURE);
-      }
-  }
+  if (context->socket_fd >= 0)
+    {
+      shutdown (context->socket_fd, SHUT_RDWR);
+      if (close (context->socket_fd) != 0)
+        {
+          error ("Could not close server socket");
+          return (S_FAILURE);
+        }
+    }
 
   if (mt_context_destroy ((mt_context_t *)context) == S_FAILURE)
     return (S_FAILURE);

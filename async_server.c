@@ -119,7 +119,7 @@ thread_cleanup_helper (void *arg)
       error ("Could not lock mutex");
       return;
     }
-  
+
   trace ("Returning tasks to global list");
 
   if (return_tasks (ctx) == S_FAILURE)
@@ -240,7 +240,7 @@ task_sender (void *arg)
 
 cleanup:
   trace ("Cleaning up sender thread");
-  pthread_cleanup_pop(!0);
+  pthread_cleanup_pop (!0);
 
   return (NULL);
 }
@@ -291,7 +291,8 @@ handle_clients (void *arg)
           continue;
         }
 
-      trace ("Created a sender thread %08x", mt_ctx->thread_pool.threads.prev->thread);
+      trace ("Created a sender thread %08x",
+             mt_ctx->thread_pool.threads.prev->thread);
 
       if (thread_create (&mt_ctx->thread_pool, result_receiver, &acl_ctx,
                          sizeof (acl_ctx), "async receiver")
@@ -303,7 +304,8 @@ handle_clients (void *arg)
           continue;
         }
 
-      trace ("Created a receiver thread %08x", mt_ctx->thread_pool.threads.prev->thread);
+      trace ("Created a receiver thread %08x",
+             mt_ctx->thread_pool.threads.prev->thread);
     }
 
   return (NULL);
