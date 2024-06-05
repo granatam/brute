@@ -1,5 +1,5 @@
 .PHONY: clean
-CFLAGS=-O2 -Wall -Wextra -pthread -gdwarf-4 -DLOG_LEVEL=TRACE
+CFLAGS=-O2 -Wall -Wextra -pthread -gdwarf-4 -DLOG_LEVEL=DEBUG
 OBJ=brute.o iter.o rec.o common.o main.o multi.o queue.o single.o gen.o semaphore.o async_client.o client_common.o sync_client.o async_server.o sync_server.o server_common.o thread_pool.o log.o
 TARGET=brute
 LIBS+=crypt/libcrypt.a
