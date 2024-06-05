@@ -94,13 +94,10 @@ return_tasks (acl_context_t *ctx)
           if (queue_push_back (&mt_ctx->queue, &ctx->registry[i])
               != QS_SUCCESS)
             {
-              error ("Could not push back task to returned tasks list");
               status = S_FAILURE;
               break;
             }
           ctx->registry_used[i] = false;
-
-          trace ("Returned task %d back to list", i);
         }
     }
 
