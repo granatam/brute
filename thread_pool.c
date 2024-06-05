@@ -38,6 +38,7 @@ thread_cleanup (void *arg)
 {
   thread_cleanup_context_t *tcc = arg;
   node_t *node = tcc->node;
+  // fprintf(stderr, "Cleaning up thread %s\n", node->name);
   thread_pool_t *thread_pool = tcc->thread_pool;
 
   pthread_mutex_lock (&thread_pool->mutex);

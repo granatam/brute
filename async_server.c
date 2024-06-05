@@ -112,7 +112,7 @@ thread_cleanup_helper (void *arg)
 {
   acl_context_t *ctx = arg;
 
-  trace ("Thread cleanup helper");
+  // trace ("Thread cleanup helper");
 
   if (pthread_mutex_lock (&ctx->mutex) != 0)
     {
@@ -120,12 +120,12 @@ thread_cleanup_helper (void *arg)
       return;
     }
 
-  trace ("Returning tasks to global list");
+  // trace ("Returning tasks to global list");
 
   if (return_tasks (ctx) == S_FAILURE)
     error ("Could not return used tasks to global queue");
 
-  trace ("Returned tasks to global list");
+  // trace ("Returned tasks to global list");
 
   if (--ctx->ref_count == 0)
     {
