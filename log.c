@@ -4,8 +4,8 @@
 
 #include <pthread.h>
 #include <stdarg.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 __attribute__ ((format (printf, 5, 6))) status_t
 message_impl (const char *file_name, const char *func_name, int line,
@@ -39,12 +39,12 @@ message_impl (const char *file_name, const char *func_name, int line,
   if (vasprintf (&message, msg, args) < 0)
     if (vfprintf (stderr, msg, args) < 0)
       return (S_FAILURE);
-  
+
   va_end (args);
 
   fprintf (stderr, "%s %s\n", log, message);
-  free(message);
-  free(log);
+  free (message);
+  free (log);
 
   fflush (stderr);
 

@@ -247,12 +247,13 @@ handle_clients (void *arg)
 
       while (true)
         {
-          if (srv_ctx->socket_fd < 0) {
-            error ("Invalid server socket");
-            acl_context_destroy (acl_ctx);
-            return (NULL);
-          }
-           
+          if (srv_ctx->socket_fd < 0)
+            {
+              error ("Invalid server socket");
+              acl_context_destroy (acl_ctx);
+              return (NULL);
+            }
+
           acl_ctx->socket_fd = accept (srv_ctx->socket_fd, NULL, NULL);
           if (acl_ctx->socket_fd == -1)
             {
