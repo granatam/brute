@@ -50,14 +50,12 @@ thread_cleanup (void *arg)
   node->next->prev = node->prev;
   --thread_pool->count;
 
-  trace ("Before signal");
-
   if (pthread_cond_signal (&thread_pool->cond) != 0)
     error ("Could not signal a conditional semaphore");
 
-  trace ("After signal %s", node->name);
-
   pthread_cleanup_pop (!0);
+
+  trace ("After signal %s", node->name);
 }
 
 static void *
