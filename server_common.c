@@ -71,6 +71,7 @@ serv_context_destroy (serv_context_t *context)
           error ("Could not close server socket");
           return (S_FAILURE);
         }
+      context->socket_fd = -1;
     }
 
   return (S_SUCCESS);
