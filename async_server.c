@@ -112,30 +112,18 @@ thread_cleanup_helper (void *arg)
 {
   acl_context_t *ctx = arg;
 
-  // trace ("Thread cleanup helper");
-
   if (pthread_mutex_lock (&ctx->mutex) != 0)
-    {
-      error ("Could not lock mutex");
-      return;
-    }
+    return;
 
-  // trace ("Returning tasks to global list");
-
-  if (return_tasks (ctx) == S_FAILURE)
-    error ("Could not return used tasks to global queue");
-
-  // trace ("Returned tasks to global list");
+  return_tasks (ctx);
 
   if (--ctx->ref_count == 0)
     {
-      trace ("No more active threads for client, destroying client context");
       acl_context_destroy (ctx);
       return;
     }
 
-  if (pthread_mutex_unlock (&ctx->mutex) != 0)
-    error ("Could not unlock mutex");
+  pthread_mutex_unlock (&ctx->mutex);
 }
 
 static void *
