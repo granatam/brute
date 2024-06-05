@@ -81,7 +81,11 @@ status_t
 close_client (int socket_fd)
 {
   shutdown (socket_fd, SHUT_RDWR);
-  close (socket_fd);
+  if (close (socket_fd) != 0)
+    {
+      error ("Could not close server socket");
+      return (S_FAILURE);
+    }
 
   trace ("Closed connection with client");
 

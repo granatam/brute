@@ -30,23 +30,30 @@ acl_context_init (serv_context_t *global_ctx)
   if (queue_init (&ctx->registry_idx, sizeof (int)) != QS_SUCCESS)
     {
       error ("Could not initialize registry indices queue");
-      return (NULL);
+      goto cleanup;
     }
   for (int i = 0; i < QUEUE_SIZE; ++i)
     if (queue_push (&ctx->registry_idx, &i) != QS_SUCCESS)
       {
         error ("Could not push index to registry indices queue");
-        return (NULL);
+        goto cleanup;
       }
 
   ctx->ref_count = 2;
   if (pthread_mutex_init (&ctx->mutex, NULL) != 0)
     {
       error ("Could not initialize mutex");
-      return (NULL);
+      goto cleanup;
     }
 
   return ctx;
+
+cleanup:
+  if (queue_cancel (&ctx->registry_idx) != QS_SUCCESS)
+    error ("Could not cancel registry indices queue");
+
+  if (queue_destroy (&ctx->registry_idx) != QS_SUCCESS)
+    error ("Could not destroy registry indices queue");
 }
 
 static void
@@ -55,10 +62,7 @@ acl_context_destroy (acl_context_t *ctx)
   trace ("Destroying client context");
 
   if (queue_cancel (&ctx->registry_idx) != QS_SUCCESS)
-    {
-      error ("Could not cancel registry indices queue");
-      goto cleanup;
-    }
+    error ("Could not cancel registry indices queue");
 
   trace ("Cancelled registry indices queue");
 
@@ -105,7 +109,7 @@ return_tasks (acl_context_t *ctx)
 }
 
 static void
-thread_cleanup_helper (void *arg)
+sender_receiver_cleanup (void *arg)
 {
   acl_context_t *ctx = arg;
 
@@ -129,7 +133,7 @@ result_receiver (void *arg)
   acl_context_t *cl_ctx = *(acl_context_t **)arg;
   mt_context_t *mt_ctx = &cl_ctx->context->context;
 
-  pthread_cleanup_push (thread_cleanup_helper, cl_ctx);
+  pthread_cleanup_push (sender_receiver_cleanup, cl_ctx);
   while (true)
     {
       result_t task;
@@ -182,7 +186,7 @@ task_sender (void *arg)
   acl_context_t *cl_ctx = *(acl_context_t **)arg;
   mt_context_t *mt_ctx = &cl_ctx->context->context;
 
-  pthread_cleanup_push (thread_cleanup_helper, cl_ctx);
+  pthread_cleanup_push (sender_receiver_cleanup, cl_ctx);
   if (send_config_data (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
     goto cleanup;
 
@@ -226,6 +230,13 @@ cleanup:
   pthread_cleanup_pop (!0);
 
   return (NULL);
+}
+
+static void
+accepter_cleanup (void *arg)
+{
+  acl_context_t *ctx = arg;
+  acl_context_destroy (ctx);
 }
 
 static void *
@@ -281,7 +292,7 @@ handle_clients (void *arg)
           continue;
         }
 
-      trace ("Created a sender thread %08x",
+      trace ("Created a sender thread: %08x",
              mt_ctx->thread_pool.threads.prev->thread);
 
       if (thread_create (&mt_ctx->thread_pool, result_receiver, &acl_ctx,
@@ -294,7 +305,7 @@ handle_clients (void *arg)
           continue;
         }
 
-      trace ("Created a receiver thread %08x",
+      trace ("Created a receiver thread: %08x",
              mt_ctx->thread_pool.threads.prev->thread);
     }
 

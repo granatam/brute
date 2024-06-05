@@ -27,27 +27,24 @@ message_impl (const char *file_name, const char *func_name, int line,
   if (level < log_level)
     return (S_SUCCESS);
 
-  char *log;
-  if (asprintf (&log, "(%s %s %d)", file_name, func_name, line) < 0)
+  char log[1 << 7];
+  if (sprintf (log, "(%s %s %d)", file_name, func_name, line) < 0)
     if (fprintf (stderr, "(%s %s %d)", file_name, func_name, line) < 0)
       return (S_FAILURE);
 
   va_list args;
   va_start (args, msg);
 
-  char *message;
-  if (vasprintf (&message, msg, args) < 0)
+  char message[1 << 7];
+  if (vsprintf (message, msg, args) < 0)
     if (vfprintf (stderr, msg, args) < 0)
       {
-        free (log);
         return (S_FAILURE);
       }
 
   va_end (args);
 
   fprintf (stderr, "%s %s\n", log, message);
-  free (message);
-  free (log);
 
   fflush (stderr);
 
