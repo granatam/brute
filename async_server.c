@@ -294,7 +294,6 @@ handle_clients (void *arg)
                          sizeof (acl_ctx), "async sender")))
         {
           error ("Could not create task sender thread");
-          close_client (acl_ctx->socket_fd);
           acl_context_destroy (acl_ctx);
           continue;
         }
@@ -306,9 +305,8 @@ handle_clients (void *arg)
                          sizeof (acl_ctx), "async receiver"))
         {
           error ("Could not create result receiver thread");
+          --acl_ctx->ref_count;
           pthread_cancel (sender);
-          close_client (acl_ctx->socket_fd);
-          acl_context_destroy (acl_ctx);
           continue;
         }
 
