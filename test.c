@@ -4,7 +4,7 @@
 int main() {
     pthread_mutex_t mutex;
     if (pthread_mutex_init (&mutex, NULL) != 0) {
-        fprintf ("Could not initialize a mutex\n");
+        printf ("Could not initialize a mutex\n");
     }
 
     if (pthread_mutex_lock (&mutex) != 0) {
