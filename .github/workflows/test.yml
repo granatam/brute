@@ -19,9 +19,13 @@ jobs:
         run: sudo apt-get update -y
       - name: install valgrind and netcat
         run: sudo apt-get install valgrind netcat -y
-      - name: make
-        run: CC=${{matrix.cc}} make 
-      - name: make check
+      - name: make dev
+        run: CC=${{matrix.cc}} make dev
+      - name: make check (dev)
+        run: make check
+      - name: make release
+        run: CC=${{matrix.cc}} make release
+      - name: make check (release)
         run: make check
   macos:
     runs-on: macos-latest
@@ -31,9 +35,13 @@ jobs:
       - uses: actions/setup-python@v2
       - name: install pytest and hypothesis
         run: pip install pytest hypothesis
-      - name: make
-        run: make
-      - name: make check
+      - name: make dev
+        run: make dev
+      - name: make check (dev)
+        run: make check
+      - name: make release
+        run: make release
+      - name: make check (release)
         run: make check
   # freebsd-clang:
   #   runs-on: ubuntu-latest
