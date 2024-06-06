@@ -15,8 +15,7 @@ typedef enum log_level_t
   LL_UNKNOWN,
 } log_level_t;
 
-#define set_log_level(log_level)                                              \
-  message_impl (NULL, NULL, 0, log_level, NULL)
+#define set_log_level(log_level) message_impl (NULL, NULL, 0, log_level, NULL)
 #define trace(...)                                                            \
   message_impl (__FILE__, __func__, __LINE__, LL_TRACE, __VA_ARGS__)
 #define debug(...)                                                            \

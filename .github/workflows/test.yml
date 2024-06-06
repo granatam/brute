@@ -50,4 +50,4 @@ jobs:
         run: |
           git config --global --add safe.directory `pwd`
           git submodule update --init --recursive --remote
-          make check
+          gmake check

@@ -107,7 +107,7 @@ handle_clients (void *arg)
                   sizeof (option));
 
       if (!thread_create (&mt_ctx->thread_pool, handle_client, &cl_ctx,
-                         sizeof (cl_ctx), "sync handler"))
+                          sizeof (cl_ctx), "sync handler"))
         {
           error ("Could not create client thread");
 
@@ -132,7 +132,7 @@ run_server (task_t *task, config_t *config)
     }
 
   if (!thread_create (&context.context.thread_pool, handle_clients,
-                     &context_ptr, sizeof (context_ptr), "sync accepter"))
+                      &context_ptr, sizeof (context_ptr), "sync accepter"))
     {
       error ("Could not create clients thread");
       goto fail;

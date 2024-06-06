@@ -290,8 +290,9 @@ handle_clients (void *arg)
       trace ("Copied client context");
 
       pthread_t sender;
-      if (!(sender = thread_create (&mt_ctx->thread_pool, task_sender, &acl_ctx,
-                         sizeof (acl_ctx), "async sender")))
+      if (!(sender
+            = thread_create (&mt_ctx->thread_pool, task_sender, &acl_ctx,
+                             sizeof (acl_ctx), "async sender")))
         {
           error ("Could not create task sender thread");
           acl_context_destroy (acl_ctx);
@@ -302,7 +303,7 @@ handle_clients (void *arg)
              mt_ctx->thread_pool.threads.prev->thread);
 
       if (!thread_create (&mt_ctx->thread_pool, result_receiver, &acl_ctx,
-                         sizeof (acl_ctx), "async receiver"))
+                          sizeof (acl_ctx), "async receiver"))
         {
           error ("Could not create result receiver thread");
           --acl_ctx->ref_count;
@@ -332,7 +333,7 @@ run_async_server (task_t *task, config_t *config)
     }
 
   if (!thread_create (&context.context.thread_pool, handle_clients,
-                     &context_ptr, sizeof (context_ptr), "async accepter"))
+                      &context_ptr, sizeof (context_ptr), "async accepter"))
     {
       error ("Could not create clients thread");
       goto fail;
