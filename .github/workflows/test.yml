@@ -51,8 +51,8 @@ jobs:
           git config --global --add safe.directory `pwd`
           git submodule update --init --recursive --remote
           cc -Og test.c
-          ./a.out
+          echo $(./a.out)
           cc -Og test.c -lpthread
-          ./a.out
+          echo $(./a.out)
           cc -Og -pthread test.c
-          ./a.out
+          echo $(./a.out)
