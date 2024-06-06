@@ -7,26 +7,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-__attribute__ ((format (printf, 5, 6))) status_t
+__attribute__ ((format (printf, 4, 5))) status_t
 message_impl (const char *file_name, const char *func_name, int line,
-              log_level_t level, const char *msg, ...)
+              const char *msg, ...)
 {
-  static log_level_t log_level = LL_OFF;
-#ifdef LOG_LEVEL
-#define LOG_LEVEL_MACRO(str) LL_##str
-#define EXPAND_LOG_LEVEL_MACRO(str) LOG_LEVEL_MACRO (str)
-  log_level = EXPAND_LOG_LEVEL_MACRO (LOG_LEVEL);
-#endif
-
-  if (msg == NULL)
-    {
-      log_level = level;
-      return (S_SUCCESS);
-    }
-
-  if (level < log_level)
-    return (S_SUCCESS);
-
   char log[1 << 7];
   if (sprintf (log, "(%s %s %d)", file_name, func_name, line) < 0)
     if (fprintf (stderr, "(%s %s %d)", file_name, func_name, line) < 0)

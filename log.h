@@ -3,22 +3,10 @@
 
 #include "common.h"
 
-typedef enum log_level_t
-{
-  LL_TRACE,
-  LL_DEBUG,
-  LL_INFO,
-  LL_WARN,
-  LL_ERROR,
-  LL_FATAL,
-  LL_OFF,
-  LL_UNKNOWN,
-} log_level_t;
-
-#define set_log_level(log_level) message_impl (NULL, NULL, 0, log_level, NULL)
 #define LOG_MESSAGE(...)                                                      \
-  message_impl (__FILE__, __func__, __LINE__, LL_TRACE, __VA_ARGS__)
+  message_impl (__FILE__, __func__, __LINE__, __VA_ARGS__)
 #define IGNORE_MESSAGE(...)
+
 #define TRACE_TRACE LOG_MESSAGE
 #define TRACE_DEBUG IGNORE_MESSAGE
 #define TRACE_INFO IGNORE_MESSAGE
@@ -82,6 +70,6 @@ typedef enum log_level_t
 #define fatal(...) PASTE2 (FATAL, LOG_LEVEL) (__VA_ARGS__)
 
 status_t message_impl (const char *file_name, const char *func_name, int line,
-                       log_level_t log_level, const char *msg, ...);
+                       const char *msg, ...);
 
 #endif /* LOG_H */

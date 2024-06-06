@@ -16,7 +16,6 @@ with warnings.catch_warnings():
 import os
 
 CPU_COUNT = os.cpu_count()
-LOG_LEVEL = os.getenv("LOG_LEVEL")
 VALGRIND_FLAGS = "--leak-check=full --error-exitcode=1 --trace-children=yes --quiet"
 DEFAULT_PORT = 8081
 
@@ -40,7 +39,7 @@ def gen_str(size, chars=string.ascii_uppercase + string.digits):
 
 def brute_cmd(passwd, alph, run_mode, brute_mode, threads=CPU_COUNT, port=DEFAULT_PORT):
     hash = crypt(passwd, passwd)
-    return f"./brute -x {LOG_LEVEL} -H {hash} -l {len(str(passwd))} -a {alph} -{run_mode} -{brute_mode} -t {threads} -p {port}"
+    return f"./brute -H {hash} -l {len(str(passwd))} -a {alph} -{run_mode} -{brute_mode} -t {threads} -p {port}"
 
 
 def run_brute(passwd, alph, run_mode, brute_mode):

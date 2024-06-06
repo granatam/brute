@@ -1,4 +1,4 @@
-.PHONY: clean
+.PHONY: all dev debug release clean check
 
 CFLAGS=-O2 -Wall -Wextra -gdwarf-4
 ifeq ($(shell uname), FreeBSD)
@@ -24,6 +24,15 @@ ifeq (${WITH_PERF_TEST}, true)
 endif
 
 all: ${TARGET}
+
+dev: CFLAGS += -DLOG_LEVEL=TRACE
+dev: clean all
+
+debug: CFLAGS += -DLOG_LEVEL=DEBUG
+debug: clean all
+
+release: CFLAGS += -DLOG_LEVEL=ERROR
+release: clean all
 
 ${TARGET}: ${OBJ} ${LIBS}
 	${CC} ${CFLAGS} -o ${TARGET} ${OBJ} ${LIBS} 
