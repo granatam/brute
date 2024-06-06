@@ -7,7 +7,7 @@
 
 #include <stdbool.h>
 
-typedef status_t (*task_callback_t) (task_t *, config_t *, st_context_t *);
+typedef void (*task_callback_t) (task_t *, config_t *, st_context_t *);
 
 typedef struct client_context_t
 {
@@ -17,7 +17,7 @@ typedef struct client_context_t
 } client_context_t;
 
 bool run_client (config_t *, task_callback_t task_callback);
-status_t find_password (task_t *, config_t *, st_context_t *);
+void find_password (task_t *, config_t *, st_context_t *);
 void spawn_clients (config_t *config, task_callback_t task_callback);
 
 #endif // CLIENT_H

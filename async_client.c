@@ -15,6 +15,11 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#ifdef __FreeBSD__
+#include <sys/socket.h>
+#include <sys/types.h>
+#endif
+
 static void *
 client_worker (void *arg)
 {

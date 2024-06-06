@@ -16,6 +16,11 @@
 #include <string.h>
 #include <unistd.h>
 
+#ifdef __FreeBSD__
+#include <sys/types.h>
+#include <sys/socket.h>
+#endif
+
 static acl_context_t *
 acl_context_init (serv_context_t *global_ctx)
 {

@@ -12,16 +12,18 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-// TODO: Should it return status_t now?
-status_t
+#ifdef __FreeBSD__
+#include <sys/socket.h>
+#include <sys/types.h>
+#endif
+
+void
 find_password (task_t *task, config_t *config, st_context_t *ctx)
 {
   task->task.is_correct = brute (task, config, st_password_check, ctx);
 
   if (!task->task.is_correct)
     memset (task->task.password, 0, sizeof (task->task.password));
-
-  return (S_SUCCESS);
 }
 
 static status_t
@@ -40,8 +42,7 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
       error ("Could not sleep");
 
   if (task_callback != NULL)
-    if (task_callback (task, config, ctx) == S_FAILURE)
-      return (S_FAILURE);
+    task_callback (task, config, ctx);
 
   result_t task_result = task->task;
   struct iovec vec[]

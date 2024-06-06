@@ -16,6 +16,11 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#ifdef __FreeBSD__
+#include <sys/socket.h>
+#include <sys/types.h>
+#endif
+
 static status_t
 delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
 {
