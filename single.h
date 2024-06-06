@@ -8,6 +8,7 @@
 #ifndef __FreeBSD__
 #include <crypt.h>
 #else
+#define _XOPEN_SOURCE
 #include <unistd.h>
 #endif
 

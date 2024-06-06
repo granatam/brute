@@ -17,8 +17,8 @@
 #include <unistd.h>
 
 #ifdef __FreeBSD__
-#include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #endif
 
 static acl_context_t *
