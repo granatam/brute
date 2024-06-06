@@ -26,7 +26,7 @@ endif
 all: ${TARGET}
 
 ${TARGET}: ${OBJ} ${LIBS}
-	@${CC} ${CFLAGS} ${OBJ} ${LIBS} -o ${TARGET}
+	${CC} ${CFLAGS} -o ${TARGET} ${OBJ} ${LIBS} 
 
 crypt/libcrypt.a:
 	@${MAKE} -C crypt
