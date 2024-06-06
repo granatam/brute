@@ -201,14 +201,27 @@ run_async_client (config_t *config)
 
   async_client_context_t *ctx_ptr = &ctx;
 
-  thread_create (&ctx.thread_pool, task_receiver, &ctx_ptr, sizeof (ctx_ptr),
-                 "async receiver");
+  if (!thread_create (&ctx.thread_pool, task_receiver, &ctx_ptr,
+                      sizeof (ctx_ptr), "async receiver"))
+    {
+      error ("Could not create receiver thread");
+      return (S_FAILURE);
+    }
   trace ("Created receiver thread");
-  thread_create (&ctx.thread_pool, result_sender, &ctx_ptr, sizeof (ctx_ptr),
-                 "async sender");
+
+  if (!thread_create (&ctx.thread_pool, result_sender, &ctx_ptr,
+                      sizeof (ctx_ptr), "async sender"))
+    {
+      error ("Could not create sender thread");
+      return (S_FAILURE);
+    }
   trace ("Created sender thread");
-  create_threads (&ctx.thread_pool, config->number_of_threads, client_worker,
-                  &ctx_ptr, sizeof (ctx_ptr), "async worker");
+
+  if (create_threads (&ctx.thread_pool, config->number_of_threads,
+                      client_worker, &ctx_ptr, sizeof (ctx_ptr),
+                      "async worker")
+      == 0)
+    return (S_FAILURE);
   trace ("Created worker thread");
 
   if (pthread_mutex_lock (&ctx.mutex) != 0)

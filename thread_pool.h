@@ -39,7 +39,7 @@ typedef struct thread_cleanup_context_t
 } thread_cleanup_context_t;
 
 status_t thread_pool_init (thread_pool_t *thread_pool);
-status_t thread_create (thread_pool_t *thread_pool, void *func (void *),
+pthread_t thread_create (thread_pool_t *thread_pool, void *func (void *),
                         void *arg, size_t arg_size, char *name);
 status_t thread_pool_collect (thread_pool_t *thread_pool, bool cancel);
 status_t thread_pool_cancel (thread_pool_t *thread_pool);

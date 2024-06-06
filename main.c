@@ -21,14 +21,15 @@ static void
 usage (char *first_arg)
 {
   fprintf (stderr,
-           "usage: %s [-l length] [-a alphabet] [-h hash] [-t number] "
-           "[-p port] [-A addr] [-T timeout] "
+           "usage: %s [-x level] [-l length] [-a alphabet] [-h hash] "
+           "[-t number] [-p port] [-A addr] [-T timeout] "
            "[-s | -m | -g | -c | -L number | -S | -v | -w] [-i | -r"
 #ifndef __APPLE__
            " | -y"
 #endif
            "]\n"
            "options:\n"
+           "\t-x level     log level\n"
            "\t-l length    password length\n"
            "\t-a alphabet  alphabet\n"
            "\t-h hash      hash\n"
@@ -37,6 +38,8 @@ usage (char *first_arg)
            "\t-A addr      server address\n"
            "\t-T timeout   timeout between task receiving and its processing "
            "in milliseconds\n"
+           "log levels:\n"
+           "\ttrace | debug | info | warn | error | fatal | off\n"
            "run modes:\n"
            "\t-s           singlethreaded mode\n"
            "\t-m           multithreaded mode\n"
@@ -95,14 +98,16 @@ parse_params (config_t *config, int argc, char *argv[])
             }
           break;
         case 'x':
-          log_level_t level = get_log_level (optarg);
-          if (level == LL_UNKNOWN)
-            {
-              error ("Unknown log level");
-              return (S_FAILURE);
-            }
-          set_log_level (level);
-          break;
+          {
+            log_level_t level = get_log_level (optarg);
+            if (level == LL_UNKNOWN)
+              {
+                error ("Unknown log level");
+                return (S_FAILURE);
+              }
+            set_log_level (level);
+            break;
+          }
         case 'a':
           config->alph = optarg;
           if (strlen (config->alph) <= 0

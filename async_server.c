@@ -85,6 +85,7 @@ acl_context_destroy (acl_context_t *ctx)
 cleanup:
   close_client (ctx->socket_fd);
   free (ctx);
+  ctx = NULL;
 }
 
 static status_t
@@ -235,6 +236,9 @@ cleanup:
 static void
 accepter_cleanup (void *arg)
 {
+  if (!arg)
+    return;
+
   acl_context_t *ctx = arg;
   acl_context_destroy (ctx);
 }
@@ -245,11 +249,14 @@ handle_clients (void *arg)
   serv_context_t *srv_ctx = *(serv_context_t **)arg;
   mt_context_t *mt_ctx = &srv_ctx->context;
 
+  acl_context_t *helper_ctx = NULL;
+  pthread_cleanup_push (accepter_cleanup, helper_ctx);
   while (true)
     {
       acl_context_t *acl_ctx = acl_context_init (srv_ctx);
       if (!acl_ctx)
         break;
+      helper_ctx = acl_ctx;
 
       while (true)
         {
@@ -282,9 +289,9 @@ handle_clients (void *arg)
 
       trace ("Copied client context");
 
-      if (thread_create (&mt_ctx->thread_pool, task_sender, &acl_ctx,
-                         sizeof (acl_ctx), "async sender")
-          == S_FAILURE)
+      pthread_t sender;
+      if (!(sender = thread_create (&mt_ctx->thread_pool, task_sender, &acl_ctx,
+                         sizeof (acl_ctx), "async sender")))
         {
           error ("Could not create task sender thread");
           close_client (acl_ctx->socket_fd);
@@ -295,11 +302,11 @@ handle_clients (void *arg)
       trace ("Created a sender thread: %08x",
              mt_ctx->thread_pool.threads.prev->thread);
 
-      if (thread_create (&mt_ctx->thread_pool, result_receiver, &acl_ctx,
-                         sizeof (acl_ctx), "async receiver")
-          == S_FAILURE)
+      if (!thread_create (&mt_ctx->thread_pool, result_receiver, &acl_ctx,
+                         sizeof (acl_ctx), "async receiver"))
         {
           error ("Could not create result receiver thread");
+          pthread_cancel (sender);
           close_client (acl_ctx->socket_fd);
           acl_context_destroy (acl_ctx);
           continue;
@@ -308,6 +315,7 @@ handle_clients (void *arg)
       trace ("Created a receiver thread: %08x",
              mt_ctx->thread_pool.threads.prev->thread);
     }
+  pthread_cleanup_pop (!0);
 
   return (NULL);
 }
@@ -325,9 +333,8 @@ run_async_server (task_t *task, config_t *config)
       return (false);
     }
 
-  if (thread_create (&context.context.thread_pool, handle_clients,
-                     &context_ptr, sizeof (context_ptr), "async accepter")
-      == S_FAILURE)
+  if (!thread_create (&context.context.thread_pool, handle_clients,
+                     &context_ptr, sizeof (context_ptr), "async accepter"))
     {
       error ("Could not create clients thread");
       goto fail;

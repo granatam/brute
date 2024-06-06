@@ -110,7 +110,7 @@ thread_run (void *arg)
   return (NULL);
 }
 
-status_t
+pthread_t
 thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg,
                size_t arg_size, char *name)
 {
@@ -123,13 +123,13 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg,
   if (pthread_mutex_init (&context.mutex, NULL) != 0)
     {
       error ("Could not create mutex");
-      return (S_FAILURE);
+      return (0);
     }
 
   if (pthread_mutex_lock (&context.mutex) != 0)
     {
       error ("Could not lock mutex");
-      return (S_FAILURE);
+      return (0);
     }
 
   pthread_t thread;
@@ -137,24 +137,24 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg,
   if (pthread_attr_init (&attr) != 0)
     {
       error ("Could not initialize a thread attribute");
-      return (S_FAILURE);
+      return (0);
     }
   if (pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED) != 0)
     {
       error ("Could not set detach state for a thread");
-      return (S_FAILURE);
+      return (0);
     }
 
   if (pthread_mutex_lock (&thread_pool->mutex) != 0)
     {
       error ("Could not lock a mutex");
-      return (S_FAILURE);
+      return (0);
     }
   ++thread_pool->count;
   if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
     {
       error ("Could not unlock a mutex");
-      return (S_FAILURE);
+      return (0);
     }
 
   if (pthread_create (&thread, &attr, &thread_run, &context) != 0)
@@ -163,7 +163,7 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg,
       if (pthread_mutex_lock (&thread_pool->mutex) != 0)
         {
           error ("Could not lock a mutex");
-          return (S_FAILURE);
+          return (0);
         }
       pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
@@ -173,16 +173,16 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg,
 
       pthread_cleanup_pop (!0);
 
-      return (S_FAILURE);
+      return (0);
     }
 
   if (pthread_mutex_lock (&context.mutex) != 0)
     {
       error ("Could not lock mutex");
-      return (S_FAILURE);
+      return (0);
     }
 
-  return (S_SUCCESS);
+  return (thread);
 }
 
 status_t
@@ -286,8 +286,7 @@ create_threads (thread_pool_t *thread_pool, int number_of_threads,
   int active_threads = 0;
 
   for (int i = 0; i < number_of_threads; ++i)
-    if (thread_create (thread_pool, func, context, context_size, name)
-        == S_SUCCESS)
+    if (thread_create (thread_pool, func, context, context_size, name))
       ++active_threads;
 
   if (active_threads == 0)
