@@ -11,7 +11,7 @@ int main() {
         fprintf (stderr, "Could not lock a mutex\n");
     }
 
-    printf ("FreeBSD test\n");
+    fprintf (stderr, "FreeBSD test\n");
 
     if (pthread_mutex_unlock (&mutex) != 0) {
         fprintf (stderr, "Could not unlock a mutex\n");
