@@ -44,7 +44,7 @@ acl_context_init (serv_context_t *global_ctx)
         goto cleanup;
       }
 
-  ctx->ref_count = 2;
+  ctx->ref_count = 1;
   if (pthread_mutex_init (&ctx->mutex, NULL) != 0)
     {
       error ("Could not initialize mutex");
@@ -90,7 +90,6 @@ acl_context_destroy (acl_context_t *ctx)
 cleanup:
   close_client (ctx->socket_fd);
   free (ctx);
-  ctx = NULL;
 }
 
 static status_t
@@ -241,11 +240,11 @@ cleanup:
 static void
 accepter_cleanup (void *arg)
 {
-  if (!arg)
+  acl_context_t *acl_ctx = *(acl_context_t **)arg;
+  if (!acl_ctx)
     return;
 
-  acl_context_t *ctx = arg;
-  acl_context_destroy (ctx);
+  sender_receiver_cleanup (acl_ctx);
 }
 
 static void *
@@ -254,22 +253,22 @@ handle_clients (void *arg)
   serv_context_t *srv_ctx = *(serv_context_t **)arg;
   mt_context_t *mt_ctx = &srv_ctx->context;
 
-  acl_context_t *helper_ctx = NULL;
-  pthread_cleanup_push (accepter_cleanup, helper_ctx);
+  acl_context_t *acl_ctx = NULL;
+  pthread_cleanup_push (accepter_cleanup, &acl_ctx);
   while (true)
     {
-      acl_context_t *acl_ctx = acl_context_init (srv_ctx);
+      if (!acl_ctx)
+        acl_ctx = acl_context_init (srv_ctx);
+
       if (!acl_ctx)
         break;
-      helper_ctx = acl_ctx;
 
       while (true)
         {
           if (srv_ctx->socket_fd < 0)
             {
               error ("Invalid server socket");
-              acl_context_destroy (acl_ctx);
-              return (NULL);
+              goto cleanup;
             }
 
           acl_ctx->socket_fd = accept (srv_ctx->socket_fd, NULL, NULL);
@@ -277,10 +276,8 @@ handle_clients (void *arg)
             {
               error ("Could not accept new connection: %s", strerror (errno));
               if (errno == EINVAL)
-                {
-                  acl_context_destroy (acl_ctx);
-                  return (NULL);
-                }
+                goto cleanup;
+
               continue;
             }
           break;
@@ -292,33 +289,33 @@ handle_clients (void *arg)
       setsockopt (acl_ctx->socket_fd, SOL_SOCKET, TCP_NODELAY, &option,
                   sizeof (option));
 
-      trace ("Copied client context");
-
-      pthread_t sender;
+      pthread_t sender, receiver;
       if (!(sender
             = thread_create (&mt_ctx->thread_pool, task_sender, &acl_ctx,
                              sizeof (acl_ctx), "async sender")))
         {
           error ("Could not create task sender thread");
-          acl_context_destroy (acl_ctx);
           continue;
         }
 
-      trace ("Created a sender thread: %08x",
-             mt_ctx->thread_pool.threads.prev->thread);
+      ++acl_ctx->ref_count;
 
-      if (!thread_create (&mt_ctx->thread_pool, result_receiver, &acl_ctx,
-                          sizeof (acl_ctx), "async receiver"))
+      trace ("Created a sender thread: %08x", sender);
+
+      if (!(receiver
+            = thread_create (&mt_ctx->thread_pool, result_receiver, &acl_ctx,
+                             sizeof (acl_ctx), "async receiver")))
         {
           error ("Could not create result receiver thread");
-          --acl_ctx->ref_count;
+          sender_receiver_cleanup (acl_ctx);
           pthread_cancel (sender);
-          continue;
+          pthread_join (sender, NULL);
         }
 
-      trace ("Created a receiver thread: %08x",
-             mt_ctx->thread_pool.threads.prev->thread);
+      acl_ctx = NULL;
+      trace ("Created a receiver thread: %08x", receiver);
     }
+cleanup:
   pthread_cleanup_pop (!0);
 
   return (NULL);
