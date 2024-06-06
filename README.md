@@ -2,7 +2,7 @@
 
 ## Usage
 ```
-usage: ./main [-x level] [-l length] [-a alphabet] [-h hash] [-t number] [-p port] [-A addr] [-T timeout] [-s | -m | -g | -c | -L | -S | -v | -w] [-i | -r | -y]
+usage: ./main [-l length] [-a alphabet] [-h hash] [-t number] [-p port] [-A addr] [-T timeout] [-s | -m | -g | -c | -L | -S | -v | -w] [-i | -r | -y]
 options:
         -l length    password length
         -a alphabet  alphabet
@@ -11,8 +11,6 @@ options:
         -p port      server port
         -A addr      server address
         -T timeout   timeout between task receiving and its processing
-log levels:
-        trace | debug | info | warn | error | fatal | off
 run modes:
         -s           singlethreaded mode
         -m           multithreaded mode
