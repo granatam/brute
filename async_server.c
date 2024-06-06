@@ -60,7 +60,9 @@ cleanup:
   if (queue_destroy (&ctx->registry_idx) != QS_SUCCESS)
     error ("Could not destroy registry indices queue");
 
-  return NULL;
+  free (ctx);
+
+  return (NULL);
 }
 
 static void
@@ -74,20 +76,13 @@ acl_context_destroy (acl_context_t *ctx)
   trace ("Cancelled registry indices queue");
 
   if (queue_destroy (&ctx->registry_idx) != QS_SUCCESS)
-    {
-      error ("Could not destroy registry indices queue");
-      goto cleanup;
-    }
+    error ("Could not destroy registry indices queue");
 
   trace ("Destroyed registry indices queue");
 
   if (pthread_mutex_destroy (&ctx->mutex) != 0)
-    {
-      error ("Could not destroy mutex");
-      goto cleanup;
-    }
+    error ("Could not destroy mutex");
 
-cleanup:
   close_client (ctx->socket_fd);
   free (ctx);
 }
@@ -98,7 +93,8 @@ return_tasks (acl_context_t *ctx)
   mt_context_t *mt_ctx = &ctx->context->context;
   status_t status = S_SUCCESS;
 
-  for (int i = 0; i < QUEUE_SIZE; ++i)
+  int i;
+  for (i = 0; i < QUEUE_SIZE; ++i)
     {
       if (ctx->registry_used[i])
         {
@@ -120,16 +116,18 @@ sender_receiver_cleanup (void *arg)
 {
   acl_context_t *ctx = arg;
 
+  bool is_last;
   if (pthread_mutex_lock (&ctx->mutex) != 0)
     return;
   pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
 
   return_tasks (ctx);
-
-  if (--ctx->ref_count == 0)
-    acl_context_destroy (ctx);
+  is_last = (--ctx->ref_count == 0);
 
   pthread_cleanup_pop (!0);
+
+  if (is_last)
+    acl_context_destroy (ctx);
 }
 
 static void *
