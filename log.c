@@ -12,8 +12,8 @@ message_impl (const char *log_level, const char *file_name,
               const char *func_name, int line, const char *msg, ...)
 {
   char log_info[1 << 7];
-  if (sprintf (log_info, "[%s] (%s %s %d)", log_level, file_name, func_name,
-               line)
+  if (snprintf (log_info, sizeof (log_info), "[%s] (%s %s %d)", log_level,
+                file_name, func_name, line)
       < 0)
     if (fprintf (stderr, "[%s] (%s %s %d)", log_level, file_name, func_name,
                  line)
