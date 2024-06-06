@@ -7,6 +7,8 @@
 
 #ifndef __FreeBSD__
 #include <crypt.h>
+#else
+#include <unistd.h>
 #endif
 
 typedef struct st_context_t
