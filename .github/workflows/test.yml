@@ -35,19 +35,19 @@ jobs:
         run: make
       - name: make check
         run: make check
-  # freebsd-clang:
-  #   runs-on: ubuntu-latest
-  #   name: FreeBSD (clang)
-  #   steps:
-  #   - uses: actions/checkout@v4
-  #   - uses: vmactions/freebsd-vm@v1
-  #     with:
-  #       usesh: true
-  #       prepare: |
-  #         pkg install -y git gmake
-  #         pkg install -y -g py3\*-pip python3
-  #         pip install hypothesis pytest
-  #       run: |
-  #         git config --global --add safe.directory `pwd`
-  #         git submodule update --init --recursive --remote
-  #         gmake check
+  freebsd-clang:
+    runs-on: ubuntu-latest
+    name: FreeBSD (clang)
+    steps:
+    - uses: actions/checkout@v4
+    - uses: vmactions/freebsd-vm@v1
+      with:
+        usesh: true
+        prepare: |
+          pkg install -y git gmake
+          pkg install -y -g py3\*-pip python3
+          pip install hypothesis pytest
+        run: |
+          git config --global --add safe.directory `pwd`
+          git submodule update --init --recursive --remote
+          gmake check
