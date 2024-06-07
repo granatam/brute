@@ -47,7 +47,7 @@ client_worker (void *arg)
 
       if (queue_push (&ctx->result_queue, &task.task) != QS_SUCCESS)
         return (NULL);
-      error ("Pushed processed task to result queue");
+      trace ("Pushed processed task to result queue");
     }
   return (NULL);
 }
@@ -268,7 +268,7 @@ run_async_client (config_t *config)
       return (false);
     }
 
-  error ("Waited for all threads to end, closing the connection now");
+  trace ("Waited for all threads to end, closing the connection now");
 
   shutdown (ctx.socket_fd, SHUT_RDWR);
   if (close (ctx.socket_fd) != 0)
