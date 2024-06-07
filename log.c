@@ -2,7 +2,6 @@
 #include "log.h"
 #include "common.h"
 
-#include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
