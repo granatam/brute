@@ -1,6 +1,8 @@
 #include "multi.h"
 
 #include "brute.h"
+#include "common.h"
+#include "log.h"
 #include "queue.h"
 #include "single.h"
 
@@ -15,19 +17,19 @@ mt_context_init (mt_context_t *context, config_t *config)
 {
   if (pthread_mutex_init (&context->mutex, NULL) != 0)
     {
-      print_error ("Could not initialize a mutex\n");
+      error ("Could not initialize a mutex");
       return (S_FAILURE);
     }
 
   if (pthread_cond_init (&context->cond_sem, NULL) != 0)
     {
-      print_error ("Could not initialize a condition variable\n");
+      error ("Could not initialize a condition variable");
       return (S_FAILURE);
     }
 
-  if (queue_init (&context->queue) == QS_FAILURE)
+  if (queue_init (&context->queue, sizeof (task_t)) == QS_FAILURE)
     {
-      print_error ("Could not initialize a queue\n");
+      error ("Could not initialize a queue");
       return (S_FAILURE);
     }
 
@@ -44,53 +46,57 @@ mt_context_init (mt_context_t *context, config_t *config)
 status_t
 mt_context_destroy (mt_context_t *context)
 {
+  trace ("Destroying multithreading context");
   if (thread_pool_cancel (&context->thread_pool) == S_FAILURE)
     {
-      print_error ("Could not cancel a thread pool\n");
+      error ("Could not cancel a thread pool");
       return (S_FAILURE);
     }
-
+  trace ("Cancelled thread pool, destroying global queue");
   if (queue_destroy (&context->queue) == QS_FAILURE)
     {
-      print_error ("Could not destroy a queue\n");
+      error ("Could not destroy a queue");
       return (S_FAILURE);
     }
-
+  trace (
+      "Global queue is destroyed, destroying conditional semaphore and mutex");
   if (pthread_cond_destroy (&context->cond_sem) != 0)
     {
-      print_error ("Could not destroy a condition variable\n");
+      error ("Could not destroy a condition variable");
       return (S_FAILURE);
     }
 
   if (pthread_mutex_destroy (&context->mutex) != 0)
     {
-      print_error ("Could not destroy a mutex\n");
+      error ("Could not destroy a mutex");
       return (S_FAILURE);
     }
+  trace ("Destroyed multithreaded context");
 
   return (S_SUCCESS);
 }
 
-status_t
+static status_t
 signal_if_found (mt_context_t *ctx)
 {
   if (pthread_mutex_lock (&ctx->mutex) != 0)
     {
-      print_error ("Could not lock a mutex\n");
+      error ("Could not lock a mutex");
       return (S_FAILURE);
     }
+  status_t status = S_SUCCESS;
   pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
 
   if (--ctx->passwords_remaining == 0 || ctx->password[0] != 0)
     if (pthread_cond_signal (&ctx->cond_sem) != 0)
       {
-        print_error ("Could not signal a condition\n");
-        return (S_FAILURE);
+        error ("Could not signal a condition");
+        status = S_FAILURE;
       }
 
   pthread_cleanup_pop (!0);
 
-  return (S_SUCCESS);
+  return (status);
 }
 
 void *
@@ -112,7 +118,8 @@ mt_password_check (void *context)
       task.from = 0;
 
       if (brute (&task, mt_ctx->config, st_password_check, &st_ctx))
-        memcpy (mt_ctx->password, task.password, sizeof (task.password));
+        memcpy (mt_ctx->password, task.task.password,
+                sizeof (task.task.password));
 
       if (signal_if_found (mt_ctx) == S_FAILURE)
         return (NULL);
@@ -128,7 +135,7 @@ queue_push_wrapper (task_t *task, void *context)
 
   if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
     {
-      print_error ("Could not lock a mutex\n");
+      error ("Could not lock a mutex");
       return (false);
     }
 
@@ -136,13 +143,13 @@ queue_push_wrapper (task_t *task, void *context)
 
   if (pthread_mutex_unlock (&mt_ctx->mutex) != 0)
     {
-      print_error ("Could not unlock a mutex\n");
+      error ("Could not unlock a mutex");
       return (false);
     }
 
   queue_status_t push_status = queue_push (&mt_ctx->queue, task);
   if (push_status == QS_FAILURE)
-    print_error ("Could not push to a queue\n");
+    error ("Could not push to a queue");
 
   if (push_status != QS_SUCCESS)
     return (false);
@@ -155,21 +162,26 @@ wait_password (mt_context_t *ctx)
 {
   if (pthread_mutex_lock (&ctx->mutex) != 0)
     {
-      print_error ("Could not lock a mutex\n");
+      error ("Could not lock a mutex");
       return (S_FAILURE);
     }
+  status_t status = S_SUCCESS;
   pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
 
+  trace ("Waiting for password to be found or tasks to end");
   while (ctx->passwords_remaining != 0 && ctx->password[0] == 0)
     if (pthread_cond_wait (&ctx->cond_sem, &ctx->mutex) != 0)
       {
-        print_error ("Could not wait on a condition\n");
-        return (S_FAILURE);
+        error ("Could not wait on a condition");
+        status = S_FAILURE;
       }
+
+  trace ("Got signal on conditional semaphore, no password are remained or "
+         "password was found");
 
   pthread_cleanup_pop (!0);
 
-  return (S_SUCCESS);
+  return (status);
 }
 
 bool
@@ -181,9 +193,9 @@ run_multi (task_t *task, config_t *config)
   if (mt_context_init (&context, config) == S_FAILURE)
     return (false);
 
-  int active_threads
-      = create_threads (&context.thread_pool, config->number_of_threads,
-                        mt_password_check, &context_ptr, sizeof (context_ptr));
+  int active_threads = create_threads (
+      &context.thread_pool, config->number_of_threads, mt_password_check,
+      &context_ptr, sizeof (context_ptr), "mt worker");
 
   if (active_threads == 0)
     goto fail;
@@ -198,16 +210,16 @@ run_multi (task_t *task, config_t *config)
 
   if (queue_cancel (&context.queue) != QS_SUCCESS)
     {
-      print_error ("Could not cancel a queue\n");
+      error ("Could not cancel a queue");
       goto fail;
     }
 
   if (context.password[0] != 0)
-    memcpy (task->password, context.password, sizeof (context.password));
+    memcpy (task->task.password, context.password, sizeof (context.password));
 
   if (mt_context_destroy (&context) == S_FAILURE)
     {
-      print_error ("Could not destroy mt context\n");
+      error ("Could not destroy mt context");
       return (false);
     }
 
@@ -215,7 +227,7 @@ run_multi (task_t *task, config_t *config)
 
 fail:
   if (mt_context_destroy (&context) == S_FAILURE)
-    print_error ("Could not destroy mt context\n");
+    error ("Could not destroy mt context");
 
   return (false);
 }

@@ -17,11 +17,15 @@ jobs:
         run: pip install pytest hypothesis
       - name: update ubuntu packages
         run: sudo apt-get update -y
-      - name: install valgrind
-        run: sudo apt-get install valgrind -y
-      - name: make
-        run: CC=${{matrix.cc}} make 
-      - name: make check
+      - name: install valgrind and netcat
+        run: sudo apt-get install valgrind netcat -y
+      - name: make dev
+        run: CC=${{matrix.cc}} make dev
+      - name: make check (dev)
+        run: make check
+      - name: make release
+        run: CC=${{matrix.cc}} make release
+      - name: make check (release)
         run: make check
   macos:
     runs-on: macos-latest
@@ -31,7 +35,27 @@ jobs:
       - uses: actions/setup-python@v2
       - name: install pytest and hypothesis
         run: pip install pytest hypothesis
-      - name: make
-        run: make
-      - name: make check
+      - name: make dev
+        run: make dev
+      - name: make check (dev)
         run: make check
+      - name: make release
+        run: make release
+      - name: make check (release)
+        run: make check
+  # freebsd-clang:
+  #   runs-on: ubuntu-latest
+  #   name: FreeBSD (clang)
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   - uses: vmactions/freebsd-vm@v1
+  #     with:
+  #       usesh: true
+  #       prepare: |
+  #         pkg install -y git gmake
+  #         pkg install -y -g py3\*-pip python3
+  #         pip install hypothesis pytest
+  #       run: |
+  #         git config --global --add safe.directory `pwd`
+  #         git submodule update --init --recursive --remote
+  #         gmake check

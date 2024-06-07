@@ -11,6 +11,8 @@ typedef enum
   RM_CLIENT,
   RM_SERVER,
   RM_LOAD_CLIENT,
+  RM_ASYNC_CLIENT,
+  RM_ASYNC_SERVER,
 } run_mode_t;
 
 typedef enum
@@ -30,6 +32,7 @@ typedef struct config_t
   char *hash;
   char *addr;
   int port;
+  int timeout;
 } config_t;
 
 #endif // CONFIG_H

@@ -1,5 +1,7 @@
 #include "thread_pool.h"
+
 #include "common.h"
+#include "log.h"
 
 #include <pthread.h>
 #include <stdio.h>
@@ -12,13 +14,13 @@ thread_pool_init (thread_pool_t *thread_pool)
 {
   if (pthread_mutex_init (&thread_pool->mutex, NULL) != 0)
     {
-      print_error ("Could not create thread pool mutex\n");
+      error ("Could not create thread pool mutex");
       return (S_FAILURE);
     }
 
   if (pthread_cond_init (&thread_pool->cond, NULL) != 0)
     {
-      print_error ("Could not create thread pool conditional semaphore\n");
+      error ("Could not create thread pool conditional semaphore");
       return (S_FAILURE);
     }
 
@@ -38,17 +40,14 @@ thread_cleanup (void *arg)
   node_t *node = tcc->node;
   thread_pool_t *thread_pool = tcc->thread_pool;
 
-  if (pthread_mutex_lock (&thread_pool->mutex) != 0)
-    print_error ("Could not lock a mutex\n");
+  pthread_mutex_lock (&thread_pool->mutex);
   pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
   node->prev->next = node->next;
   node->next->prev = node->prev;
   --thread_pool->count;
 
-  if (pthread_cond_signal (&thread_pool->cond) != 0)
-    print_error ("Could not signal a conditional semaphore\n");
-
+  pthread_cond_signal (&thread_pool->cond);
   pthread_cleanup_pop (!0);
 }
 
@@ -63,20 +62,21 @@ thread_run (void *arg)
   memcpy (args, local_ctx.arg, local_ctx.arg_size);
 
   if (pthread_setcancelstate (PTHREAD_CANCEL_DISABLE, NULL) != 0)
-    print_error ("Could not set cancel state\n");
+    error ("Could not set cancel state");
 
   if (pthread_mutex_unlock (&tp_ctx->mutex) != 0)
     {
-      print_error ("Could not unlock mutex\n");
+      error ("Could not unlock mutex");
       return (NULL);
     }
 
   node_t node;
   node.thread = pthread_self ();
+  node.name = local_ctx.name;
 
   if (pthread_mutex_lock (&thread_pool->mutex) != 0)
     {
-      print_error ("Could not lock mutex\n");
+      error ("Could not lock mutex");
       return (NULL);
     }
 
@@ -94,99 +94,95 @@ thread_run (void *arg)
   thread_pool->threads.prev->next = &node;
   thread_pool->threads.prev = &node;
 
-  if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
-    {
-      print_error ("Could not unlock mutex\n");
-      return (NULL);
-    }
-
   thread_cleanup_context_t tcc = { .thread_pool = thread_pool, .node = &node };
   pthread_cleanup_push (thread_cleanup, &tcc);
 
-  if (pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL) != 0)
-    {
-      print_error ("Could not set cancel state for a thread\n");
-      return (NULL);
-    }
+  if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
+    error ("Could not unlock mutex");
 
-  local_ctx.func (args);
+  if (pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL) != 0)
+    error ("Could not set cancel state for a thread");
+  else
+    local_ctx.func (args);
 
   pthread_cleanup_pop (!0);
 
   return (NULL);
 }
 
-status_t
+pthread_t
 thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg,
-               size_t arg_size)
+               size_t arg_size, char *name)
 {
-  tp_context_t context = {
-    .thread_pool = thread_pool, .func = func, .arg = arg, .arg_size = arg_size
-  };
+  tp_context_t context = { .thread_pool = thread_pool,
+                           .func = func,
+                           .arg = arg,
+                           .arg_size = arg_size,
+                           .name = name };
 
   if (pthread_mutex_init (&context.mutex, NULL) != 0)
     {
-      print_error ("Could not create mutex\n");
-      return (S_FAILURE);
+      error ("Could not create mutex");
+      return (0);
     }
 
   if (pthread_mutex_lock (&context.mutex) != 0)
     {
-      print_error ("Could not lock mutex\n");
-      return (S_FAILURE);
+      error ("Could not lock mutex");
+      return (0);
     }
 
   pthread_t thread;
   pthread_attr_t attr;
   if (pthread_attr_init (&attr) != 0)
     {
-      print_error ("Could not initialize a thread attribute\n");
-      return (S_FAILURE);
+      error ("Could not initialize a thread attribute");
+      return (0);
     }
   if (pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED) != 0)
     {
-      print_error ("Could not set detach state for a thread\n");
-      return (S_FAILURE);
+      error ("Could not set detach state for a thread");
+      return (0);
     }
 
   if (pthread_mutex_lock (&thread_pool->mutex) != 0)
     {
-      print_error ("Could not lock a mutex\n");
-      return (S_FAILURE);
+      error ("Could not lock a mutex");
+      return (0);
     }
-  pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
   ++thread_pool->count;
-  pthread_cleanup_pop (!0);
+  if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
+    {
+      error ("Could not unlock a mutex");
+      return (0);
+    }
 
   if (pthread_create (&thread, &attr, &thread_run, &context) != 0)
     {
-      print_error ("Could not create thread\n");
+      error ("Could not create thread");
       if (pthread_mutex_lock (&thread_pool->mutex) != 0)
         {
-          print_error ("Could not lock a mutex\n");
-          return (S_FAILURE);
+          error ("Could not lock a mutex");
+          return (0);
         }
       pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
       --thread_pool->count;
-
       if (pthread_cond_signal (&thread_pool->cond) != 0)
-        {
-          print_error ("Could not signal a conditional semaphore\n");
-          return (S_FAILURE);
-        }
+        error ("Could not signal a conditional semaphore");
+
       pthread_cleanup_pop (!0);
 
-      return (S_FAILURE);
+      return (0);
     }
 
   if (pthread_mutex_lock (&context.mutex) != 0)
     {
-      print_error ("Could not lock mutex\n");
-      return (S_FAILURE);
+      error ("Could not lock mutex");
+      return (0);
     }
 
-  return (S_SUCCESS);
+  return (thread);
 }
 
 status_t
@@ -198,7 +194,7 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
     {
       if (pthread_mutex_lock (&thread_pool->mutex) != 0)
         {
-          print_error ("Could not lock mutex\n");
+          error ("Could not lock mutex");
           return (S_FAILURE);
         }
 
@@ -208,7 +204,7 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
 
       if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
         {
-          print_error ("Could not unlock mutex\n");
+          error ("Could not unlock mutex");
           return (S_FAILURE);
         }
 
@@ -220,31 +216,28 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
 
       if (pthread_mutex_lock (&thread_pool->mutex) != 0)
         {
-          print_error ("Could not lock a mutex\n");
+          error ("Could not lock a mutex");
           return (S_FAILURE);
         }
-      pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
 
       if (cancel)
         if (pthread_cancel (thread) != 0)
-          {
-            print_error ("Could not cancel a thread\n");
-            return (S_FAILURE);
-          }
+          error ("Could not cancel a thread");
 
       while (thread_pool->threads.next->thread == thread)
         if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
           {
-            print_error ("Could not wait for a conditional semaphore\n");
-            return (S_FAILURE);
+            error ("Could not wait for a conditional semaphore");
+            pthread_mutex_unlock (&thread_pool->mutex);
+            break;
           }
 
-      pthread_cleanup_pop (!0);
+      pthread_mutex_unlock (&thread_pool->mutex);
     }
 
   if (pthread_mutex_lock (&thread_pool->mutex) != 0)
     {
-      print_error ("Could not lock a mutex\n");
+      error ("Could not lock a mutex");
       return (S_FAILURE);
     }
   pthread_cleanup_push (cleanup_mutex_unlock, &thread_pool->mutex);
@@ -252,12 +245,11 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
   while (thread_pool->count != 0)
     if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
       {
-        print_error ("Could not wait for a conditional semaphore\n");
+        error ("Could not wait for a conditional semaphore");
         return (S_FAILURE);
       }
-  pthread_cleanup_pop (!0);
 
-  print_error ("After thread_pool_collect\n");
+  pthread_cleanup_pop (!0);
 
   /* Valgrind tests are returning false positive result, since it doesn't
    * wait until all memory allocated for threads is cleared, so we need to
@@ -288,16 +280,17 @@ thread_pool_join (thread_pool_t *thread_pool)
 
 int
 create_threads (thread_pool_t *thread_pool, int number_of_threads,
-                void *func (void *), void *context, size_t context_size)
+                void *func (void *), void *context, size_t context_size,
+                char *name)
 {
   int active_threads = 0;
 
   for (int i = 0; i < number_of_threads; ++i)
-    if (thread_create (thread_pool, func, context, context_size) == S_SUCCESS)
+    if (thread_create (thread_pool, func, context, context_size, name))
       ++active_threads;
 
   if (active_threads == 0)
-    print_error ("Could not create a single thread\n");
+    error ("Could not create a single thread");
 
   return (active_threads);
 }

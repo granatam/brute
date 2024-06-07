@@ -1,12 +1,15 @@
+#include "async_client.h"
+#include "async_server.h"
 #include "brute.h"
-#include "client.h"
 #include "common.h"
 #include "config.h"
 #include "gen.h"
+#include "log.h"
 #include "multi.h"
 #include "queue.h"
-#include "server.h"
 #include "single.h"
+#include "sync_client.h"
+#include "sync_server.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -19,7 +22,8 @@ usage (char *first_arg)
 {
   fprintf (stderr,
            "usage: %s [-l length] [-a alphabet] [-h hash] [-t number] "
-           "[-p port] [-A addr] [-s | -m | -g | -c | -L number | -S] [-i | -r"
+           "[-p port] [-A addr] [-T timeout] "
+           "[-s | -m | -g | -c | -L number | -S | -v | -w] [-i | -r"
 #ifndef __APPLE__
            " | -y"
 #endif
@@ -31,13 +35,17 @@ usage (char *first_arg)
            "\t-t number    number of threads\n"
            "\t-p port      server port\n"
            "\t-A addr      server address\n"
+           "\t-T timeout   timeout between task receiving and its processing "
+           "in milliseconds\n"
            "run modes:\n"
            "\t-s           singlethreaded mode\n"
            "\t-m           multithreaded mode\n"
            "\t-g           generator mode\n"
-           "\t-c           client mode\n"
+           "\t-c           synchronous client mode\n"
            "\t-L number    spawn N load clients\n"
-           "\t-S           server mode\n"
+           "\t-S           synchronous server mode\n"
+           "\t-v           asynchronous client mode\n"
+           "\t-w           asynchronous server mode\n"
            "brute modes:\n"
            "\t-i           iterative bruteforce\n"
            "\t-r           recursive bruteforce\n"
@@ -52,7 +60,7 @@ static status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
   int opt = 0;
-  while ((opt = getopt (argc, argv, "l:a:H:t:p:A:L:smgcSiryh")) != -1)
+  while ((opt = getopt (argc, argv, "l:a:H:t:p:A:L:T:smgcSvwiryh")) != -1)
     {
       switch (opt)
         {
@@ -60,9 +68,8 @@ parse_params (config_t *config, int argc, char *argv[])
           config->length = atoi (optarg);
           if (config->length <= 0 || config->length > MAX_PASSWORD_LENGTH)
             {
-              print_error (
-                  "Password's length must be a number between 0 and %d\n",
-                  MAX_PASSWORD_LENGTH);
+              error ("Password's length must be a number between 0 and %d",
+                     MAX_PASSWORD_LENGTH);
               return (S_FAILURE);
             }
           break;
@@ -71,8 +78,8 @@ parse_params (config_t *config, int argc, char *argv[])
           if (strlen (config->alph) <= 0
               || strlen (config->alph) > MAX_ALPH_LENGTH)
             {
-              print_error ("Alphabet's length must be between 0 and %d\n",
-                           MAX_ALPH_LENGTH);
+              error ("Alphabet's length must be between 0 and %d",
+                     MAX_ALPH_LENGTH);
               return (S_FAILURE);
             }
           break;
@@ -86,9 +93,8 @@ parse_params (config_t *config, int argc, char *argv[])
             if (config->number_of_threads < 1
                 || config->number_of_threads > number_of_cpus)
               {
-                print_error (
-                    "Number of threads must be a number between 1 and %d",
-                    number_of_cpus);
+                error ("Number of threads must be a number between 1 and %d",
+                       number_of_cpus);
                 return (S_FAILURE);
               }
             break;
@@ -97,13 +103,20 @@ parse_params (config_t *config, int argc, char *argv[])
           config->port = atoi (optarg);
           if (config->length <= 0 || config->length > MAX_TCP_PORT)
             {
-              print_error ("Port must be a number between 0 and %d\n",
-                           MAX_TCP_PORT);
+              error ("Port must be a number between 0 and %d", MAX_TCP_PORT);
               return (S_FAILURE);
             }
           break;
         case 'A':
           config->addr = optarg;
+          break;
+        case 'T':
+          config->timeout = atoi (optarg);
+          if (config->timeout < 0)
+            {
+              error ("Timeout must be a number greater than 0");
+              return (S_FAILURE);
+            }
           break;
         case 's':
           config->run_mode = RM_SINGLE;
@@ -121,14 +134,20 @@ parse_params (config_t *config, int argc, char *argv[])
           config->number_of_threads = atoi (optarg);
           if (config->number_of_threads < 1)
             {
-              print_error ("Number of load clients to spawn must be a number "
-                           "greater than 1\n");
+              error ("Number of load clients to spawn must be a number "
+                     "greater than 1");
               return (S_FAILURE);
             }
           config->run_mode = RM_LOAD_CLIENT;
           break;
         case 'S':
           config->run_mode = RM_SERVER;
+          break;
+        case 'v':
+          config->run_mode = RM_ASYNC_CLIENT;
+          break;
+        case 'w':
+          config->run_mode = RM_ASYNC_SERVER;
           break;
         case 'i':
           config->brute_mode = BM_ITER;
@@ -162,6 +181,7 @@ main (int argc, char *argv[])
     .hash = "abFZSxKKdq5s6", /* crypt ("abc", "abc"); */
     .port = 9000,
     .addr = "127.0.0.1",
+    .timeout = 0,
   };
 
   if (parse_params (&config, argc, argv) == S_FAILURE)
@@ -171,7 +191,7 @@ main (int argc, char *argv[])
     }
 
   task_t task;
-  memset (task.password, 0, sizeof (task.password));
+  memset (&task, 0, sizeof (task));
 
   bool is_found = false;
   switch (config.run_mode)
@@ -185,24 +205,31 @@ main (int argc, char *argv[])
     case RM_GENERATOR:
       is_found = run_generator (&task, &config);
       break;
+    case RM_ASYNC_SERVER:
+      is_found = run_async_server (&task, &config);
+      break;
     case RM_SERVER:
       is_found = run_server (&task, &config);
       break;
+    case RM_ASYNC_CLIENT:
+      run_async_client (&config);
+      break;
     case RM_CLIENT:
-      run_client (&task, &config, find_password);
+      run_client (&config, find_password);
       break;
     case RM_LOAD_CLIENT:
-      spawn_clients (&task, &config, NULL);
+      spawn_clients (&config, NULL);
       break;
     }
 
   /* Clients should not output anything, only computations and data exchange
    * with the server */
-  if (config.run_mode == RM_CLIENT || config.run_mode == RM_LOAD_CLIENT)
+  if (config.run_mode == RM_CLIENT || config.run_mode == RM_LOAD_CLIENT
+      || config.run_mode == RM_ASYNC_CLIENT)
     return (EXIT_SUCCESS);
 
   if (is_found)
-    printf ("Password found: %s\n", task.password);
+    printf ("Password found: %s\n", task.task.password);
   else
     printf ("Password not found\n");
 

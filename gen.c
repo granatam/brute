@@ -3,6 +3,7 @@
 #include "brute.h"
 #include "common.h"
 #include "iter.h"
+#include "log.h"
 #include "rec.h"
 #include "single.h"
 
@@ -14,7 +15,7 @@ gen_context_init (gen_context_t *context, config_t *config, task_t *task)
 {
   if (pthread_mutex_init (&context->mutex, NULL) != 0)
     {
-      print_error ("Could not initialize a mutex\n");
+      error ("Could not initialize a mutex");
       return (S_FAILURE);
     }
 
@@ -42,7 +43,7 @@ gen_context_init (gen_context_t *context, config_t *config, task_t *task)
 
   if (thread_pool_init (&context->thread_pool) == S_FAILURE)
     {
-      print_error ("Could not initialize a thread pool\n");
+      error ("Could not initialize a thread pool");
       return (S_FAILURE);
     }
 
@@ -53,7 +54,7 @@ gen_context_init (gen_context_t *context, config_t *config, task_t *task)
   return (S_SUCCESS);
 
 alloc_fail:
-  print_error ("Could not allocate memory for context state\n");
+  error ("Could not allocate memory for context state");
   return (S_FAILURE);
 }
 
@@ -64,13 +65,13 @@ gen_context_destroy (gen_context_t *context)
 
   if (thread_pool_join (&context->thread_pool) == S_FAILURE)
     {
-      print_error ("Could not cancel a thread pool\n");
+      error ("Could not join a thread pool");
       return (S_FAILURE);
     }
 
   if (pthread_mutex_destroy (&context->mutex) != 0)
     {
-      print_error ("Could not destroy a mutex\n");
+      error ("Could not destroy a mutex");
       return (S_FAILURE);
     }
 
@@ -94,7 +95,7 @@ gen_worker (void *context)
     {
       if (pthread_mutex_lock (&gen_ctx->mutex) != 0)
         {
-          print_error ("Could not lock a mutex\n");
+          error ("Could not lock a mutex");
           return (NULL);
         }
 
@@ -105,7 +106,7 @@ gen_worker (void *context)
 
       if (pthread_mutex_unlock (&gen_ctx->mutex) != 0)
         {
-          print_error ("Could not unlock a mutex\n");
+          error ("Could not unlock a mutex");
           return (NULL);
         }
 
@@ -116,7 +117,8 @@ gen_worker (void *context)
       task.from = 0;
       if (brute (&task, gen_ctx->config, st_password_check, &st_ctx))
         {
-          memcpy (gen_ctx->password, task.password, sizeof (task.password));
+          memcpy (gen_ctx->password, task.task.password,
+                  sizeof (task.task.password));
           gen_ctx->cancelled = true;
         }
     }
@@ -138,7 +140,7 @@ run_generator (task_t *task, config_t *config)
       = (config->number_of_threads == 1) ? 1 : config->number_of_threads - 1;
   int active_threads
       = create_threads (&context.thread_pool, number_of_threads, gen_worker,
-                        &context_ptr, sizeof (context_ptr));
+                        &context_ptr, sizeof (context_ptr), "gen worker");
 
   if (active_threads == 0)
     goto fail;
@@ -147,18 +149,18 @@ run_generator (task_t *task, config_t *config)
 
   if (gen_context_destroy (&context) == S_FAILURE)
     {
-      print_error ("Could not destroy generator context\n");
+      error ("Could not destroy generator context");
       return (false);
     }
 
   if (context.password[0] != 0)
-    memcpy (task->password, context.password, sizeof (context.password));
+    memcpy (task->task.password, context.password, sizeof (context.password));
 
   return (context.password[0] != 0);
 
 fail:
   if (gen_context_destroy (&context) == S_FAILURE)
-    print_error ("Could not return generator context\n");
+    error ("Could not return generator context");
 
   return (false);
 }

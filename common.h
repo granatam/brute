@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include <stdbool.h>
 
-#define print_error(...) print_error_impl (__func__, __LINE__, __VA_ARGS__)
+#include <sys/uio.h>
 
 #define MAX_PASSWORD_LENGTH (7)
 #define MAX_ALPH_LENGTH (20)
@@ -12,9 +12,16 @@
 
 typedef char password_t[MAX_PASSWORD_LENGTH + 1];
 
+typedef struct result_t
+{
+  int id;
+  bool is_correct;
+  password_t password;
+} result_t;
+
 typedef struct task_t
 {
-  password_t password;
+  result_t task;
   int from;
   int to;
 } task_t;
@@ -37,14 +44,11 @@ typedef enum command_t
   CMD_ALPH,
   CMD_HASH,
   CMD_TASK,
-  CMD_EXIT,
 } command_t;
 
-status_t print_error_impl (const char *func_name, int line, const char *msg,
-                           ...);
 void cleanup_mutex_unlock (void *mutex);
 
 status_t recv_wrapper (int socket_fd, void *buf, int len, int flags);
-status_t send_wrapper (int socket_fd, void *buf, int len, int flags);
+status_t send_wrapper (int socket_fd, struct iovec *vec, int iovcnt);
 
 #endif // COMMON_H

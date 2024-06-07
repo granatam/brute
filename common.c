@@ -5,6 +5,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <unistd.h>
 
 #ifndef TEMP_FAILURE_RETRY
@@ -17,22 +18,6 @@
     __result;                                                                 \
   }))
 #endif
-
-__attribute__ ((format (printf, 3, 4))) status_t
-print_error_impl (const char *func_name, int line, const char *msg, ...)
-{
-  fprintf (stderr, "(%s %d) ", func_name, line);
-
-  va_list args;
-  va_start (args, msg);
-
-  if (vfprintf (stderr, msg, args) != 0)
-    return (S_FAILURE);
-
-  va_end (args);
-
-  return (S_SUCCESS);
-}
 
 void
 cleanup_mutex_unlock (void *mutex)
@@ -58,17 +43,27 @@ recv_wrapper (int socket_fd, void *buf, int len, int flags)
 }
 
 status_t
-send_wrapper (int socket_fd, void *buf, int len, int flags)
+send_wrapper (int socket_fd, struct iovec *vec, int iovcnt)
 {
-  char *bytes = (char *)buf;
-  while (len > 0)
+  while (iovcnt > 0)
     {
-      int bytes_written
-          = TEMP_FAILURE_RETRY (send (socket_fd, bytes, len, flags));
-      if (bytes_written <= 0)
+      size_t bytes_written
+          = TEMP_FAILURE_RETRY (writev (socket_fd, vec, iovcnt));
+      if ((int)bytes_written <= 0)
         return (S_FAILURE);
-      len -= bytes_written;
-      bytes += bytes_written;
+
+      while (bytes_written >= vec[0].iov_len)
+        {
+          bytes_written -= vec[0].iov_len;
+          ++vec;
+          --iovcnt;
+        }
+      if ((iovcnt > 0) && (bytes_written > 0))
+        {
+          vec[0].iov_len -= bytes_written;
+          char *base = vec[0].iov_base;
+          vec[0].iov_base = base + bytes_written;
+        }
     }
 
   return (S_SUCCESS);
