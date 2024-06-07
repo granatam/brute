@@ -121,7 +121,7 @@ sender_receiver_cleanup (void *arg)
     return;
   pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
 
-  /* TODO: Move return_tasks out of mutex lock (probably should add 
+  /* TODO: Move return_tasks out of mutex lock (probably should add
    * sender/receiver tid and cancel them both) */
   return_tasks (ctx);
   is_last = (--ctx->ref_count == 0);
