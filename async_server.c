@@ -174,6 +174,9 @@ result_receiver (void *arg)
 
       if (serv_signal_if_found (mt_ctx) == S_FAILURE)
         break;
+
+      if (mt_ctx->password[0] != 0)
+        break;
     }
 
   trace ("Cleaning up receiver thread");
