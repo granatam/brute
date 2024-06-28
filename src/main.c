@@ -5,6 +5,7 @@
 #include "gen.h"
 #include "log.h"
 #include "multi.h"
+#include "reactor_server.h"
 #include "single.h"
 #include "sync_client.h"
 #include "sync_server.h"
@@ -39,6 +40,7 @@ usage (char *first_arg)
            "\t-S, --server             synchronous server mode\n"
            "\t-v, --async-client       asynchronous client mode\n"
            "\t-w, --async-server       asynchronous server mode\n"
+           "\t-R, --reactor-server     reactor server mode\n"
            "brute modes:\n"
            "\t-i, --iter               iterative bruteforce\n"
            "\t-r, --rec                recursive bruteforce\n"
@@ -51,7 +53,7 @@ usage (char *first_arg)
 static status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
-  const char short_opts[] = "l:a:H:t:p:A:L:T:smgcSvwiryh";
+  const char short_opts[] = "l:a:H:t:p:A:L:T:smgcSvwRiryh";
   const struct option long_opts[]
       = { { "length", required_argument, 0, 'l' },
           { "alph", required_argument, 0, 'a' },
@@ -68,11 +70,13 @@ parse_params (config_t *config, int argc, char *argv[])
           { "server", no_argument, 0, 'S' },
           { "async-client", no_argument, 0, 'v' },
           { "async-server", no_argument, 0, 'w' },
+          { "reactor-server", no_argument, 0, 'R' },
           { "iter", no_argument, 0, 'i' },
           { "rec", no_argument, 0, 'r' },
           { "rec-gen", no_argument, 0, 'y' },
           { "help", no_argument, 0, 'h' },
           { NULL, 0, NULL, 0 } };
+
   int opt = 0;
   while ((opt = getopt_long (argc, argv, short_opts, long_opts, NULL)) != -1)
     {
@@ -163,6 +167,9 @@ parse_params (config_t *config, int argc, char *argv[])
         case 'w':
           config->run_mode = RM_ASYNC_SERVER;
           break;
+        case 'R':
+          config->run_mode = RM_REACTOR_SERVER;
+          break;
         case 'i':
           config->brute_mode = BM_ITER;
           break;
@@ -233,6 +240,9 @@ main (int argc, char *argv[])
       break;
     case RM_LOAD_CLIENT:
       spawn_clients (&config, NULL);
+      break;
+    case RM_REACTOR_SERVER:
+      is_found = run_reactor_server (&task, &config);
       break;
     }
 
