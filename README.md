@@ -24,6 +24,7 @@ Run modes:
         -S, --server             synchronous server mode
         -v, --async-client       asynchronous client mode
         -w, --async-server       asynchronous server mode
+        -R, --reactor-server     reactor server mode
 
 Brute modes:
         -i, --iter               iterative bruteforce
