@@ -1,5 +1,5 @@
 on: [ 'push', 'pull_request' ]
-  
+
 jobs:
   ubuntu:
     runs-on: ubuntu-latest
@@ -11,8 +11,10 @@ jobs:
           - cc: gcc
           - cc: clang
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: install pytest and hypothesis
         run: pip install pytest hypothesis
       - name: update ubuntu packages
@@ -31,8 +33,10 @@ jobs:
     runs-on: macos-latest
     name: MacOS (clang)
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: install pytest and hypothesis
         run: pip install pytest hypothesis
       - name: make dev
