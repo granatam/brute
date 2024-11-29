@@ -43,6 +43,7 @@ class RunMode(str, Enum):
     SYNC_SERVER = "S"
     ASYNC_CLIENT = "v"
     ASYNC_SERVER = "w"
+    REACTOR_SERVER = "R"
     NETCAT = "nc"  # Special case, used for client's behavior imitation
 
 
