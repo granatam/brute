@@ -1,7 +1,7 @@
-on: [ 'push', 'pull_request' ]
+on: [ 'push' ]
 
 jobs:
-  ubuntu:
+  x86-ubuntu:
     runs-on: ubuntu-latest
     name: x86 Ubuntu
     strategy:
@@ -24,12 +24,51 @@ jobs:
       - name: make dev
         run: CC=${{matrix.cc}} make dev
       - name: make check (dev)
-        run: make check
+        run: WITH_VALGRIND=true make check
       - name: make release
         run: CC=${{matrix.cc}} make release
       - name: make check (release)
+        run: WITH_VALGRIND=true make check
+      - name: make release with AddressSanitizer
+        run: CC=${{matrix.cc}} CFLAGS="-O2 -Wall -Wextra -gdwarf-4 -fsanitize=address -fno-omit-frame-pointer" make release
+      - name: make check (release) with ASan
         run: make check
-  macos:
+  non-x86-ubuntu:
+    runs-on: ubuntu-latest
+    name: non-x86 Ubuntu
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: aarch64, cc: gcc }
+          - { arch: aarch64, cc: clang }
+          - { arch: riscv64, cc: gcc }
+          - { arch: riscv64, cc: clang }
+          - { arch: ppc64le, cc: gcc }
+          - { arch: ppc64le, cc: clang }
+          - { arch: s390x, cc: gcc }
+          - { arch: s390x, cc: clang }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: uraimo/run-on-arch-action@v2
+        name: Run commands
+        id: build-and-check
+        with:
+          arch: ${{matrix.arch}}
+          distro: ubuntu_latest
+          # Not required, but speeds up builds by storing container images in
+          # a GitHub package registry.
+          githubToken: ${{ github.token }}
+          run: |
+            apt-get update -q -y
+            apt-get install netcat-traditional python3-pytest python3-hypothesis make ${{matrix.cc}} -q -y
+            CC=${{matrix.cc}} make dev
+            make check
+            CC=${{matrix.cc}} make release
+            make check
+            CC=${{matrix.cc}} CFLAGS="-O2 -Wall -Wextra -gdwarf-4 -fsanitize=address -fno-omit-frame-pointer" make release
+            make check
+  aarch64-macos:
     runs-on: macos-latest
     name: MacOS (clang)
     steps:
@@ -47,19 +86,38 @@ jobs:
         run: make release
       - name: make check (release)
         run: make check
-  # freebsd-clang:
-  #   runs-on: ubuntu-latest
-  #   name: FreeBSD (clang)
-  #   steps:
-  #   - uses: actions/checkout@v4
-  #   - uses: vmactions/freebsd-vm@v1
-  #     with:
-  #       usesh: true
-  #       prepare: |
-  #         pkg install -y git gmake
-  #         pkg install -y -g py3\*-pip python3
-  #         pip install hypothesis pytest
-  #       run: |
-  #         git config --global --add safe.directory `pwd`
-  #         git submodule update --init --recursive --remote
-  #         gmake check
+  x86-macos:
+    runs-on: macos-13
+    name: x86 MacOS (clang)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: install pytest and hypothesis
+        run: pip install pytest hypothesis
+      - name: make dev
+        run: make dev
+      - name: make check (dev)
+        run: make check
+      - name: make release
+        run: make release
+      - name: make check (release)
+        run: make check
+  freebsd-clang:
+    runs-on: ubuntu-latest
+    name: FreeBSD (clang)
+    steps:
+    - uses: actions/checkout@v4
+    - uses: vmactions/freebsd-vm@v1
+      with:
+        usesh: true
+        prepare: |
+          pkg install -y gmake
+          pkg install -y -g py3\*-pip python3
+          pip install hypothesis pytest
+        run: |
+          gmake dev
+          gmake check
+          gmake release
+          gmake check

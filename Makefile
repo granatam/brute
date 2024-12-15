@@ -21,8 +21,9 @@ TARGET=brute
 
 TESTS=test/simple-test.py test/client-server-test.py
 PERF_TESTS=test/performance-test.py
+WITH_VALGRIND ?= false
 
-ifeq ($(shell uname), Linux)
+ifeq (${WITH_VALGRIND}, true)
 	# No valgrind on MacOS
 	TESTS+=test/valgrind-test.py
 endif
