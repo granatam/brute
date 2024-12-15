@@ -3,7 +3,6 @@
 #define __USE_GNU
 #include <errno.h>
 #include <stdarg.h>
-#include <stdio.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <unistd.h>
@@ -28,7 +27,7 @@ cleanup_mutex_unlock (void *mutex)
 status_t
 recv_wrapper (int socket_fd, void *buf, int len, int flags)
 {
-  char *bytes = (char *)buf;
+  char *bytes = buf;
   while (len > 0)
     {
       int bytes_read
