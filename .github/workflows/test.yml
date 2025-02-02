@@ -30,7 +30,7 @@ jobs:
       - name: make check (release)
         run: WITH_VALGRIND=true make check
       - name: make release with AddressSanitizer
-        run: CC=${{matrix.cc}} CFLAGS="-O2 -Wall -Wextra -gdwarf-4 -fsanitize=address -fno-omit-frame-pointer" make release
+        run: CC=${{matrix.cc}} CFLAGS="-O1 -Wall -Wextra -gdwarf-4 -fsanitize=address -fno-omit-frame-pointer" make release
       - name: make check (release) with ASan
         run: make check
   non-x86-ubuntu:
@@ -62,11 +62,11 @@ jobs:
           run: |
             apt-get update -q -y
             apt-get install netcat-traditional python3-pytest python3-hypothesis make ${{matrix.cc}} -q -y
+            CC=${{matrix.cc}} CFLAGS="-O1 -Wall -Wextra -gdwarf-4 -fsanitize=address -static-libasan -fno-omit-frame-pointer" make release
+            make check
             CC=${{matrix.cc}} make dev
             make check
             CC=${{matrix.cc}} make release
-            make check
-            CC=${{matrix.cc}} CFLAGS="-O2 -Wall -Wextra -gdwarf-4 -fsanitize=address -fno-omit-frame-pointer" make release
             make check
   aarch64-macos:
     runs-on: macos-latest
