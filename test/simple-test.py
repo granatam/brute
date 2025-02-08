@@ -1,41 +1,41 @@
 from datetime import timedelta
-import string
-from hypothesis import given, strategies as st, settings
-from utils import (
-    shuffle_password,
-    gen_str,
-    run_brute,
-    phases,
-)
+
+from hypothesis import given, settings
+from hypothesis.strategies import data
+from testrunner import Config, RunMode, _TestRunner, phases
 
 
-# Password size is from 2 to 7, alphabet is just a shuffled password
-@given(
-    st.text(min_size=2, alphabet=string.ascii_letters, max_size=6),
-    st.text(min_size=1, max_size=1, alphabet="smg"),
-    st.text(min_size=1, max_size=1, alphabet="iry"),
-)
+@given(data=data())
 @settings(deadline=timedelta(seconds=3), phases=phases)
-def test_password_found(passwd, run_mode, brute_mode):
-    alph = shuffle_password(passwd)
-
-    assert (
-        run_brute(passwd, alph, run_mode, brute_mode)
-        == f"Password found: {passwd}\n"
-    )
+def test_single_short_password(data):
+    _TestRunner(Config((2, 6), (2, 6), run_mode=RunMode.SINGLE)).run(data)
 
 
-# Test for long alphabet and short password
-@given(
-    st.text(min_size=1, max_size=1, alphabet="smg"),
-    st.text(min_size=1, max_size=1, alphabet="iry"),
-)
-@settings(deadline=timedelta(seconds=5), phases=phases)
-def test_corner_cases(run_mode, brute_mode):
-    long_alph = gen_str(5)
-    short_password = gen_str(5, long_alph)
+@given(data=data())
+@settings(deadline=timedelta(seconds=3), phases=phases)
+def test_multi_short_password(data):
+    _TestRunner(Config((2, 6), (2, 6), run_mode=RunMode.MULTI)).run(data)
 
-    assert (
-        run_brute(short_password, long_alph, run_mode, brute_mode)
-        == f"Password found: {short_password}\n"
-    )
+
+@given(data=data())
+@settings(deadline=timedelta(seconds=3), phases=phases)
+def test_gen_short_password(data):
+    _TestRunner(Config((2, 6), (2, 6), run_mode=RunMode.GENERATOR)).run(data)
+
+
+@given(data=data())
+@settings(deadline=timedelta(seconds=3), phases=phases, max_examples=20)
+def test_single_corner_cases(data):
+    _TestRunner(Config((5, 5), (5, 5), run_mode=RunMode.SINGLE)).run(data)
+
+
+@given(data=data())
+@settings(deadline=timedelta(seconds=3), phases=phases, max_examples=20)
+def test_multi_corner_cases(data):
+    _TestRunner(Config((5, 5), (5, 5), run_mode=RunMode.MULTI)).run(data)
+
+
+@given(data=data())
+@settings(deadline=timedelta(seconds=3), phases=phases, max_examples=20)
+def test_gen_corner_cases(data):
+    _TestRunner(Config((5, 5), (5, 5), run_mode=RunMode.GENERATOR)).run(data)
