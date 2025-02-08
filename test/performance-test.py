@@ -1,6 +1,10 @@
 from timeit import timeit
-from hypothesis import given, strategies as st, settings
-from utils import gen_str, brute_cmd, CPU_COUNT
+
+from hypothesis import given, settings
+from hypothesis import strategies as st
+from utils import CPU_COUNT, brute_cmd, gen_str
+
+# To be refactored
 
 
 @given(st.text(min_size=1, max_size=1, alphabet="iry"))
