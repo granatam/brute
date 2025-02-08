@@ -20,7 +20,7 @@ jobs:
       - name: update ubuntu packages
         run: sudo apt-get update -y
       - name: install valgrind and netcat
-        run: sudo apt-get install valgrind netcat -y
+        run: sudo apt-get install valgrind netcat-traditional -y
       - name: make dev
         run: CC=${{matrix.cc}} make dev
       - name: make check (dev)
