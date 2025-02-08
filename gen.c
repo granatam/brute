@@ -93,6 +93,7 @@ gen_worker (void *context)
 
   while (!gen_ctx->cancelled && gen_ctx->password[0] == 0)
     {
+      bool cancelled = false;
       if (pthread_mutex_lock (&gen_ctx->mutex) != 0)
         {
           error ("Could not lock a mutex");
@@ -102,7 +103,7 @@ gen_worker (void *context)
       task_t task = *gen_ctx->state->task;
 
       if (!gen_ctx->cancelled && gen_ctx->password[0] == 0)
-        gen_ctx->cancelled = !gen_ctx->state_next (gen_ctx->state);
+        gen_ctx->cancelled = cancelled = !gen_ctx->state_next (gen_ctx->state);
 
       if (pthread_mutex_unlock (&gen_ctx->mutex) != 0)
         {
@@ -110,7 +111,7 @@ gen_worker (void *context)
           return (NULL);
         }
 
-      if (gen_ctx->cancelled || gen_ctx->password[0] != 0)
+      if (cancelled || gen_ctx->password[0] != 0)
         break;
 
       task.to = task.from;
