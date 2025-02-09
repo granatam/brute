@@ -194,6 +194,7 @@ queue_push_back (queue_t *queue, void *payload)
   if (pthread_mutex_lock (&queue->head_mutex) != 0)
     {
       error ("Could not lock queue head mutex");
+      free (node);
       return (QS_FAILURE);
     }
   pthread_cleanup_push (cleanup_mutex_unlock, &queue->head_mutex);
