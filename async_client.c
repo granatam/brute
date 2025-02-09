@@ -97,9 +97,6 @@ task_receiver (void *arg)
             goto end;
           trace ("Pushed received task to queue");
           break;
-        default:
-          error ("Unknown command");
-          break;
         }
     }
 
