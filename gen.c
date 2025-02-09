@@ -176,7 +176,9 @@ run_generator (task_t *task, config_t *config)
 
 fail:
   if (gen_context_destroy (&context) == S_FAILURE)
-    error ("Could not return generator context");
+    {
+      error ("Could not return generator context");
+    }
 
   return (false);
 }

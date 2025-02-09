@@ -149,7 +149,9 @@ queue_push_wrapper (task_t *task, void *context)
 
   queue_status_t push_status = queue_push (&mt_ctx->queue, task);
   if (push_status == QS_FAILURE)
-    error ("Could not push to a queue");
+    {
+      error ("Could not push to a queue");
+    }
 
   if (push_status != QS_SUCCESS)
     return (false);
@@ -227,7 +229,9 @@ run_multi (task_t *task, config_t *config)
 
 fail:
   if (mt_context_destroy (&context) == S_FAILURE)
-    error ("Could not destroy mt context");
+    {
+      error ("Could not destroy mt context");
+    }
 
   return (false);
 }
