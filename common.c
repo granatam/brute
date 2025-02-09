@@ -52,17 +52,21 @@ send_wrapper (int socket_fd, struct iovec *vec, int iovcnt)
       if ((int)bytes_written <= 0)
         return (S_FAILURE);
 
-      while (bytes_written >= vec[0].iov_len)
+      while (bytes_written > 0)
         {
-          bytes_written -= vec[0].iov_len;
-          ++vec;
-          --iovcnt;
-        }
-      if ((iovcnt > 0) && (bytes_written > 0))
-        {
-          vec[0].iov_len -= bytes_written;
-          char *base = vec[0].iov_base;
-          vec[0].iov_base = base + bytes_written;
+          if (bytes_written >= vec[0].iov_len)
+            {
+              bytes_written -= vec[0].iov_len;
+              ++vec;
+              --iovcnt;
+            }
+          else
+            {
+              vec[0].iov_len -= bytes_written;
+              char *base = vec[0].iov_base;
+              vec[0].iov_base = base + bytes_written;
+              bytes_written = 0;
+            }
         }
     }
 
