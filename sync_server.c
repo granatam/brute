@@ -74,7 +74,9 @@ handle_client (void *arg)
       if (delegate_task (cl_ctx->socket_fd, &task, mt_ctx) == S_FAILURE)
         {
           if (queue_push (&mt_ctx->queue, &task) == QS_FAILURE)
-            error ("Could not push to the queue");
+            {
+              error ("Could not push to the queue");
+            }
 
           trace ("Pushed task back to queue because of client failure");
 
@@ -167,7 +169,9 @@ run_server (task_t *task, config_t *config)
     memcpy (task->task.password, mt_ctx->password, sizeof (mt_ctx->password));
 
   if (serv_context_destroy (&context) == S_FAILURE)
-    error ("Could not destroy server context");
+    {
+      error ("Could not destroy server context");
+    }
 
   trace ("Destroyed the server context");
 
@@ -175,7 +179,9 @@ run_server (task_t *task, config_t *config)
 
 fail:
   if (serv_context_destroy (&context) == S_FAILURE)
-    error ("Could not destroy server context");
+    {
+      error ("Could not destroy server context");
+    }
 
   return (false);
 }
