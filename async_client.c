@@ -235,7 +235,7 @@ run_async_client (config_t *config)
       error ("Could not lock a mutex");
       goto cleanup;
     }
-  status_t status = S_SUCCESS;
+  volatile status_t status = S_SUCCESS;
   pthread_cleanup_push (cleanup_mutex_unlock, &ctx.mutex);
 
   while (!ctx.done)
