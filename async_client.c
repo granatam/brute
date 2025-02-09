@@ -162,17 +162,18 @@ run_async_client (config_t *config)
   if (queue_init (&ctx.result_queue, sizeof (result_t)) != QS_SUCCESS)
     {
       error ("Could not initialize result queue");
+      queue_destroy (&ctx.task_queue);
       return (false);
     }
   if (pthread_mutex_init (&ctx.mutex, NULL) != 0)
     {
       error ("Could not initialize mutex");
-      return (false);
+      goto cleanup;
     }
   if (pthread_cond_init (&ctx.cond_sem, NULL) != 0)
     {
       error ("Could not initialize conditional semaphore");
-      return (false);
+      goto cleanup;
     }
   ctx.config = config;
   ctx.done = false;
@@ -183,7 +184,7 @@ run_async_client (config_t *config)
   if (ctx.socket_fd == -1)
     {
       error ("Could not initialize client socket");
-      return (false);
+      goto cleanup;
     }
 
   int option = 1;
@@ -198,7 +199,7 @@ run_async_client (config_t *config)
   if (connect (ctx.socket_fd, (struct sockaddr *)&addr, sizeof (addr)) == -1)
     {
       error ("Could not connect to server");
-      return (false);
+      goto cleanup;
     }
 
   setsockopt (ctx.socket_fd, SOL_SOCKET, TCP_NODELAY, &option,
@@ -210,7 +211,7 @@ run_async_client (config_t *config)
                       sizeof (ctx_ptr), "async receiver"))
     {
       error ("Could not create receiver thread");
-      return (S_FAILURE);
+      goto cleanup;
     }
   trace ("Created receiver thread");
 
@@ -218,7 +219,7 @@ run_async_client (config_t *config)
                       sizeof (ctx_ptr), "async sender"))
     {
       error ("Could not create sender thread");
-      return (S_FAILURE);
+      goto cleanup;
     }
   trace ("Created sender thread");
 
@@ -226,13 +227,13 @@ run_async_client (config_t *config)
                       client_worker, &ctx_ptr, sizeof (ctx_ptr),
                       "async worker")
       == 0)
-    return (S_FAILURE);
+    goto cleanup;
   trace ("Created worker thread");
 
   if (pthread_mutex_lock (&ctx.mutex) != 0)
     {
       error ("Could not lock a mutex");
-      return (S_FAILURE);
+      goto cleanup;
     }
   status_t status = S_SUCCESS;
   pthread_cleanup_push (cleanup_mutex_unlock, &ctx.mutex);
@@ -248,27 +249,31 @@ run_async_client (config_t *config)
   pthread_cleanup_pop (!0);
 
   if (S_FAILURE == status)
-    return (S_FAILURE);
+    goto cleanup;
 
   trace ("Got signal on conditional semaphore");
 
   if (queue_cancel (&ctx.task_queue) != QS_SUCCESS)
     {
       error ("Could not cancel task queue");
-      return (false);
+      goto cleanup;
     }
   if (queue_cancel (&ctx.result_queue) != QS_SUCCESS)
     {
       error ("Could not cancel result queue");
-      return (false);
+      goto cleanup;
     }
   if (thread_pool_join (&ctx.thread_pool) == S_FAILURE)
     {
       error ("Could not cancel thread pool");
-      return (false);
+      goto cleanup;
     }
 
   trace ("Waited for all threads to end, closing the connection now");
+
+cleanup:
+  queue_destroy (&ctx.task_queue);
+  queue_destroy (&ctx.result_queue);
 
   shutdown (ctx.socket_fd, SHUT_RDWR);
   if (close (ctx.socket_fd) != 0)
