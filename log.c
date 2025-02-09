@@ -31,6 +31,7 @@ message_impl (log_level_t log_level, const char *file_name,
   if (vsnprintf (message, sizeof (message), msg, args) < 0)
     if (vfprintf (stderr, msg, args) < 0)
       {
+        va_end (args);
         return (S_FAILURE);
       }
 
