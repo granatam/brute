@@ -91,9 +91,9 @@ gen_worker (void *context)
     .data = { .initialized = 0 },
   };
 
-  while (!gen_ctx->cancelled && gen_ctx->password[0] == 0)
+  while (true)
     {
-      bool cancelled = false;
+      bool cancelled = gen_ctx->cancelled;
       if (pthread_mutex_lock (&gen_ctx->mutex) != 0)
         {
           error ("Could not lock a mutex");
@@ -101,10 +101,15 @@ gen_worker (void *context)
         }
 
       task_t task = *gen_ctx->state->task;
-
       if (!gen_ctx->cancelled && gen_ctx->password[0] == 0)
-        gen_ctx->cancelled = cancelled = !gen_ctx->state_next (gen_ctx->state);
-
+        {
+          gen_ctx->cancelled = cancelled
+              = !gen_ctx->state_next (gen_ctx->state);
+          /* Correct password in the last state corner case.  */
+          if (cancelled && st_password_check (&task, &st_ctx))
+            memcpy (gen_ctx->password, task.task.password,
+                    sizeof (task.task.password));
+        }
       if (pthread_mutex_unlock (&gen_ctx->mutex) != 0)
         {
           error ("Could not unlock a mutex");
@@ -118,9 +123,19 @@ gen_worker (void *context)
       task.from = 0;
       if (brute (&task, gen_ctx->config, st_password_check, &st_ctx))
         {
+          if (pthread_mutex_lock (&gen_ctx->mutex) != 0)
+            {
+              error ("Could not lock a mutex");
+              return (NULL);
+            }
           memcpy (gen_ctx->password, task.task.password,
                   sizeof (task.task.password));
-          gen_ctx->cancelled = true;
+          if (pthread_mutex_unlock (&gen_ctx->mutex) != 0)
+            {
+              error ("Could not unlock a mutex");
+              return (NULL);
+            }
+          break;
         }
     }
   return (NULL);
