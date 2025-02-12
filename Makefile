@@ -45,4 +45,4 @@ clean:
 	@${MAKE} -C crypt clean
 
 check: all
-	@LOG_LEVEL=trace pytest --hypothesis-show-statistics ${TESTS}
+	pytest --hypothesis-show-statistics ${TESTS}
