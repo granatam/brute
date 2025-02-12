@@ -74,7 +74,13 @@ run_client (config_t *config, task_callback_t task_callback)
     }
 
   int option = 1;
-  setsockopt (socket_fd, SOL_SOCKET, SO_KEEPALIVE, &option, sizeof (option));
+  if (setsockopt (socket_fd, SOL_SOCKET, SO_KEEPALIVE, &option,
+                  sizeof (option))
+      == -1)
+    {
+      error ("Could not set socket option");
+      return (false);
+    }
 
   struct sockaddr_in addr;
   addr.sin_family = AF_INET;
@@ -87,7 +93,13 @@ run_client (config_t *config, task_callback_t task_callback)
       return (false);
     }
 
-  setsockopt (socket_fd, SOL_SOCKET, TCP_NODELAY, &option, sizeof (option));
+  if (setsockopt (socket_fd, IPPROTO_TCP, TCP_NODELAY, &option,
+                  sizeof (option))
+      == -1)
+    {
+      error ("Could not set socket option");
+      return (false);
+    }
 
   char hash[HASH_LENGTH];
   char alph[MAX_ALPH_LENGTH];
