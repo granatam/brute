@@ -28,8 +28,13 @@ serv_context_init (serv_context_t *context, config_t *config)
     }
 
   int option = 1;
-  setsockopt (context->socket_fd, SOL_SOCKET, SO_REUSEADDR, &option,
-              sizeof (option));
+  if (setsockopt (context->socket_fd, SOL_SOCKET, SO_REUSEADDR, &option,
+                  sizeof (option))
+      == -1)
+    {
+      error ("Could not set socket option");
+      goto fail;
+    }
 
   struct sockaddr_in serv_addr;
   serv_addr.sin_family = AF_INET;

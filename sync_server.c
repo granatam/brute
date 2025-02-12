@@ -110,8 +110,12 @@ handle_clients (void *arg)
       trace ("Accepted new connection");
 
       int option = 1;
-      setsockopt (cl_ctx.socket_fd, SOL_SOCKET, TCP_NODELAY, &option,
-                  sizeof (option));
+      if (setsockopt (cl_ctx.socket_fd, IPPROTO_TCP, TCP_NODELAY, &option,
+                      sizeof (option))
+          == -1)
+        {
+          error ("Could not set socket option");
+        }
 
       if (!thread_create (&mt_ctx->thread_pool, handle_client, &cl_ctx,
                           sizeof (cl_ctx), "sync handler"))

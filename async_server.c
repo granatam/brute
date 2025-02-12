@@ -297,8 +297,14 @@ handle_clients (void *arg)
       trace ("Accepted new connection");
 
       int option = 1;
-      setsockopt (acl_ctx->socket_fd, SOL_SOCKET, TCP_NODELAY, &option,
-                  sizeof (option));
+
+      if (setsockopt (acl_ctx->socket_fd, IPPROTO_TCP, TCP_NODELAY, &option,
+                      sizeof (option))
+          == -1)
+        {
+          error ("Could not set socket option");
+          goto cleanup;
+        }
 
       pthread_t sender, receiver;
       if (!(sender

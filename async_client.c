@@ -189,8 +189,13 @@ run_async_client (config_t *config)
     }
 
   int option = 1;
-  setsockopt (ctx.socket_fd, SOL_SOCKET, SO_KEEPALIVE, &option,
-              sizeof (option));
+  if (setsockopt (ctx.socket_fd, SOL_SOCKET, SO_KEEPALIVE, &option,
+                  sizeof (option))
+      == -1)
+    {
+      error ("Could not set socket option");
+      goto cleanup;
+    }
 
   struct sockaddr_in addr;
   addr.sin_family = AF_INET;
@@ -203,8 +208,13 @@ run_async_client (config_t *config)
       goto cleanup;
     }
 
-  setsockopt (ctx.socket_fd, SOL_SOCKET, TCP_NODELAY, &option,
-              sizeof (option));
+  if (setsockopt (ctx.socket_fd, IPPROTO_TCP, TCP_NODELAY, &option,
+                  sizeof (option))
+      == -1)
+    {
+      error ("Could not set socket option");
+      goto cleanup;
+    }
 
   async_client_context_t *ctx_ptr = &ctx;
 
