@@ -1,15 +1,23 @@
 .PHONY: all dev debug release clean check
 
-CFLAGS=-O2 -Wall -Wextra -gdwarf-4
+CFLAGS ?= -O2 -Wall -Wextra -gdwarf-4
 ifeq ($(shell uname), FreeBSD)
 	LIBS+=-lpthread
 else
 	CFLAGS+=-pthread
 endif
 CFLAGS+=-I./crypt
-OBJ=brute.o iter.o rec.o common.o main.o multi.o queue.o single.o gen.o semaphore.o async_client.o client_common.o sync_client.o async_server.o sync_server.o server_common.o thread_pool.o log.o
+
+CRYPT_LIB=crypt/libcrypt.a
+
+OBJ_DIR=obj
+SRC_DIR=src
+
+OBJ=$(addprefix ${OBJ_DIR}/,brute.o iter.o rec.o common.o main.o multi.o \
+	queue.o single.o gen.o semaphore.o async_client.o client_common.o \
+	sync_client.o async_server.o sync_server.o server_common.o \
+	thread_pool.o log.o)
 TARGET=brute
-LIBS+=crypt/libcrypt.a
 
 TESTS=test/simple-test.py test/client-server-test.py
 WITH_PERF_TEST ?= false
@@ -23,7 +31,16 @@ ifeq (${WITH_PERF_TEST}, true)
 	TESTS+=test/performance-test.py
 endif
 
-all: ${TARGET}
+all: ${OBJ_DIR} ${TARGET}
+
+${OBJ_DIR}:
+	mkdir -p ${OBJ_DIR}
+
+${TARGET}: ${OBJ} ${CRYPT_LIB}
+	${CC} ${CFLAGS} -o ${TARGET} ${OBJ} ${CRYPT_LIB} ${LIBS}
+
+${OBJ_DIR}/%.o: ${SRC_DIR}/%.c
+	${CC} ${CFLAGS} -c $< -o $@
 
 dev: CFLAGS += -DLOG_LEVEL=TRACE
 dev: clean all
@@ -34,15 +51,13 @@ debug: clean all
 release: CFLAGS += -DLOG_LEVEL=ERROR
 release: clean all
 
-${TARGET}: ${OBJ} ${LIBS}
-	${CC} ${CFLAGS} -o ${TARGET} ${OBJ} ${LIBS} 
-
-crypt/libcrypt.a:
+${CRYPT_LIB}:
 	@${MAKE} -C crypt
 
-clean:
-	@${RM} ${TARGET} *.o
-	@${MAKE} -C crypt clean
-
 check: all
-	pytest --hypothesis-show-statistics ${TESTS}
+	@pytest --hypothesis-show-statistics ${TESTS}
+
+clean:
+	@${RM} ${TARGET}
+	@${RM} -r ${OBJ_DIR}
+	@${MAKE} -C crypt clean
