@@ -18,6 +18,7 @@ with warnings.catch_warnings():
         from legacycrypt import crypt
 
 import os
+
 from hypothesis import Phase
 
 phases = (Phase.explicit, Phase.reuse, Phase.generate, Phase.target)
@@ -32,7 +33,7 @@ DEFAULT_PORT = 8081
 class CommandMode(str, Enum):
     BASIC = "./brute"
     VALGRIND = f"valgrind {VALGRIND_FLAGS} ./brute"
-    PERF = "time ./brute"  # TODO: Retrieve time from `time` cmd
+    PERF = "time ./brute"
 
 
 class RunMode(str, Enum):
@@ -90,8 +91,9 @@ class Config:
 
 
 class _TestRunner:
-    def __init__(self, config: Config = Config()):
+    def __init__(self, data, config: Config = Config()):
         self.config = config
+        self.generated_params = self.generate_test_params(data)
 
     def generate_test_params(self, data):
         brute_mode = data.draw(st.sampled_from(self.config.brute_mode_pool))
@@ -139,6 +141,7 @@ class _TestRunner:
     ):
         with open(stderr_log.name, "r") as log:
             stderr_log = log.read()
+
         if (
             output != expected
             or cmd_mode == CommandMode.VALGRIND
@@ -166,8 +169,8 @@ class _TestRunner:
                 "Output does not match expected. See stderr for details."
             )
 
-    def run(self, data, cmd_mode=CommandMode.BASIC):
-        brute_mode, alph, password = self.generate_test_params(data)
+    def run(self, cmd_mode=CommandMode.BASIC):
+        brute_mode, alph, password = self.generated_params
         expected = f"Password found: {password}\n"
 
         stderr_log = tempfile.NamedTemporaryFile()
