@@ -20,15 +20,11 @@ OBJ=$(addprefix ${OBJ_DIR}/,brute.o iter.o rec.o common.o main.o multi.o \
 TARGET=brute
 
 TESTS=test/simple-test.py test/client-server-test.py
-WITH_PERF_TEST ?= false
+PERF_TESTS=test/performance-test.py
 
 ifeq ($(shell uname), Linux)
 	# No valgrind on MacOS
 	TESTS+=test/valgrind-test.py
-endif
-
-ifeq (${WITH_PERF_TEST}, true)
-	TESTS+=test/performance-test.py
 endif
 
 all: ${OBJ_DIR} ${TARGET}
@@ -56,6 +52,9 @@ ${CRYPT_LIB}:
 
 check: all
 	@pytest --hypothesis-show-statistics ${TESTS}
+
+perf: all
+	@pytest -rA ${PERF_TESTS}
 
 clean:
 	@${RM} ${TARGET}

@@ -1,55 +1,48 @@
-from timeit import timeit
+import time
 
 from hypothesis import given, settings
-from hypothesis import strategies as st
-from utils import CPU_COUNT, brute_cmd, gen_str
+from hypothesis.strategies import data
+from testrunner import (DEFAULT_PORT, BruteMode, CommandMode, Config, RunMode,
+                        _TestRunner, phases)
 
-# To be refactored
-
-
-@given(st.text(min_size=1, max_size=1, alphabet="iry"))
-@settings(deadline=None)
-def test_performance_gen(brute_mode):
-    alph = gen_str(12)
-    passwd = gen_str(5, alph)
-
-    single_brute = brute_cmd(passwd, alph, "d", brute_mode)
-    gen_brute = brute_cmd(passwd, alph, "g", brute_mode)
-
-    single_time = timeit(
-        stmt=f"subprocess.check_output('{single_brute}', shell=True)",
-        setup="import subprocess",
-        number=1,
-    )
-    gen_time = timeit(
-        stmt=f"subprocess.check_output('{gen_brute}', shell=True)",
-        setup="import subprocess",
-        number=1,
-    )
-    ratio = single_time / gen_time
-
-    assert ratio >= CPU_COUNT * 0.7
+MAX_RUNS = 1000
+SKIP = 10
 
 
-@given(st.text(min_size=1, max_size=1, alphabet="iry"))
-@settings(deadline=None)
-def test_performance_multi(brute_mode):
-    alph = gen_str(12)
-    passwd = gen_str(5, alph)
+def run_perf_test(data, run_mode, client_run_modes, port=DEFAULT_PORT):
+    # First example is alphabet and password that contains only A's, so
+    # we need to skip some generated examples
+    for i in range(SKIP):
+        testrunner = _TestRunner(
+            data,
+            Config(
+                (7, 7),
+                (10, 10),
+                run_mode=run_mode,
+                client_run_modes=client_run_modes,
+                port=port,
+            ),
+        )
+    start = time.time()
+    for i in range(MAX_RUNS):
+        testrunner.run(data, CommandMode.PERF)
+    end = time.time()
+    print(f"{MAX_RUNS} runs in {run_mode}: {end - start:.4f} seconds")
 
-    single_brute = brute_cmd(passwd, alph, "d", brute_mode)
-    multi_brute = brute_cmd(passwd, alph, "m", brute_mode)
 
-    single_time = timeit(
-        stmt=f"subprocess.check_output('{single_brute}', shell=True)",
-        setup="import subprocess",
-        number=1,
-    )
-    multi_time = timeit(
-        stmt=f"subprocess.check_output('{multi_brute}', shell=True)",
-        setup="import subprocess",
-        number=1,
-    )
-    ratio = single_time / multi_time
+@given(data=data())
+@settings(deadline=None, phases=phases, max_examples=1)
+def test_performance_single(data):
+    run_perf_test(data, RunMode.SINGLE, [])
 
-    assert ratio >= CPU_COUNT * 0.7
+
+@given(data=data())
+@settings(deadline=None, phases=phases, max_examples=1)
+def test_performance_multi(data):
+    run_perf_test(data, RunMode.MULTI, [])
+
+
+@given(data=data())
+@settings(deadline=None, phases=phases, max_examples=1)
+def test_performance_gen(data):
+    run_perf_test(data, RunMode.GENERATOR, [])
