@@ -187,10 +187,9 @@ serv_signal_if_found (mt_context_t *ctx)
 
   if (--ctx->passwords_remaining == 0 || ctx->password[0] != 0)
     {
-      if (ctx->passwords_remaining == 0)
-        trace ("No passwords are left, signaling now");
-      else
-        trace ("Password is found, signaling now");
+      trace (ctx->passwords_remaining == 0
+                 ? "No passwords are left, signaling now"
+                 : "Password is found, signaling now");
 
       if (pthread_cond_signal (&ctx->cond_sem) != 0)
         {
