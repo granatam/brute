@@ -2,7 +2,6 @@
 #define REC_H
 
 #include "common.h"
-#include "config.h"
 
 #ifndef __APPLE__
 #include <signal.h>

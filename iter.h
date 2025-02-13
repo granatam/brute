@@ -2,7 +2,6 @@
 #define ITER_H
 
 #include "common.h"
-#include "config.h"
 
 typedef struct iter_state_t
 {

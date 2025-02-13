@@ -4,7 +4,6 @@
 #include "common.h"
 #include "config.h"
 #include "queue.h"
-#include "single.h"
 #include "thread_pool.h"
 
 #include <stdbool.h>
