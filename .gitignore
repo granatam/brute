@@ -1,11 +1,12 @@
-.hypothesis
-.pytest_cache
-.DS_Store
-.vscode
-.venv
+obj/
+.hypothesis/
+.pytest_cache/
+.vscode/
+.venv/
+__pycache__/
 
-__pycache__
-
-brute
-*.o
 *.a
+*.o
+brute
+
+.DS_Store
