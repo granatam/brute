@@ -2,8 +2,14 @@ import time
 
 from hypothesis import given, settings
 from hypothesis.strategies import data
-from testrunner import (DEFAULT_PORT, BruteMode, CommandMode, Config, RunMode,
-                        _TestRunner, phases)
+from testrunner import (
+    DEFAULT_PORT,
+    CommandMode,
+    Config,
+    RunMode,
+    _TestRunner,
+    phases,
+)
 
 MAX_RUNS = 1000
 SKIP = 10

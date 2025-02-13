@@ -2,8 +2,14 @@ from datetime import timedelta
 
 from hypothesis import given, settings
 from hypothesis.strategies import data
-from testrunner import (BruteMode, CommandMode, Config, RunMode, _TestRunner,
-                        phases)
+from testrunner import (
+    BruteMode,
+    CommandMode,
+    Config,
+    RunMode,
+    _TestRunner,
+    phases,
+)
 
 
 @given(data=data())
