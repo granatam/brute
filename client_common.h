@@ -2,8 +2,6 @@
 #define CLIENT_COMMON_H
 
 #include "common.h"
-#include "config.h"
-#include "single.h"
 
 #include <stdbool.h>
 
