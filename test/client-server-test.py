@@ -79,7 +79,7 @@ def test_async_client_async_server(data):
             (2, 3),
             (2, 3),
             run_mode=RunMode.ASYNC_SERVER,
-            client_run_modes=[RunMode.SYNC_CLIENT],
+            client_run_modes=[RunMode.ASYNC_CLIENT],
             port=9005,
         ),
     ).run()
