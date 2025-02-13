@@ -17,7 +17,6 @@ with warnings.catch_warnings():
     except ImportError:  # No crypt library in Python 3.13
         from legacycrypt import crypt
 
-import os
 
 from hypothesis import Phase
 
