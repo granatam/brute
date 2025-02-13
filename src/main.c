@@ -9,6 +9,7 @@
 #include "sync_client.h"
 #include "sync_server.h"
 
+#include <getopt.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,46 +20,61 @@ static void
 usage (char *first_arg)
 {
   fprintf (stderr,
-           "usage: %s [-l length] [-a alphabet] [-h hash] [-t number] "
-           "[-p port] [-A addr] [-T timeout] "
-           "[-s | -m | -g | -c | -L number | -S | -v | -w] [-i | -r"
-#ifndef __APPLE__
-           " | -y"
-#endif
-           "]\n"
+           "usage: %s [options] [run mode] [brute mode]\n"
            "options:\n"
-           "\t-l length    password length\n"
-           "\t-a alphabet  alphabet\n"
-           "\t-h hash      hash\n"
-           "\t-t number    number of threads\n"
-           "\t-p port      server port\n"
-           "\t-A addr      server address\n"
-           "\t-T timeout   timeout between task receiving and its processing "
-           "in milliseconds\n"
+           "\t-l, --length uint        password length\n"
+           "\t-a, --alph str           alphabet\n"
+           "\t-h, --hash str           hash\n"
+           "\t-t, --threads uint       number of threads\n"
+           "\t-p, --port uint          server port\n"
+           "\t-A, --addr str           server address\n"
+           "\t-T, --timeout uint       timeout between task receiving and its "
+           "processing in milliseconds\n"
            "run modes:\n"
-           "\t-s           singlethreaded mode\n"
-           "\t-m           multithreaded mode\n"
-           "\t-g           generator mode\n"
-           "\t-c           synchronous client mode\n"
-           "\t-L number    spawn N load clients\n"
-           "\t-S           synchronous server mode\n"
-           "\t-v           asynchronous client mode\n"
-           "\t-w           asynchronous server mode\n"
+           "\t-s, --single             singlethreaded mode\n"
+           "\t-m, --multi              multithreaded mode\n"
+           "\t-g, --gen                generator mode\n"
+           "\t-c, --client             synchronous client mode\n"
+           "\t-L, --load-clients uint  spawn N load clients\n"
+           "\t-S, --server             synchronous server mode\n"
+           "\t-v, --async-client       asynchronous client mode\n"
+           "\t-w, --async-server       asynchronous server mode\n"
            "brute modes:\n"
-           "\t-i           iterative bruteforce\n"
-           "\t-r           recursive bruteforce\n"
+           "\t-i, --iter               iterative bruteforce\n"
+           "\t-r, --rec                recursive bruteforce\n"
 #ifndef __APPLE__
-           "\t-y           recursive generator\n"
+           "\t-y, --rec-gen            recursive generator\n"
 #endif
            ,
            first_arg);
 }
-
 static status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
+  const char short_opts[] = "l:a:H:t:p:A:L:T:smgcSvwiryh";
+  const struct option long_opts[]
+      = { { "length", required_argument, 0, 'l' },
+          { "alph", required_argument, 0, 'a' },
+          { "hash", required_argument, 0, 'H' },
+          { "threads", required_argument, 0, 't' },
+          { "port", required_argument, 0, 'p' },
+          { "addr", required_argument, 0, 'A' },
+          { "load-clients", required_argument, 0, 'L' },
+          { "timeout", required_argument, 0, 'T' },
+          { "single", no_argument, 0, 's' },
+          { "multi", no_argument, 0, 'm' },
+          { "gen", no_argument, 0, 'g' },
+          { "client", no_argument, 0, 'c' },
+          { "server", no_argument, 0, 'S' },
+          { "async-client", no_argument, 0, 'v' },
+          { "async-server", no_argument, 0, 'w' },
+          { "iter", no_argument, 0, 'i' },
+          { "rec", no_argument, 0, 'r' },
+          { "rec-gen", no_argument, 0, 'y' },
+          { "help", no_argument, 0, 'h' },
+          { NULL, 0, NULL, 0 } };
   int opt = 0;
-  while ((opt = getopt (argc, argv, "l:a:H:t:p:A:L:T:smgcSvwiryh")) != -1)
+  while ((opt = getopt_long (argc, argv, short_opts, long_opts, NULL)) != -1)
     {
       switch (opt)
         {

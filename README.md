@@ -1,29 +1,34 @@
 # brute
 
 ## Usage
+
 ```
-usage: ./main [-l length] [-a alphabet] [-h hash] [-t number] [-p port] [-A addr] [-T timeout] [-s | -m | -g | -c | -L | -S | -v | -w] [-i | -r | -y]
-options:
-        -l length    password length
-        -a alphabet  alphabet
-        -h hash      hash
-        -t number    number of threads
-        -p port      server port
-        -A addr      server address
-        -T timeout   timeout between task receiving and its processing
-run modes:
-        -s           singlethreaded mode
-        -m           multithreaded mode
-        -g           generator mode
-        -c           synchronous client mode
-        -L number    spawn N load clients
-        -S           synchronous server mode
-        -v           asynchronous client mode
-        -w           asynchronous server mode
-brute modes:
-        -i           iterative bruteforce
-        -r           recursive bruteforce
-        -y           recursive generator
+Usage:
+./brute [options] [run mode] [brute mode]
+
+Options:
+        -l, --length uint        password length
+        -a, --alph str           alphabet
+        -h, --hash str           hash
+        -t, --threads uint       number of threads
+        -p, --port uint          server port
+        -A, --addr str           server address
+        -T, --timeout uint       timeout between task receiving and its processing in milliseconds
+
+Run modes:
+        -s, --single             singlethreaded mode
+        -m, --multi              multithreaded mode
+        -g, --gen                generator mode
+        -c, --client             synchronous client mode
+        -L, --load-clients uint  spawn N load clients
+        -S, --server             synchronous server mode
+        -v, --async-client       asynchronous client mode
+        -w, --async-server       asynchronous server mode
+
+Brute modes:
+        -i, --iter               iterative bruteforce
+        -r, --rec                recursive bruteforce
+        -y, --rec-gen            recursive generator
 ```
 
 > Note: Recursive generator is not available on MacOS
