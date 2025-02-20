@@ -30,6 +30,8 @@ acl_context_init (serv_context_t *global_ctx)
       error ("Could not allocate memory for client context");
       return (NULL);
     }
+  trace ("Allocated memory for client context");
+
   ctx->context = global_ctx;
 
   if (queue_init (&ctx->registry_idx, sizeof (int)) != QS_SUCCESS)
@@ -72,6 +74,8 @@ cleanup:
 static void
 acl_context_destroy (acl_context_t *ctx)
 {
+  pthread_cleanup_push (free, ctx);
+
   trace ("Destroying client context");
 
   if (queue_cancel (&ctx->registry_idx) != QS_SUCCESS)
@@ -93,7 +97,10 @@ acl_context_destroy (acl_context_t *ctx)
       error ("Could not destroy mutex");
     }
   close_client (ctx->socket_fd);
-  free (ctx);
+
+  pthread_cleanup_pop (!0);
+
+  trace ("Freed client context");
 }
 
 static status_t
