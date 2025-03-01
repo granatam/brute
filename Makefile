@@ -27,7 +27,7 @@ ifeq ($(shell uname), Linux)
 	TESTS+=test/valgrind-test.py
 endif
 
-all: ${OBJ_DIR} ${TARGET}
+all: ${TARGET}
 
 ${OBJ_DIR}:
 	mkdir -p ${OBJ_DIR}
@@ -35,7 +35,7 @@ ${OBJ_DIR}:
 ${TARGET}: ${OBJ} ${CRYPT_LIB}
 	${CC} ${CFLAGS} -o ${TARGET} ${OBJ} ${CRYPT_LIB} ${LIBS}
 
-${OBJ_DIR}/%.o: ${SRC_DIR}/%.c
+${OBJ_DIR}/%.o: ${SRC_DIR}/%.c | ${OBJ_DIR}
 	${CC} ${CFLAGS} -c $< -o $@
 
 dev: CFLAGS += -DLOG_LEVEL=TRACE
