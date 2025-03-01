@@ -1,9 +1,9 @@
 on: [ 'push' ]
 
 jobs:
-  lint:
+  check-format-c:
     runs-on: ubuntu-latest
-    name: Check formatting with clang-format
+    name: clang-format
     steps:
     - uses: actions/checkout@v3
     - uses: jidicula/clang-format-action@v4.11.0
@@ -11,3 +11,17 @@ jobs:
         clang-format-version: '16'
         check-path: '.'
         exclude-regex: 'crypt'
+  lint-python:
+    runs-on: ubuntu-latest
+    name: Ruff linter
+    steps:
+      - uses: actions/checkout@v3
+      - uses: chartboost/ruff-action@v1
+  check-format-python:
+    runs-on: ubuntu-latest
+    name: Ruff formatter
+    steps:
+      - uses: actions/checkout@v3
+      - uses: chartboost/ruff-action@v1
+        with:
+            args: format --check
