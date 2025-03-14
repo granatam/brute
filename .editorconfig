@@ -1,6 +1,6 @@
 root = true
 
-[*.{c,h}]
+[**.{c,h}]
 indent_style = space
 indent_size = 2
 trim_trailing_whitespace = true
@@ -9,7 +9,7 @@ insert_final_newline = true
 [Makefile]
 indent_style = tab
 
-[*.py]
+[**.py]
 indent_style = space
 indent_size = 4
 trim_trailing_whitespace = true
