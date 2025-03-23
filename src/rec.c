@@ -87,16 +87,14 @@ brute_rec (task_t *task, char *alph, password_handler_t password_handler,
 {
   if (pos == task->to)
     return (password_handler (task, context));
-  else
-    {
-      for (size_t i = 0; alph[i] != '\0'; ++i)
-        {
-          task->task.password[pos] = alph[i];
 
-          if (brute_rec (task, alph, password_handler, context, pos + 1))
-            return (true);
-        }
+  for (size_t i = 0; alph[i] != '\0'; ++i)
+    {
+      task->task.password[pos] = alph[i];
+      if (brute_rec (task, alph, password_handler, context, pos + 1))
+        return (true);
     }
+
   return (false);
 }
 
