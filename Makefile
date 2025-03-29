@@ -22,8 +22,10 @@ TARGET=brute
 TESTS=test/simple-test.py test/client-server-test.py
 PERF_TESTS=test/performance-test.py
 
-ifeq ($(shell uname), Linux)
-	# No valgrind on MacOS
+WITH_VALGRIND ?= false
+
+ifeq (${WITH_VALGRIND}, true)
+	# No valgrind on MacOS, also Valgrind tests cannot be run with ASan
 	TESTS+=test/valgrind-test.py
 endif
 

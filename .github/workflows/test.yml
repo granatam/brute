@@ -24,10 +24,18 @@ jobs:
       - name: make dev
         run: CC=${{matrix.cc}} make dev
       - name: make check (dev)
-        run: make check
+        run: WITH_VALGRIND=true make check
       - name: make release
         run: CC=${{matrix.cc}} make release
       - name: make check (release)
+        run: WITH_VALGRIND=true make check
+      - name: make release with ASan
+        run: CC=${{matrix.cc}} CFLAGS="-O2 -Wall -Wextra -gdwarf-4 -fsanitize=address -fno-omit-frame-pointer" make release
+      - name: make check (release) with ASan
+        run: make check
+      - name: make release with UBSan
+        run: CC=${{matrix.cc}} CFLAGS="-O2 -Wall -Wextra -gdwarf-4 -fsanitize=undefined -fno-omit-frame-pointer" make release
+      - name: make check (release) with UBSan
         run: make check
   macos:
     runs-on: macos-latest
@@ -46,6 +54,14 @@ jobs:
       - name: make release
         run: make release
       - name: make check (release)
+        run: make check
+      - name: make release with ASan
+        run: CFLAGS="-O2 -Wall -Wextra -gdwarf-4 -fsanitize=address -fno-omit-frame-pointer" make release
+      - name: make check (release) with ASan
+        run: make check
+      - name: make release with UBSan
+        run: CFLAGS="-O2 -Wall -Wextra -gdwarf-4 -fsanitize=undefined -fno-omit-frame-pointer" make release
+      - name: make check (release) with UBSan
         run: make check
   # freebsd-clang:
   #   runs-on: ubuntu-latest
