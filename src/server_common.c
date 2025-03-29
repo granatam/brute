@@ -124,7 +124,7 @@ close_client (int socket_fd)
   shutdown (socket_fd, SHUT_RDWR);
   if (close (socket_fd) != 0)
     {
-      error ("Could not close server socket");
+      error ("Could not close client socket");
       return (S_FAILURE);
     }
 
