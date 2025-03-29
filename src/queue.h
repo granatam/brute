@@ -10,7 +10,8 @@ typedef enum queue_status_t
 {
   QS_SUCCESS,
   QS_INACTIVE,
-  QS_FAILURE
+  QS_FAILURE,
+  QS_EMPTY,
 } queue_status_t;
 
 typedef struct ll_node_t
@@ -35,6 +36,7 @@ queue_status_t queue_init (queue_t *queue, size_t unit_size);
 queue_status_t queue_push (queue_t *queue, void *payload);
 queue_status_t queue_push_back (queue_t *queue, void *payload);
 queue_status_t queue_pop (queue_t *queue, void *payload);
+queue_status_t queue_trypop (queue_t *queue, void *payload);
 queue_status_t queue_cancel (queue_t *queue);
 queue_status_t queue_destroy (queue_t *queue);
 
