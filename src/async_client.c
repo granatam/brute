@@ -20,6 +20,80 @@
 #include <sys/types.h>
 #endif
 
+static status_t
+async_client_ctx_init (async_client_context_t *ctx, config_t *config)
+{
+  memset (ctx, 0, sizeof (*ctx));
+
+  if (thread_pool_init (&ctx->thread_pool) == S_FAILURE)
+    {
+      error ("Could not initialize thread pool");
+      return (S_FAILURE);
+    }
+  if (queue_init (&ctx->task_queue, sizeof (task_t)) != QS_SUCCESS)
+    {
+      error ("Could not initialize task queue");
+      return (S_FAILURE);
+    }
+  if (queue_init (&ctx->result_queue, sizeof (result_t)) != QS_SUCCESS)
+    {
+      error ("Could not initialize result queue");
+      queue_destroy (&ctx->task_queue);
+      return (S_FAILURE);
+    }
+  if (pthread_mutex_init (&ctx->mutex, NULL) != 0)
+    {
+      error ("Could not initialize mutex");
+      goto cleanup;
+    }
+  if (pthread_cond_init (&ctx->cond_sem, NULL) != 0)
+    {
+      error ("Could not initialize conditional semaphore");
+      goto cleanup;
+    }
+  ctx->config = config;
+  ctx->done = false;
+  ctx->config->hash = ctx->hash;
+  ctx->config->alph = ctx->alph;
+
+  ctx->socket_fd = socket (AF_INET, SOCK_STREAM, 0);
+  if (ctx->socket_fd == -1)
+    {
+      error ("Could not initialize client socket");
+      goto cleanup;
+    }
+
+  int option = 1;
+  if (setsockopt (ctx->socket_fd, SOL_SOCKET, SO_KEEPALIVE, &option,
+                  sizeof (option))
+      == -1)
+    {
+      error ("Could not set socket option");
+      goto cleanup;
+    }
+
+  if (setsockopt (ctx->socket_fd, IPPROTO_TCP, TCP_NODELAY, &option,
+                  sizeof (option))
+      == -1)
+    {
+      error ("Could not set socket option");
+      goto cleanup;
+    }
+
+  return (S_SUCCESS);
+
+cleanup:
+  queue_destroy (&ctx->task_queue);
+  queue_destroy (&ctx->result_queue);
+
+  shutdown (ctx->socket_fd, SHUT_RDWR);
+  if (close (ctx->socket_fd) != 0)
+    {
+      error ("Could not close socket");
+    }
+  return (S_FAILURE);
+}
+
 static void *
 client_worker (void *arg)
 {
@@ -148,54 +222,9 @@ bool
 run_async_client (config_t *config)
 {
   async_client_context_t ctx;
-  memset (&ctx, 0, sizeof (ctx));
 
-  if (thread_pool_init (&ctx.thread_pool) == S_FAILURE)
-    {
-      error ("Could not initialize thread pool");
-      return (false);
-    }
-  if (queue_init (&ctx.task_queue, sizeof (task_t)) != QS_SUCCESS)
-    {
-      error ("Could not initialize task queue");
-      return (false);
-    }
-  if (queue_init (&ctx.result_queue, sizeof (result_t)) != QS_SUCCESS)
-    {
-      error ("Could not initialize result queue");
-      queue_destroy (&ctx.task_queue);
-      return (false);
-    }
-  if (pthread_mutex_init (&ctx.mutex, NULL) != 0)
-    {
-      error ("Could not initialize mutex");
-      goto cleanup;
-    }
-  if (pthread_cond_init (&ctx.cond_sem, NULL) != 0)
-    {
-      error ("Could not initialize conditional semaphore");
-      goto cleanup;
-    }
-  ctx.config = config;
-  ctx.done = false;
-  ctx.config->hash = ctx.hash;
-  ctx.config->alph = ctx.alph;
-
-  ctx.socket_fd = socket (AF_INET, SOCK_STREAM, 0);
-  if (ctx.socket_fd == -1)
-    {
-      error ("Could not initialize client socket");
-      goto cleanup;
-    }
-
-  int option = 1;
-  if (setsockopt (ctx.socket_fd, SOL_SOCKET, SO_KEEPALIVE, &option,
-                  sizeof (option))
-      == -1)
-    {
-      error ("Could not set socket option");
-      goto cleanup;
-    }
+  if (async_client_ctx_init (&ctx, config) == S_FAILURE)
+    return (false);
 
   struct sockaddr_in addr;
   addr.sin_family = AF_INET;
@@ -205,14 +234,6 @@ run_async_client (config_t *config)
   if (connect (ctx.socket_fd, (struct sockaddr *)&addr, sizeof (addr)) == -1)
     {
       error ("Could not connect to server");
-      goto cleanup;
-    }
-
-  if (setsockopt (ctx.socket_fd, IPPROTO_TCP, TCP_NODELAY, &option,
-                  sizeof (option))
-      == -1)
-    {
-      error ("Could not set socket option");
       goto cleanup;
     }
 

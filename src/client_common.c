@@ -42,16 +42,16 @@ handle_hash (int socket_fd, char *hash)
 int
 ms_sleep (long milliseconds)
 {
-  struct timespec time, time2;
+  struct timespec duration, rem;
   if (milliseconds >= 1000)
     {
-      time.tv_sec = milliseconds / 1000;
-      time.tv_nsec = (milliseconds % 1000) * 1000000;
+      duration.tv_sec = milliseconds / 1000;
+      duration.tv_nsec = (milliseconds % 1000) * 1000000;
     }
   else
     {
-      time.tv_sec = 0;
-      time.tv_nsec = milliseconds * 1000000;
+      duration.tv_sec = 0;
+      duration.tv_nsec = milliseconds * 1000000;
     }
-  return nanosleep (&time, &time2);
+  return nanosleep (&duration, &rem);
 }

@@ -171,7 +171,13 @@ queue_destroy (queue_t *queue)
   if (pthread_mutex_destroy (&queue->tail_mutex) != 0)
     return (QS_FAILURE);
 
-  /* TODO: destroy linked list */
+  while (queue->list.next != &queue->list)
+    {
+      ll_node_t *node = queue->list.next;
+      queue->list.next = node->next;
+      node->next->prev = &queue->list;
+      free (node);
+    }
 
   return (QS_SUCCESS);
 }
@@ -180,6 +186,8 @@ queue_status_t
 queue_push_back (queue_t *queue, void *payload)
 {
   trace ("Calling queue_push_back");
+  queue_status_t status = QS_SUCCESS;
+
   ll_node_t *node
       = calloc (1, sizeof (*node) + queue->unit_size - sizeof (node->payload));
   if (!node)
@@ -187,9 +195,9 @@ queue_push_back (queue_t *queue, void *payload)
       error ("Could not allocate memory");
       return (QS_FAILURE);
     }
+  pthread_cleanup_push (free, node);
   memcpy (node->payload, payload, queue->unit_size);
 
-  queue_status_t status = QS_SUCCESS;
   bool list_used = true;
   if (pthread_mutex_lock (&queue->head_mutex) != 0)
     {
@@ -218,6 +226,7 @@ queue_push_back (queue_t *queue, void *payload)
 
   if (!list_used)
     free (node);
+  pthread_cleanup_pop (0);
 
   return (status);
 }
