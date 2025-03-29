@@ -1,5 +1,6 @@
 #include "server_common.h"
 
+#include "brute.h"
 #include "common.h"
 #include "log.h"
 #include "multi.h"
@@ -237,4 +238,33 @@ serv_signal_if_found (mt_context_t *ctx)
   pthread_cleanup_pop (!0);
 
   return (status);
+}
+
+status_t
+process_tasks (task_t *task, config_t *config, mt_context_t *mt_ctx)
+{
+  task->from = (config->length < 3) ? 1 : 2;
+  task->to = config->length;
+
+  brute (task, config, queue_push_wrapper, mt_ctx);
+
+  trace ("Calculated all tasks");
+
+  if (wait_password (mt_ctx) == S_FAILURE)
+    return (S_FAILURE);
+
+  trace ("Got password");
+
+  if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
+    {
+      error ("Could not cancel a queue");
+      return (S_FAILURE);
+    }
+
+  trace ("Cancelled global queue");
+
+  if (mt_ctx->password[0] != 0)
+    memcpy (task->task.password, mt_ctx->password, sizeof (mt_ctx->password));
+
+  return (S_SUCCESS);
 }

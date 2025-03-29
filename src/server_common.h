@@ -26,4 +26,6 @@ status_t send_task (int socket_fd, task_t *task);
 
 status_t serv_signal_if_found (mt_context_t *ctx);
 
+status_t process_tasks (task_t *task, config_t *config, mt_context_t *mt_ctx);
+
 #endif // SERVER_COMMON_H
