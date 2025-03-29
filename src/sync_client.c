@@ -17,6 +17,13 @@
 #include <sys/types.h>
 #endif
 
+typedef struct client_context_t
+{
+  task_t *task;
+  config_t *config;
+  task_callback_t task_callback;
+} client_context_t;
+
 void
 find_password (task_t *task, config_t *config, st_context_t *ctx)
 {

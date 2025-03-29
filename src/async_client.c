@@ -4,6 +4,7 @@
 #include "client_common.h"
 #include "common.h"
 #include "log.h"
+#include "queue.h"
 #include "single.h"
 #include "thread_pool.h"
 
@@ -20,8 +21,22 @@
 #include <sys/types.h>
 #endif
 
+typedef struct client_context_t
+{
+  int socket_fd;
+  thread_pool_t thread_pool;
+  queue_t task_queue;
+  queue_t result_queue;
+  pthread_mutex_t mutex;
+  config_t *config;
+  bool done;
+  pthread_cond_t cond_sem;
+  char hash[HASH_LENGTH];
+  char alph[MAX_ALPH_LENGTH];
+} client_context_t;
+
 static status_t
-async_client_ctx_init (async_client_context_t *ctx, config_t *config)
+client_context_init (client_context_t *ctx, config_t *config)
 {
   memset (ctx, 0, sizeof (*ctx));
 
@@ -97,7 +112,7 @@ cleanup:
 static void *
 client_worker (void *arg)
 {
-  async_client_context_t *ctx = *(async_client_context_t **)arg;
+  client_context_t *ctx = *(client_context_t **)arg;
 
   st_context_t st_context = {
     .hash = ctx->config->hash,
@@ -131,7 +146,7 @@ client_worker (void *arg)
 static void *
 task_receiver (void *arg)
 {
-  async_client_context_t *ctx = *(async_client_context_t **)arg;
+  client_context_t *ctx = *(client_context_t **)arg;
 
   task_t task;
   while (true)
@@ -192,7 +207,7 @@ end:
 static void *
 result_sender (void *arg)
 {
-  async_client_context_t *ctx = *(async_client_context_t **)arg;
+  client_context_t *ctx = *(client_context_t **)arg;
 
   result_t result;
   while (true)
@@ -221,9 +236,9 @@ result_sender (void *arg)
 bool
 run_async_client (config_t *config)
 {
-  async_client_context_t ctx;
+  client_context_t ctx;
 
-  if (async_client_ctx_init (&ctx, config) == S_FAILURE)
+  if (client_context_init (&ctx, config) == S_FAILURE)
     return (false);
 
   struct sockaddr_in addr;
@@ -237,7 +252,7 @@ run_async_client (config_t *config)
       goto cleanup;
     }
 
-  async_client_context_t *ctx_ptr = &ctx;
+  client_context_t *ctx_ptr = &ctx;
 
   if (!thread_create (&ctx.thread_pool, task_receiver, &ctx_ptr,
                       sizeof (ctx_ptr), "async receiver"))

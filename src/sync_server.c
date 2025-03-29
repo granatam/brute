@@ -21,6 +21,12 @@
 #include <sys/types.h>
 #endif
 
+typedef struct client_context_t
+{
+  serv_base_context_t *context;
+  int socket_fd;
+} client_context_t;
+
 static status_t
 delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
 {
@@ -56,10 +62,10 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
 static void *
 handle_client (void *arg)
 {
-  cl_context_t *cl_ctx = (cl_context_t *)arg;
-  mt_context_t *mt_ctx = &cl_ctx->context->context;
+  client_context_t *client_ctx = (client_context_t *)arg;
+  mt_context_t *mt_ctx = &client_ctx->context->context;
 
-  if (send_config_data (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
+  if (send_config_data (client_ctx->socket_fd, mt_ctx) == S_FAILURE)
     return (NULL);
 
   while (true)
@@ -71,7 +77,7 @@ handle_client (void *arg)
       task.to = task.from;
       task.from = 0;
 
-      if (delegate_task (cl_ctx->socket_fd, &task, mt_ctx) == S_FAILURE)
+      if (delegate_task (client_ctx->socket_fd, &task, mt_ctx) == S_FAILURE)
         {
           if (queue_push (&mt_ctx->queue, &task) == QS_FAILURE)
             {
@@ -93,16 +99,17 @@ handle_client (void *arg)
 static void *
 handle_clients (void *arg)
 {
-  serv_context_t *serv_ctx = *(serv_context_t **)arg;
+  serv_base_context_t *serv_ctx = *(serv_base_context_t **)arg;
   mt_context_t *mt_ctx = &serv_ctx->context;
 
-  cl_context_t cl_ctx = {
+  client_context_t client_ctx = {
     .context = serv_ctx,
   };
 
   while (true)
     {
-      if ((cl_ctx.socket_fd = accept (serv_ctx->socket_fd, NULL, NULL)) == -1)
+      if ((client_ctx.socket_fd = accept (serv_ctx->socket_fd, NULL, NULL))
+          == -1)
         {
           error ("Could not accept new connection");
           continue;
@@ -110,19 +117,19 @@ handle_clients (void *arg)
       trace ("Accepted new connection");
 
       int option = 1;
-      if (setsockopt (cl_ctx.socket_fd, IPPROTO_TCP, TCP_NODELAY, &option,
+      if (setsockopt (client_ctx.socket_fd, IPPROTO_TCP, TCP_NODELAY, &option,
                       sizeof (option))
           == -1)
         {
           error ("Could not set socket option");
         }
 
-      if (!thread_create (&mt_ctx->thread_pool, handle_client, &cl_ctx,
-                          sizeof (cl_ctx), "sync handler"))
+      if (!thread_create (&mt_ctx->thread_pool, handle_client, &client_ctx,
+                          sizeof (client_ctx), "sync handler"))
         {
           error ("Could not create client thread");
 
-          close_client (cl_ctx.socket_fd);
+          close_client (client_ctx.socket_fd);
           continue;
         }
     }
@@ -133,10 +140,10 @@ handle_clients (void *arg)
 bool
 run_server (task_t *task, config_t *config)
 {
-  serv_context_t context;
-  serv_context_t *context_ptr = &context;
+  serv_base_context_t context;
+  serv_base_context_t *context_ptr = &context;
 
-  if (serv_context_init (&context, config) == S_FAILURE)
+  if (serv_base_context_init (&context, config) == S_FAILURE)
     {
       error ("Could not initialize server context");
       return (false);
@@ -172,7 +179,7 @@ run_server (task_t *task, config_t *config)
   if (mt_ctx->password[0] != 0)
     memcpy (task->task.password, mt_ctx->password, sizeof (mt_ctx->password));
 
-  if (serv_context_destroy (&context) == S_FAILURE)
+  if (serv_base_context_destroy (&context) == S_FAILURE)
     {
       error ("Could not destroy server context");
     }
@@ -182,7 +189,7 @@ run_server (task_t *task, config_t *config)
   return (mt_ctx->password[0] != 0);
 
 fail:
-  if (serv_context_destroy (&context) == S_FAILURE)
+  if (serv_base_context_destroy (&context) == S_FAILURE)
     {
       error ("Could not destroy server context");
     }
