@@ -18,10 +18,10 @@ queue_init (queue_t *queue, size_t unit_size)
   queue->list.prev = &queue->list;
   queue->list.next = &queue->list;
 
-  if (sem_init (&queue->full, 0, 0) != 0)
+  if (sem_init (&queue->full, 0, 0) != SS_SUCCESS)
     goto fail;
 
-  if (sem_init (&queue->empty, 0, QUEUE_SIZE) != 0)
+  if (sem_init (&queue->empty, 0, QUEUE_SIZE) != SS_SUCCESS)
     goto fail;
 
   if (pthread_mutex_init (&queue->head_mutex, NULL) != 0)
@@ -33,6 +33,7 @@ queue_init (queue_t *queue, size_t unit_size)
   return (QS_SUCCESS);
 
 fail:
+  trace ("queue init failed");
   queue->active = false;
   return (QS_FAILURE);
 }
@@ -56,7 +57,7 @@ queue_push_internal (queue_t *queue, void *payload)
   if (pthread_mutex_unlock (&queue->tail_mutex) != 0)
     goto fail;
 
-  if (sem_post (&queue->full) != 0)
+  if (sem_post (&queue->full) != SS_SUCCESS)
     goto fail;
 
   return (QS_SUCCESS);
@@ -69,7 +70,7 @@ fail:
 queue_status_t
 queue_push (queue_t *queue, void *payload)
 {
-  if (sem_wait (&queue->empty) != 0)
+  if (sem_wait (&queue->empty) != SS_SUCCESS)
     {
       queue->active = false;
       return (QS_FAILURE);
@@ -88,13 +89,10 @@ cleanup_free_handler (void *ptr)
     }
 }
 
-queue_status_t
-queue_pop (queue_t *queue, void *payload)
+static queue_status_t
+queue_pop_internal (queue_t *queue, void *payload)
 {
   ll_node_t *node_to_pop = NULL;
-  if (sem_wait (&queue->full) != S_SUCCESS)
-    goto fail;
-
   if (!queue->active)
     {
       sem_post (&queue->full);
@@ -123,7 +121,7 @@ queue_pop (queue_t *queue, void *payload)
   if (pthread_mutex_unlock (&queue->head_mutex) != 0)
     goto fail;
 
-  if (sem_post (&queue->empty) != S_SUCCESS)
+  if (sem_post (&queue->empty) != SS_SUCCESS)
     goto fail;
 
   pthread_cleanup_pop (!0);
@@ -138,14 +136,40 @@ fail:
 }
 
 queue_status_t
+queue_pop (queue_t *queue, void *payload)
+{
+  if (sem_wait (&queue->full) != SS_SUCCESS)
+    {
+      queue->active = false;
+      return (QS_FAILURE);
+    }
+
+  return queue_pop_internal (queue, payload);
+}
+
+queue_status_t
+queue_trypop (queue_t *queue, void *payload)
+{
+  switch (sem_trywait (&queue->full))
+    {
+    case SS_LOCKED:
+      return (QS_EMPTY);
+    case SS_FAILURE:
+      return (QS_FAILURE);
+    case SS_SUCCESS:
+      return (queue_pop_internal (queue, payload));
+    }
+}
+
+queue_status_t
 queue_cancel (queue_t *queue)
 {
   queue->active = false;
 
-  if (sem_post (&queue->full) != 0)
+  if (sem_post (&queue->full) != SS_SUCCESS)
     return (QS_FAILURE);
 
-  if (sem_post (&queue->empty) != 0)
+  if (sem_post (&queue->empty) != SS_SUCCESS)
     return (QS_FAILURE);
 
   return (QS_SUCCESS);
@@ -159,10 +183,10 @@ queue_destroy (queue_t *queue)
 
   free (queue->queue);
 
-  if (sem_destroy (&queue->full) != 0)
+  if (sem_destroy (&queue->full) != SS_SUCCESS)
     return (QS_FAILURE);
 
-  if (sem_destroy (&queue->empty) != 0)
+  if (sem_destroy (&queue->empty) != SS_SUCCESS)
     return (QS_FAILURE);
 
   if (pthread_mutex_destroy (&queue->head_mutex) != 0)
@@ -207,7 +231,7 @@ queue_push_back (queue_t *queue, void *payload)
     }
   pthread_cleanup_push (cleanup_mutex_unlock, &queue->head_mutex);
 
-  if (sem_trywait (&queue->empty) == S_SUCCESS)
+  if (sem_trywait (&queue->empty) == SS_SUCCESS)
     {
       status = queue_push_internal (queue, payload);
       list_used = false;
@@ -220,7 +244,7 @@ queue_push_back (queue_t *queue, void *payload)
       queue->list.prev->next = node;
       queue->list.prev = node;
       status
-          = (sem_post (&queue->full) == S_SUCCESS) ? QS_SUCCESS : QS_FAILURE;
+          = (sem_post (&queue->full) == SS_SUCCESS) ? QS_SUCCESS : QS_FAILURE;
     }
   pthread_cleanup_pop (!0);
 
