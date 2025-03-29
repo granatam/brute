@@ -1,81 +1,24 @@
 on: [ 'push', 'pull_request' ]
 
 jobs:
-  ubuntu:
-    runs-on: ubuntu-latest
-    name: x86 Ubuntu
+  test:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - cc: gcc
-          - cc: clang
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: install pytest and hypothesis
-        run: pip install pytest hypothesis
-      - name: update ubuntu packages
-        run: sudo apt-get update -y
-      - name: install valgrind and netcat
-        run: sudo apt-get install valgrind netcat-traditional -y
-      - name: make dev
-        run: CC=${{matrix.cc}} make dev
-      - name: make check (dev)
-        run: WITH_VALGRIND=true make check
-      - name: make release
-        run: CC=${{matrix.cc}} make release
-      - name: make check (release)
-        run: WITH_VALGRIND=true make check
-      - name: make release with ASan
-        run: CC=${{matrix.cc}} CFLAGS="-O2 -Wall -Wextra -gdwarf-4 -fsanitize=address -fno-omit-frame-pointer" make release
-      - name: make check (release) with ASan
-        run: make check
-      - name: make release with UBSan
-        run: CC=${{matrix.cc}} CFLAGS="-O2 -Wall -Wextra -gdwarf-4 -fsanitize=undefined -fno-omit-frame-pointer" make release
-      - name: make check (release) with UBSan
-        run: make check
-  macos:
-    runs-on: macos-latest
-    name: MacOS (clang)
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: install pytest and hypothesis
-        run: pip install pytest hypothesis
-      - name: make dev
-        run: make dev
-      - name: make check (dev)
-        run: make check
-      - name: make release
-        run: make release
-      - name: make check (release)
-        run: make check
-      - name: make release with ASan
-        run: CFLAGS="-O2 -Wall -Wextra -gdwarf-4 -fsanitize=address -fno-omit-frame-pointer" make release
-      - name: make check (release) with ASan
-        run: make check
-      - name: make release with UBSan
-        run: CFLAGS="-O2 -Wall -Wextra -gdwarf-4 -fsanitize=undefined -fno-omit-frame-pointer" make release
-      - name: make check (release) with UBSan
-        run: make check
-  # freebsd-clang:
-  #   runs-on: ubuntu-latest
-  #   name: FreeBSD (clang)
-  #   steps:
-  #   - uses: actions/checkout@v4
-  #   - uses: vmactions/freebsd-vm@v1
-  #     with:
-  #       usesh: true
-  #       prepare: |
-  #         pkg install -y git gmake
-  #         pkg install -y -g py3\*-pip python3
-  #         pip install hypothesis pytest
-  #       run: |
-  #         git config --global --add safe.directory `pwd`
-  #         git submodule update --init --recursive --remote
-  #         gmake check
+          - name: x86 Ubuntu (gcc)
+            runs_on: ubuntu-latest
+            cc_prefix: CC=gcc
+            valgrind_prefix: WITH_VALGRIND=true
+          - name: x86 Ubuntu (clang)
+            runs_on: ubuntu-latest
+            cc_prefix: CC=clang
+            valgrind_prefix: WITH_VALGRIND=true
+          - name: AArch64 MacOS (clang)
+            runs_on: macos-latest
+    name: ${{ matrix.name }}
+    uses: ./.github/workflows/test-common.yml
+    with:
+      runs_on: ${{ matrix.runs_on }}
+      cc_prefix: ${{ matrix.cc_prefix }}
+      valgrind_prefix: ${{ matrix.valgrind_prefix }}
