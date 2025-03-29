@@ -4,7 +4,6 @@
 
 #include <stdarg.h>
 #include <stdio.h>
-#include <stdlib.h>
 
 __attribute__ ((format (printf, 5, 6))) status_t
 message_impl (log_level_t log_level, const char *file_name,

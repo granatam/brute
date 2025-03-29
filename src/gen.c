@@ -6,9 +6,21 @@
 #include "log.h"
 #include "rec.h"
 #include "single.h"
+#include "thread_pool.h"
 
 #include <stdlib.h>
 #include <string.h>
+
+typedef struct gen_context_t
+{
+  base_state_t *state;
+  bool (*state_next) (base_state_t *state);
+  pthread_mutex_t mutex;
+  config_t *config;
+  password_t password;
+  bool cancelled;
+  thread_pool_t thread_pool;
+} gen_context_t;
 
 static status_t
 gen_context_init (gen_context_t *context, config_t *config, task_t *task)

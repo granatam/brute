@@ -7,14 +7,12 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 status_t
-serv_context_init (serv_context_t *context, config_t *config)
+serv_base_context_init (serv_base_context_t *context, config_t *config)
 {
   if (mt_context_init ((mt_context_t *)context, config) == S_FAILURE)
     return (S_FAILURE);
@@ -61,7 +59,7 @@ fail:
 }
 
 status_t
-serv_context_destroy (serv_context_t *context)
+serv_base_context_destroy (serv_base_context_t *context)
 {
   if (mt_context_destroy ((mt_context_t *)context) == S_FAILURE)
     return (S_FAILURE);

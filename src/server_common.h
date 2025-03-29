@@ -7,20 +7,20 @@
 
 #include <stdbool.h>
 
-typedef struct serv_context_t
+typedef struct serv_base_context_t
 {
   mt_context_t context;
   int socket_fd;
-} serv_context_t;
+} serv_base_context_t;
 
-status_t serv_context_init (serv_context_t *, config_t *);
-status_t serv_context_destroy (serv_context_t *);
+status_t serv_base_context_init (serv_base_context_t *ctx, config_t *config);
+status_t serv_base_context_destroy (serv_base_context_t *ctx);
 
 status_t close_client (int socket_fd);
 
-status_t send_hash (int socket_fd, mt_context_t *);
-status_t send_alph (int socket_fd, mt_context_t *);
-status_t send_config_data (int socket_fd, mt_context_t *);
+status_t send_hash (int socket_fd, mt_context_t *ctx);
+status_t send_alph (int socket_fd, mt_context_t *ctx);
+status_t send_config_data (int socket_fd, mt_context_t *ctx);
 status_t send_task (int socket_fd, task_t *task);
 
 status_t serv_signal_if_found (mt_context_t *ctx);

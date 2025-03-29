@@ -21,10 +21,21 @@
 #include <sys/types.h>
 #endif
 
-static acl_context_t *
-acl_context_init (serv_context_t *global_ctx)
+typedef struct client_context_t
 {
-  acl_context_t *ctx = calloc (1, sizeof (*ctx));
+  serv_base_context_t *context;
+  task_t registry[QUEUE_SIZE];
+  queue_t registry_idx;
+  bool registry_used[QUEUE_SIZE];
+  int socket_fd;
+  unsigned char ref_count;
+  pthread_mutex_t mutex;
+} client_context_t;
+
+static client_context_t *
+client_context_init (serv_base_context_t *global_ctx)
+{
+  client_context_t *ctx = calloc (1, sizeof (*ctx));
   if (!ctx)
     {
       error ("Could not allocate memory for client context");
@@ -72,7 +83,7 @@ cleanup:
 }
 
 static void
-acl_context_destroy (acl_context_t *ctx)
+client_context_destroy (client_context_t *ctx)
 {
   pthread_cleanup_push (free, ctx);
 
@@ -104,7 +115,7 @@ acl_context_destroy (acl_context_t *ctx)
 }
 
 static status_t
-return_tasks (acl_context_t *ctx)
+return_tasks (client_context_t *ctx)
 {
   mt_context_t *mt_ctx = &ctx->context->context;
   status_t status = S_SUCCESS;
@@ -130,7 +141,7 @@ return_tasks (acl_context_t *ctx)
 static void
 sender_receiver_cleanup (void *arg)
 {
-  acl_context_t *ctx = arg;
+  client_context_t *ctx = arg;
 
   bool is_last;
   if (pthread_mutex_lock (&ctx->mutex) != 0)
@@ -145,13 +156,13 @@ sender_receiver_cleanup (void *arg)
   pthread_cleanup_pop (!0);
 
   if (is_last)
-    acl_context_destroy (ctx);
+    client_context_destroy (ctx);
 }
 
 static void *
 result_receiver (void *arg)
 {
-  acl_context_t *cl_ctx = *(acl_context_t **)arg;
+  client_context_t *cl_ctx = *(client_context_t **)arg;
   mt_context_t *mt_ctx = &cl_ctx->context->context;
 
   pthread_cleanup_push (sender_receiver_cleanup, cl_ctx);
@@ -204,7 +215,7 @@ result_receiver (void *arg)
 static void *
 task_sender (void *arg)
 {
-  acl_context_t *cl_ctx = *(acl_context_t **)arg;
+  client_context_t *cl_ctx = *(client_context_t **)arg;
   mt_context_t *mt_ctx = &cl_ctx->context->context;
 
   pthread_cleanup_push (sender_receiver_cleanup, cl_ctx);
@@ -258,27 +269,27 @@ cleanup:
 static void
 accepter_cleanup (void *arg)
 {
-  acl_context_t *acl_ctx = *(acl_context_t **)arg;
-  if (!acl_ctx)
+  client_context_t *client_ctx = *(client_context_t **)arg;
+  if (!client_ctx)
     return;
 
-  sender_receiver_cleanup (acl_ctx);
+  sender_receiver_cleanup (client_ctx);
 }
 
 static void *
 handle_clients (void *arg)
 {
-  serv_context_t *srv_ctx = *(serv_context_t **)arg;
+  serv_base_context_t *srv_ctx = *(serv_base_context_t **)arg;
   mt_context_t *mt_ctx = &srv_ctx->context;
 
-  acl_context_t *acl_ctx = NULL;
-  pthread_cleanup_push (accepter_cleanup, &acl_ctx);
+  client_context_t *client_ctx = NULL;
+  pthread_cleanup_push (accepter_cleanup, &client_ctx);
   while (true)
     {
-      if (!acl_ctx)
-        acl_ctx = acl_context_init (srv_ctx);
+      if (!client_ctx)
+        client_ctx = client_context_init (srv_ctx);
 
-      if (!acl_ctx)
+      if (!client_ctx)
         break;
 
       while (true)
@@ -289,8 +300,8 @@ handle_clients (void *arg)
               goto cleanup;
             }
 
-          acl_ctx->socket_fd = accept (srv_ctx->socket_fd, NULL, NULL);
-          if (acl_ctx->socket_fd == -1)
+          client_ctx->socket_fd = accept (srv_ctx->socket_fd, NULL, NULL);
+          if (client_ctx->socket_fd == -1)
             {
               error ("Could not accept new connection: %s", strerror (errno));
               if (errno == EINVAL)
@@ -305,7 +316,7 @@ handle_clients (void *arg)
 
       int option = 1;
 
-      if (setsockopt (acl_ctx->socket_fd, IPPROTO_TCP, TCP_NODELAY, &option,
+      if (setsockopt (client_ctx->socket_fd, IPPROTO_TCP, TCP_NODELAY, &option,
                       sizeof (option))
           == -1)
         {
@@ -315,28 +326,28 @@ handle_clients (void *arg)
 
       pthread_t sender, receiver;
       if (!(sender
-            = thread_create (&mt_ctx->thread_pool, task_sender, &acl_ctx,
-                             sizeof (acl_ctx), "async sender")))
+            = thread_create (&mt_ctx->thread_pool, task_sender, &client_ctx,
+                             sizeof (client_ctx), "async sender")))
         {
           error ("Could not create task sender thread");
           continue;
         }
 
-      ++acl_ctx->ref_count;
+      ++client_ctx->ref_count;
 
       trace ("Created a sender thread: %08x", sender);
 
-      if (!(receiver
-            = thread_create (&mt_ctx->thread_pool, result_receiver, &acl_ctx,
-                             sizeof (acl_ctx), "async receiver")))
+      if (!(receiver = thread_create (&mt_ctx->thread_pool, result_receiver,
+                                      &client_ctx, sizeof (client_ctx),
+                                      "async receiver")))
         {
           error ("Could not create result receiver thread");
-          sender_receiver_cleanup (acl_ctx);
+          sender_receiver_cleanup (client_ctx);
           pthread_cancel (sender);
           pthread_join (sender, NULL);
         }
 
-      acl_ctx = NULL;
+      client_ctx = NULL;
       trace ("Created a receiver thread: %08x", receiver);
     }
 cleanup:
@@ -349,10 +360,10 @@ bool
 run_async_server (task_t *task, config_t *config)
 {
   signal (SIGPIPE, SIG_IGN);
-  serv_context_t context;
-  serv_context_t *context_ptr = &context;
+  serv_base_context_t context;
+  serv_base_context_t *context_ptr = &context;
 
-  if (serv_context_init (&context, config) == S_FAILURE)
+  if (serv_base_context_init (&context, config) == S_FAILURE)
     {
       error ("Could not initialize server context");
       return (false);
@@ -390,7 +401,7 @@ run_async_server (task_t *task, config_t *config)
   if (mt_ctx->password[0] != 0)
     memcpy (task->task.password, mt_ctx->password, sizeof (mt_ctx->password));
 
-  if (serv_context_destroy (&context) == S_FAILURE)
+  if (serv_base_context_destroy (&context) == S_FAILURE)
     {
       error ("Could not destroy server context");
     }
@@ -402,7 +413,7 @@ run_async_server (task_t *task, config_t *config)
 fail:
   trace ("Failed, destroying server context");
 
-  if (serv_context_destroy (&context) == S_FAILURE)
+  if (serv_base_context_destroy (&context) == S_FAILURE)
     {
       error ("Could not destroy server context");
     }
