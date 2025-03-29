@@ -1,6 +1,5 @@
 #include "sync_server.h"
 
-#include "brute.h"
 #include "common.h"
 #include "log.h"
 #include "multi.h"
@@ -145,28 +144,10 @@ run_server (task_t *task, config_t *config)
       goto fail;
     }
 
-  task->from = (config->length < 3) ? 1 : 2;
-  task->to = config->length;
-
   mt_context_t *mt_ctx = (mt_context_t *)&context;
 
-  brute (task, config, queue_push_wrapper, mt_ctx);
-
-  if (wait_password (mt_ctx) == S_FAILURE)
+  if (process_tasks (task, config, mt_ctx) == S_FAILURE)
     goto fail;
-
-  trace ("Got password");
-
-  if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
-    {
-      error ("Could not cancel a queue");
-      goto fail;
-    }
-
-  trace ("Cancelled the global queue");
-
-  if (mt_ctx->password[0] != 0)
-    memcpy (task->task.password, mt_ctx->password, sizeof (mt_ctx->password));
 
   if (serv_base_context_destroy (&context) == S_FAILURE)
     {
