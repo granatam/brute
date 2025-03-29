@@ -130,7 +130,7 @@ mt_password_check (void *context)
 bool
 queue_push_wrapper (task_t *task, void *context)
 {
-  mt_context_t *mt_ctx = (mt_context_t *)context;
+  mt_context_t *mt_ctx = context;
 
   if (pthread_mutex_lock (&mt_ctx->mutex) != 0)
     {

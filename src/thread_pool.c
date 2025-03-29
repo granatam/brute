@@ -54,7 +54,7 @@ thread_cleanup (void *arg)
 static void *
 thread_run (void *arg)
 {
-  tp_context_t *tp_ctx = (tp_context_t *)arg;
+  tp_context_t *tp_ctx = arg;
   tp_context_t local_ctx = *tp_ctx;
   thread_pool_t *thread_pool = local_ctx.thread_pool;
 

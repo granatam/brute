@@ -28,7 +28,7 @@ cleanup_mutex_unlock (void *mutex)
 status_t
 recv_wrapper (int socket_fd, void *buf, int len, int flags)
 {
-  char *bytes = (char *)buf;
+  char *bytes = buf;
   while (len > 0)
     {
       int bytes_read

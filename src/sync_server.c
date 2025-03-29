@@ -62,7 +62,7 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
 static void *
 handle_client (void *arg)
 {
-  client_context_t *client_ctx = (client_context_t *)arg;
+  client_context_t *client_ctx = arg;
   mt_context_t *mt_ctx = &client_ctx->context->context;
 
   if (send_config_data (client_ctx->socket_fd, mt_ctx) == S_FAILURE)

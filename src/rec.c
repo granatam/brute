@@ -7,7 +7,7 @@ static bool
 brute_rec_gen_handler (task_t *task, void *context)
 {
   (void)task; /* to suppress "unused parameter" warning */
-  rec_state_t *state = (rec_state_t *)context;
+  rec_state_t *state = context;
 
   if (swapcontext (&state->rec_context, &state->main_context) != 0)
     {
