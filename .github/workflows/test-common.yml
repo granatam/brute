@@ -1,0 +1,32 @@
+on:
+  workflow_call:
+    inputs:
+      runs_on: { type: string, required: true }
+      cc_prefix: { type: string, required: false, default: '' }
+      valgrind_prefix: { type: string, required: false, default: '' }
+
+jobs:
+  test:
+    name: test
+    runs-on: ${{ inputs.runs_on }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: update ubuntu packages
+        if: ${{ contains(inputs.runs_on, 'ubuntu') }}
+        run: sudo apt-get update -y
+      - name: install valgrind and netcat
+        if: ${{ contains(inputs.runs_on, 'ubuntu') }}
+        run: sudo apt-get install valgrind netcat-traditional -y
+      - name: install python dependencies 
+        run: pip install pytest hypothesis
+      - name: build (dev)
+        run: ${{ inputs.cc_prefix }} make dev
+      - name: test (dev)
+        run: ${{ inputs.valgrind_prefix }} make check
+      - name: build (release)
+        run: ${{ inputs.cc_prefix }} make release
+      - name: test (release)
+        run: ${{ inputs.valgrind_prefix }} make check
