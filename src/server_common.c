@@ -5,7 +5,9 @@
 #include "multi.h"
 
 #include <arpa/inet.h>
+#include <errno.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <pthread.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -73,6 +75,43 @@ serv_base_context_destroy (serv_base_context_t *context)
           return (S_FAILURE);
         }
       context->socket_fd = -1;
+    }
+
+  return (S_SUCCESS);
+}
+
+status_t
+accept_client (int srv_socket_fd, int *cl_socket_fd)
+{
+  while (true)
+    {
+      if (srv_socket_fd < 0)
+        {
+          error ("Invalid server socket");
+          return (S_FAILURE);
+        }
+
+      *cl_socket_fd = accept (srv_socket_fd, NULL, NULL);
+      if (*cl_socket_fd == -1)
+        {
+          error ("Could not accept new connection: %s", strerror (errno));
+          if (errno == EINVAL)
+            return (S_FAILURE);
+
+          continue;
+        }
+      break;
+    }
+
+  trace ("Accepted new connection");
+
+  int option = 1;
+  if (setsockopt (*cl_socket_fd, IPPROTO_TCP, TCP_NODELAY, &option,
+                  sizeof (option))
+      == -1)
+    {
+      error ("Could not set socket option");
+      return (S_FAILURE);
     }
 
   return (S_SUCCESS);
