@@ -213,7 +213,7 @@ result_sender (void *arg)
   while (true)
     {
       if (queue_pop (&ctx->result_queue, &result) != QS_SUCCESS)
-        return (NULL);
+        goto end;
       trace ("Got new result from result queue");
 
       struct iovec vec[] = {
@@ -224,11 +224,19 @@ result_sender (void *arg)
           == S_FAILURE)
         {
           error ("Could not send result to server");
-          return (NULL);
+          goto end;
         }
       trace ("Sent %s result %s to server",
              result.is_correct ? "correct" : "incorrect", result.password);
     }
+
+end:
+  trace ("Disconnected from server, not receiving anything from now");
+  ctx->done = true;
+  if (pthread_cond_signal (&ctx->cond_sem) != 0)
+    error ("Could not signal on a conditional semaphore");
+
+  trace ("Signaled to main thread about receiving end");
 
   return (NULL);
 }

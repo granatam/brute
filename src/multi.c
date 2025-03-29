@@ -33,7 +33,10 @@ mt_context_init (mt_context_t *context, config_t *config)
     }
 
   if (thread_pool_init (&context->thread_pool) == S_FAILURE)
-    return (S_FAILURE);
+    {
+      queue_destroy (&context->queue);
+      return (S_FAILURE);
+    }
 
   context->config = config;
   context->passwords_remaining = 0;
