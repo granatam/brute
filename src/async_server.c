@@ -6,7 +6,6 @@
 #include "server_common.h"
 
 #include <arpa/inet.h>
-#include <errno.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <pthread.h>
@@ -292,37 +291,9 @@ handle_clients (void *arg)
       if (!client_ctx)
         break;
 
-      while (true)
-        {
-          if (srv_ctx->socket_fd < 0)
-            {
-              error ("Invalid server socket");
-              goto cleanup;
-            }
-
-          client_ctx->socket_fd = accept (srv_ctx->socket_fd, NULL, NULL);
-          if (client_ctx->socket_fd == -1)
-            {
-              error ("Could not accept new connection: %s", strerror (errno));
-              if (errno == EINVAL)
-                goto cleanup;
-
-              continue;
-            }
-          break;
-        }
-
-      trace ("Accepted new connection");
-
-      int option = 1;
-
-      if (setsockopt (client_ctx->socket_fd, IPPROTO_TCP, TCP_NODELAY, &option,
-                      sizeof (option))
-          == -1)
-        {
-          error ("Could not set socket option");
-          goto cleanup;
-        }
+      if (accept_client (srv_ctx->socket_fd, &client_ctx->socket_fd)
+          == S_FAILURE)
+        goto cleanup;
 
       pthread_t sender, receiver;
       if (!(sender

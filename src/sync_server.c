@@ -108,21 +108,10 @@ handle_clients (void *arg)
 
   while (true)
     {
-      if ((client_ctx.socket_fd = accept (serv_ctx->socket_fd, NULL, NULL))
-          == -1)
-        {
-          error ("Could not accept new connection");
-          continue;
-        }
-      trace ("Accepted new connection");
-
-      int option = 1;
-      if (setsockopt (client_ctx.socket_fd, IPPROTO_TCP, TCP_NODELAY, &option,
-                      sizeof (option))
-          == -1)
-        {
-          error ("Could not set socket option");
-        }
+      /* TODO: Probably we should not continue here */
+      if (accept_client (serv_ctx->socket_fd, &client_ctx.socket_fd)
+          == S_FAILURE)
+        continue;
 
       if (!thread_create (&mt_ctx->thread_pool, handle_client, &client_ctx,
                           sizeof (client_ctx), "sync handler"))
