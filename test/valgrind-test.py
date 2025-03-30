@@ -153,6 +153,7 @@ def test_valgrind_netcat_async_client_async_server(data):
         ),
     ).run(CommandMode.VALGRIND)
 
+
 # Reactor server, one synchronous client
 @given(data=data())
 @settings(deadline=timedelta(seconds=5), phases=phases, max_examples=5)
