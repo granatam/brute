@@ -51,4 +51,9 @@ void cleanup_mutex_unlock (void *mutex);
 status_t recv_wrapper (int socket_fd, void *buf, int len, int flags);
 status_t send_wrapper (int socket_fd, struct iovec *vec, int iovcnt);
 
+status_t recv_wrapper_nonblock (int socket_fd, void *buf, int len, int flags,
+                                int *total);
+status_t send_wrapper_nonblock (int socket_fd, struct iovec *vec, int iovcnt,
+                                int *total);
+
 #endif // COMMON_H
