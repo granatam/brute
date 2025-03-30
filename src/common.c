@@ -2,8 +2,6 @@
 
 #define __USE_GNU
 #include <errno.h>
-#include <stdarg.h>
-#include <stdio.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <unistd.h>
