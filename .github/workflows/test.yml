@@ -19,7 +19,6 @@ jobs:
             cc_prefix: CFLAGS="-O2 -Wall -Wextra -gdwarf-4 -I$(brew --prefix libevent)/include" LIBS="-L$(brew --prefix libevent)/lib"
           - name: x86 MacOS (clang)
             runs_on: macos-13 
-            cc_prefix: CFLAGS="-O2 -Wall -Wextra -gdwarf-4 -I$(brew --prefix libevent)/include" LIBS="-L$(brew --prefix libevent)/lib"
     name: ${{ matrix.name }}
     uses: ./.github/workflows/test-common.yml
     with:
