@@ -16,7 +16,9 @@ jobs:
             valgrind_prefix: WITH_VALGRIND=true
           - name: AArch64 MacOS (clang)
             runs_on: macos-latest
-            cc_prefix: CFLAGS="-O2 -Wall -Wextra -gdwarf-4 -I$(brew --prefix libevent)/include" LIBS="-L$(brew --prefix libevent)/lib"
+            cc_prefix: |
+                export CFLAGS="-I$(brew --prefix libevent)/include $CFLAGS"
+                export LIBS="-L$(brew --prefix libevent)/lib"
           - name: x86 MacOS (clang)
             runs_on: macos-13 
     name: ${{ matrix.name }}
