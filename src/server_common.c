@@ -15,19 +15,19 @@
 #include <unistd.h>
 
 status_t
-serv_base_context_init (serv_base_context_t *context, config_t *config)
+srv_base_context_init (srv_base_context_t *srv_base, config_t *config)
 {
-  if (mt_context_init ((mt_context_t *)context, config) == S_FAILURE)
+  if (mt_context_init ((mt_context_t *)srv_base, config) == S_FAILURE)
     return (S_FAILURE);
 
-  if ((context->socket_fd = socket (AF_INET, SOCK_STREAM, 0)) == -1)
+  if ((srv_base->socket_fd = socket (AF_INET, SOCK_STREAM, 0)) == -1)
     {
       error ("Could not initialize server socket");
       return (S_FAILURE);
     }
 
   int option = 1;
-  if (setsockopt (context->socket_fd, SOL_SOCKET, SO_REUSEADDR, &option,
+  if (setsockopt (srv_base->socket_fd, SOL_SOCKET, SO_REUSEADDR, &option,
                   sizeof (option))
       == -1)
     {
@@ -35,20 +35,20 @@ serv_base_context_init (serv_base_context_t *context, config_t *config)
       goto fail;
     }
 
-  struct sockaddr_in serv_addr;
-  serv_addr.sin_family = AF_INET;
-  serv_addr.sin_addr.s_addr = inet_addr (config->addr);
-  serv_addr.sin_port = htons (config->port);
+  struct sockaddr_in srv_addr;
+  srv_addr.sin_family = AF_INET;
+  srv_addr.sin_addr.s_addr = inet_addr (config->addr);
+  srv_addr.sin_port = htons (config->port);
 
-  if (bind (context->socket_fd, (struct sockaddr *)&serv_addr,
-            sizeof (serv_addr))
+  if (bind (srv_base->socket_fd, (struct sockaddr *)&srv_addr,
+            sizeof (srv_addr))
       == -1)
     {
       error ("Could not bind socket");
       goto fail;
     }
 
-  if (listen (context->socket_fd, 10) == -1)
+  if (listen (srv_base->socket_fd, 10) == -1)
     {
       error ("Could not start listening to incoming connections");
       goto fail;
@@ -57,32 +57,32 @@ serv_base_context_init (serv_base_context_t *context, config_t *config)
   return (S_SUCCESS);
 
 fail:
-  close (context->socket_fd);
+  close (srv_base->socket_fd);
   return (S_FAILURE);
 }
 
 status_t
-serv_base_context_destroy (serv_base_context_t *context)
+srv_base_context_destroy (srv_base_context_t *srv_base)
 {
-  if (mt_context_destroy ((mt_context_t *)context) == S_FAILURE)
+  if (mt_context_destroy ((mt_context_t *)srv_base) == S_FAILURE)
     return (S_FAILURE);
 
-  if (context->socket_fd >= 0)
+  if (srv_base->socket_fd >= 0)
     {
-      shutdown (context->socket_fd, SHUT_RDWR);
-      if (close (context->socket_fd) != 0)
+      shutdown (srv_base->socket_fd, SHUT_RDWR);
+      if (close (srv_base->socket_fd) != 0)
         {
           error ("Could not close server socket");
           return (S_FAILURE);
         }
-      context->socket_fd = -1;
+      srv_base->socket_fd = -1;
     }
 
   return (S_SUCCESS);
 }
 
 status_t
-accept_client (int srv_socket_fd, int *cl_socket_fd)
+accept_client (int srv_socket_fd, int *client_socket_fd)
 {
   while (true)
     {
@@ -92,8 +92,8 @@ accept_client (int srv_socket_fd, int *cl_socket_fd)
           return (S_FAILURE);
         }
 
-      *cl_socket_fd = accept (srv_socket_fd, NULL, NULL);
-      if (*cl_socket_fd == -1)
+      *client_socket_fd = accept (srv_socket_fd, NULL, NULL);
+      if (*client_socket_fd == -1)
         {
           error ("Could not accept new connection: %s", strerror (errno));
           if (errno == EINVAL)
@@ -107,7 +107,7 @@ accept_client (int srv_socket_fd, int *cl_socket_fd)
   trace ("Accepted new connection");
 
   int option = 1;
-  if (setsockopt (*cl_socket_fd, IPPROTO_TCP, TCP_NODELAY, &option,
+  if (setsockopt (*client_socket_fd, IPPROTO_TCP, TCP_NODELAY, &option,
                   sizeof (option))
       == -1)
     {
@@ -211,7 +211,7 @@ send_task (int socket_fd, task_t *task)
 }
 
 status_t
-serv_signal_if_found (mt_context_t *ctx)
+srv_trysignal (mt_context_t *ctx)
 {
   if (pthread_mutex_lock (&ctx->mutex) != 0)
     {

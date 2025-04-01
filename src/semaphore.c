@@ -1,5 +1,7 @@
 #include "semaphore.h"
 
+#include "common.h"
+
 sem_status_t
 sem_init (sem_t *sem, int pshared, unsigned int value)
 {

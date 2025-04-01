@@ -2,7 +2,9 @@
 #define QUEUE_H
 
 #include "semaphore.h"
+
 #include <pthread.h>
+#include <stdbool.h>
 
 #define QUEUE_SIZE (8)
 

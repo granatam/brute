@@ -1,8 +1,8 @@
 #include "sync_server.h"
 
-#include "common.h"
 #include "log.h"
 #include "multi.h"
+#include "server_common.h"
 #include "thread_pool.h"
 
 #include <arpa/inet.h>
@@ -22,7 +22,7 @@
 
 typedef struct client_context_t
 {
-  serv_base_context_t *context;
+  srv_base_context_t *srv_base;
   int socket_fd;
 } client_context_t;
 
@@ -62,7 +62,7 @@ static void *
 handle_client (void *arg)
 {
   client_context_t *client_ctx = arg;
-  mt_context_t *mt_ctx = &client_ctx->context->context;
+  mt_context_t *mt_ctx = &client_ctx->srv_base->mt_ctx;
 
   if (send_config_data (client_ctx->socket_fd, mt_ctx) == S_FAILURE)
     return (NULL);
@@ -86,7 +86,7 @@ handle_client (void *arg)
           return (NULL);
         }
 
-      if (serv_signal_if_found (mt_ctx) == S_FAILURE)
+      if (srv_trysignal (mt_ctx) == S_FAILURE)
         return (NULL);
     }
 
@@ -96,17 +96,17 @@ handle_client (void *arg)
 static void *
 handle_clients (void *arg)
 {
-  serv_base_context_t *serv_ctx = *(serv_base_context_t **)arg;
-  mt_context_t *mt_ctx = &serv_ctx->context;
+  srv_base_context_t *srv_base = *(srv_base_context_t **)arg;
+  mt_context_t *mt_ctx = &srv_base->mt_ctx;
 
   client_context_t client_ctx = {
-    .context = serv_ctx,
+    .srv_base = srv_base,
   };
 
   while (true)
     {
       /* TODO: Probably we should not continue here */
-      if (accept_client (serv_ctx->socket_fd, &client_ctx.socket_fd)
+      if (accept_client (srv_base->socket_fd, &client_ctx.socket_fd)
           == S_FAILURE)
         continue;
 
@@ -126,28 +126,28 @@ handle_clients (void *arg)
 bool
 run_server (task_t *task, config_t *config)
 {
-  serv_base_context_t context;
-  serv_base_context_t *context_ptr = &context;
+  srv_base_context_t srv_base;
+  srv_base_context_t *base_ptr = &srv_base;
 
-  if (serv_base_context_init (&context, config) == S_FAILURE)
+  if (srv_base_context_init (base_ptr, config) == S_FAILURE)
     {
       error ("Could not initialize server context");
       return (false);
     }
 
-  if (!thread_create (&context.context.thread_pool, handle_clients,
-                      &context_ptr, sizeof (context_ptr), "sync accepter"))
+  if (!thread_create (&base_ptr->mt_ctx.thread_pool, handle_clients, &base_ptr,
+                      sizeof (base_ptr), "sync accepter"))
     {
       error ("Could not create clients thread");
       goto fail;
     }
 
-  mt_context_t *mt_ctx = (mt_context_t *)&context;
+  mt_context_t *mt_ctx = (mt_context_t *)base_ptr;
 
   if (process_tasks (task, config, mt_ctx) == S_FAILURE)
     goto fail;
 
-  if (serv_base_context_destroy (&context) == S_FAILURE)
+  if (srv_base_context_destroy (base_ptr) == S_FAILURE)
     error ("Could not destroy server context");
 
   trace ("Destroyed the server context");
@@ -157,7 +157,7 @@ run_server (task_t *task, config_t *config)
 fail:
   trace ("Failed, destroying server context");
 
-  if (serv_base_context_destroy (&context) == S_FAILURE)
+  if (srv_base_context_destroy (base_ptr) == S_FAILURE)
     error ("Could not destroy server context");
 
   return (false);

@@ -12,10 +12,10 @@
 
 typedef struct rsrv_context_t
 {
-  serv_base_context_t context;
+  srv_base_context_t srv_base;
   queue_t jobs_queue;
   queue_t starving_clients;
-  struct event_base *base;
+  struct event_base *ev_base;
   pthread_mutex_t mutex;
 } rsrv_context_t;
 
@@ -30,7 +30,7 @@ typedef struct client_state_t
 typedef struct client_context_t
 {
   struct event *read_event;
-  rsrv_context_t *context;
+  rsrv_context_t *rsrv_ctx;
   evutil_socket_t socket_fd;
   bool is_starving;
   bool is_writing;
@@ -41,7 +41,6 @@ typedef struct client_context_t
   client_state_t read_state;
   result_t read_buffer;
   pthread_mutex_t is_writing_mutex;
-  pthread_mutex_t write_state_mutex;
   pthread_mutex_t is_starving_mutex;
   pthread_mutex_t registry_used_mutex;
 } client_context_t;

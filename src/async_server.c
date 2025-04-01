@@ -21,7 +21,7 @@
 
 typedef struct client_context_t
 {
-  serv_base_context_t *context;
+  srv_base_context_t *srv_base;
   task_t registry[QUEUE_SIZE];
   queue_t registry_idx;
   bool registry_used[QUEUE_SIZE];
@@ -31,7 +31,7 @@ typedef struct client_context_t
 } client_context_t;
 
 static client_context_t *
-client_context_init (serv_base_context_t *global_ctx)
+client_context_init (srv_base_context_t *srv_base)
 {
   client_context_t *ctx = calloc (1, sizeof (*ctx));
   if (!ctx)
@@ -41,7 +41,7 @@ client_context_init (serv_base_context_t *global_ctx)
     }
   trace ("Allocated memory for client context");
 
-  ctx->context = global_ctx;
+  ctx->srv_base = srv_base;
 
   if (queue_init (&ctx->registry_idx, sizeof (int)) != QS_SUCCESS)
     {
@@ -105,7 +105,7 @@ client_context_destroy (client_context_t *ctx)
 static status_t
 return_tasks (client_context_t *ctx)
 {
-  mt_context_t *mt_ctx = &ctx->context->context;
+  mt_context_t *mt_ctx = &ctx->srv_base->mt_ctx;
   status_t status = S_SUCCESS;
 
   int i;
@@ -150,14 +150,14 @@ sender_receiver_cleanup (void *arg)
 static void *
 result_receiver (void *arg)
 {
-  client_context_t *cl_ctx = *(client_context_t **)arg;
-  mt_context_t *mt_ctx = &cl_ctx->context->context;
+  client_context_t *client_ctx = *(client_context_t **)arg;
+  mt_context_t *mt_ctx = &client_ctx->srv_base->mt_ctx;
 
-  pthread_cleanup_push (sender_receiver_cleanup, cl_ctx);
+  pthread_cleanup_push (sender_receiver_cleanup, client_ctx);
   while (true)
     {
       result_t task;
-      if (recv_wrapper (cl_ctx->socket_fd, &task, sizeof (task), 0)
+      if (recv_wrapper (client_ctx->socket_fd, &task, sizeof (task), 0)
           == S_FAILURE)
         {
           error ("Could not receive result from client");
@@ -177,7 +177,7 @@ result_receiver (void *arg)
       trace ("Received %s result %s from client",
              task.is_correct ? "correct" : "incorrect", task.password);
 
-      if (queue_push (&cl_ctx->registry_idx, &task.id) != QS_SUCCESS)
+      if (queue_push (&client_ctx->registry_idx, &task.id) != QS_SUCCESS)
         {
           error ("Could not return id to a queue");
           break;
@@ -185,9 +185,9 @@ result_receiver (void *arg)
 
       trace ("Pushed index of received task back to indices queue");
 
-      cl_ctx->registry_used[task.id] = false;
+      client_ctx->registry_used[task.id] = false;
 
-      if (serv_signal_if_found (mt_ctx) == S_FAILURE)
+      if (srv_trysignal (mt_ctx) == S_FAILURE)
         break;
 
       if (mt_ctx->password[0] != 0)
@@ -203,44 +203,44 @@ result_receiver (void *arg)
 static void *
 task_sender (void *arg)
 {
-  client_context_t *cl_ctx = *(client_context_t **)arg;
-  mt_context_t *mt_ctx = &cl_ctx->context->context;
+  client_context_t *client_ctx = *(client_context_t **)arg;
+  mt_context_t *mt_ctx = &client_ctx->srv_base->mt_ctx;
 
-  pthread_cleanup_push (sender_receiver_cleanup, cl_ctx);
-  if (send_config_data (cl_ctx->socket_fd, mt_ctx) == S_FAILURE)
+  pthread_cleanup_push (sender_receiver_cleanup, client_ctx);
+  if (send_config_data (client_ctx->socket_fd, mt_ctx) == S_FAILURE)
     goto cleanup;
 
   while (true)
     {
       int id;
-      if (queue_pop (&cl_ctx->registry_idx, &id) != QS_SUCCESS)
+      if (queue_pop (&client_ctx->registry_idx, &id) != QS_SUCCESS)
         break;
 
       trace ("Got index from registry");
 
-      task_t *task = &cl_ctx->registry[id];
+      task_t *task = &client_ctx->registry[id];
       if (queue_pop (&mt_ctx->queue, task) != QS_SUCCESS)
         {
-          if (queue_push (&cl_ctx->registry_idx, &id) != QS_SUCCESS)
+          if (queue_push (&client_ctx->registry_idx, &id) != QS_SUCCESS)
             error ("Could not push back id to registry indices queue");
           break;
         }
 
       trace ("Got task from global queue");
 
-      cl_ctx->registry_used[id] = true;
+      client_ctx->registry_used[id] = true;
 
       task_t task_copy = *task;
       task_copy.task.id = id;
       task_copy.to = task->from;
       task_copy.from = 0;
 
-      if (send_task (cl_ctx->socket_fd, &task_copy) == S_FAILURE)
+      if (send_task (client_ctx->socket_fd, &task_copy) == S_FAILURE)
         {
           error ("Could not send task to client");
           if (queue_push_back (&mt_ctx->queue, task) != QS_SUCCESS)
             error ("Could not push back task to global queue");
-          cl_ctx->registry_used[task->task.id] = false;
+          client_ctx->registry_used[task->task.id] = false;
           break;
         }
     }
@@ -265,20 +265,20 @@ accepter_cleanup (void *arg)
 static void *
 handle_clients (void *arg)
 {
-  serv_base_context_t *srv_ctx = *(serv_base_context_t **)arg;
-  mt_context_t *mt_ctx = &srv_ctx->context;
+  srv_base_context_t *srv_base = *(srv_base_context_t **)arg;
+  mt_context_t *mt_ctx = &srv_base->mt_ctx;
 
   client_context_t *client_ctx = NULL;
   pthread_cleanup_push (accepter_cleanup, &client_ctx);
   while (true)
     {
       if (!client_ctx)
-        client_ctx = client_context_init (srv_ctx);
+        client_ctx = client_context_init (srv_base);
 
       if (!client_ctx)
         break;
 
-      if (accept_client (srv_ctx->socket_fd, &client_ctx->socket_fd)
+      if (accept_client (srv_base->socket_fd, &client_ctx->socket_fd)
           == S_FAILURE)
         goto cleanup;
 
@@ -318,28 +318,28 @@ bool
 run_async_server (task_t *task, config_t *config)
 {
   signal (SIGPIPE, SIG_IGN);
-  serv_base_context_t context;
-  serv_base_context_t *context_ptr = &context;
+  srv_base_context_t srv_base;
+  srv_base_context_t *base_ptr = &srv_base;
 
-  if (serv_base_context_init (&context, config) == S_FAILURE)
+  if (srv_base_context_init (base_ptr, config) == S_FAILURE)
     {
       error ("Could not initialize server context");
       return (false);
     }
 
-  if (!thread_create (&context.context.thread_pool, handle_clients,
-                      &context_ptr, sizeof (context_ptr), "async accepter"))
+  if (!thread_create (&srv_base.mt_ctx.thread_pool, handle_clients, &base_ptr,
+                      sizeof (base_ptr), "async accepter"))
     {
       error ("Could not create clients thread");
       goto fail;
     }
 
-  mt_context_t *mt_ctx = (mt_context_t *)&context;
+  mt_context_t *mt_ctx = (mt_context_t *)base_ptr;
 
   if (process_tasks (task, config, mt_ctx) == S_FAILURE)
     goto fail;
 
-  if (serv_base_context_destroy (&context) == S_FAILURE)
+  if (srv_base_context_destroy (base_ptr) == S_FAILURE)
     error ("Could not destroy server context");
 
   trace ("Destroyed server context");
@@ -349,7 +349,7 @@ run_async_server (task_t *task, config_t *config)
 fail:
   trace ("Failed, destroying server context");
 
-  if (serv_base_context_destroy (&context) == S_FAILURE)
+  if (srv_base_context_destroy (base_ptr) == S_FAILURE)
     error ("Could not destroy server context");
 
   return (false);
