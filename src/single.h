@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "config.h"
+
 #include <stdbool.h>
 
 #ifndef __FreeBSD__

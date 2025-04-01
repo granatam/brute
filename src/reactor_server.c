@@ -38,15 +38,15 @@ rsrv_ctx_init (rsrv_context_t *ctx)
       return (S_FAILURE);
     }
 
-  ctx->base = event_base_new ();
-  if (!ctx->base)
+  ctx->ev_base = event_base_new ();
+  if (!ctx->ev_base)
     {
       error ("Could not initialize event base");
       return (S_FAILURE);
     }
   trace ("Allocated memory for event loop base");
 
-  if (evutil_make_socket_nonblocking (ctx->context.socket_fd) < 0)
+  if (evutil_make_socket_nonblocking (ctx->srv_base.socket_fd) < 0)
     {
       error ("Could not change socket to be nonblocking");
       return (S_FAILURE);
@@ -68,10 +68,10 @@ typedef struct event_list_t
 } event_list_t;
 
 static int
-collect_events_cb (const struct event_base *base, const struct event *ev,
+collect_events_cb (const struct event_base *ev_base, const struct event *ev,
                    void *arg)
 {
-  (void)base; /* to suppress the "unused parameter" warning */
+  (void)ev_base; /* to suppress the "unused parameter" warning */
 
   event_list_t *list = arg;
   event_node_t *node = calloc (1, sizeof (*node));
@@ -108,10 +108,10 @@ clients_cleanup (event_list_t *list)
 static status_t
 rsrv_context_destroy (rsrv_context_t *ctx)
 {
-  event_base_loopbreak (ctx->base);
+  event_base_loopbreak (ctx->ev_base);
   trace ("Stopped event loop");
 
-  if (serv_base_context_destroy (&ctx->context) == S_FAILURE)
+  if (srv_base_context_destroy (&ctx->srv_base) == S_FAILURE)
     {
       error ("Could not destroy server context");
       return (S_FAILURE);
@@ -134,9 +134,9 @@ rsrv_context_destroy (rsrv_context_t *ctx)
   ev_list.head.prev = &ev_list.head;
   ev_list.head.next = &ev_list.head;
   ev_list.head.ev = NULL;
-  event_base_foreach_event (ctx->base, collect_events_cb, &ev_list);
+  event_base_foreach_event (ctx->ev_base, collect_events_cb, &ev_list);
   clients_cleanup (&ev_list);
-  event_base_free (ctx->base);
+  event_base_free (ctx->ev_base);
   trace ("Deallocated clients contexts");
 
   return (S_SUCCESS);
@@ -145,7 +145,7 @@ rsrv_context_destroy (rsrv_context_t *ctx)
 static void handle_read (evutil_socket_t, short, void *);
 
 static client_context_t *
-client_context_init (rsrv_context_t *srv_ctx, evutil_socket_t fd)
+client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
 {
   client_context_t *client_ctx = calloc (1, sizeof (*client_ctx));
   if (!client_ctx)
@@ -156,12 +156,12 @@ client_context_init (rsrv_context_t *srv_ctx, evutil_socket_t fd)
   trace ("Allocated memory for client context");
 
   client_ctx->socket_fd = fd;
-  client_ctx->context = srv_ctx;
+  client_ctx->rsrv_ctx = rsrv_ctx;
   client_ctx->read_state.vec[0].iov_base = &client_ctx->read_buffer;
   client_ctx->read_state.vec[0].iov_len = sizeof (client_ctx->read_buffer);
   client_ctx->read_state.vec_sz = 1;
 
-  mt_context_t *mt_ctx = &client_ctx->context->context.context;
+  mt_context_t *mt_ctx = &client_ctx->rsrv_ctx->srv_base.mt_ctx;
 
   client_ctx->write_state.cmd[0] = CMD_HASH;
   client_ctx->write_state.vec[0].iov_base = &client_ctx->write_state.cmd[0];
@@ -208,8 +208,8 @@ client_context_init (rsrv_context_t *srv_ctx, evutil_socket_t fd)
     }
 
   client_ctx->read_event
-      = event_new (srv_ctx->base, client_ctx->socket_fd, EV_READ | EV_PERSIST,
-                   handle_read, client_ctx);
+      = event_new (rsrv_ctx->ev_base, client_ctx->socket_fd,
+                   EV_READ | EV_PERSIST, handle_read, client_ctx);
   if (!client_ctx->read_event)
     {
       error ("Could not create read event");
@@ -226,7 +226,7 @@ fail:
 static status_t
 return_tasks (client_context_t *ctx)
 {
-  mt_context_t *mt_ctx = &ctx->context->context.context;
+  mt_context_t *mt_ctx = &ctx->rsrv_ctx->srv_base.mt_ctx;
   status_t status = S_SUCCESS;
 
   int i;
@@ -281,7 +281,7 @@ push_job (client_context_t *ctx, status_t (*job_func) (void *))
     .arg = ctx,
     .job_func = job_func,
   };
-  if (queue_push_back (&ctx->context->jobs_queue, &job) != QS_SUCCESS)
+  if (queue_push_back (&ctx->rsrv_ctx->jobs_queue, &job) != QS_SUCCESS)
     {
       error ("Could not push job to a job queue");
       return (S_FAILURE);
@@ -394,7 +394,7 @@ create_task_job (void *arg)
   trace ("Got index %d from registry", id);
 
   task_t *task = &ctx->registry[id];
-  mt_context_t *mt_ctx = &ctx->context->context.context;
+  mt_context_t *mt_ctx = &ctx->rsrv_ctx->srv_base.mt_ctx;
 
   qs = queue_trypop (&mt_ctx->queue, task);
   if (qs == QS_EMPTY)
@@ -410,7 +410,7 @@ create_task_job (void *arg)
           return (S_FAILURE);
         }
       trace ("Pushed id %d back to registry indices queue", id);
-      if (queue_push_back (&ctx->context->starving_clients, &ctx)
+      if (queue_push_back (&ctx->rsrv_ctx->starving_clients, &ctx)
           == QS_FAILURE)
         {
           error ("Could not push index to registry indices queue");
@@ -469,7 +469,7 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
   (void)socket_fd; /* to suppress "unused parameter" warning */
 
   client_context_t *ctx = arg;
-  mt_context_t *mt_ctx = &ctx->context->context.context;
+  mt_context_t *mt_ctx = &ctx->rsrv_ctx->srv_base.mt_ctx;
 
   size_t bytes_read
       = readv (ctx->socket_fd, ctx->read_state.vec, ctx->read_state.vec_sz);
@@ -519,9 +519,9 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
           return;
         }
       memcpy (mt_ctx->password, result->password, sizeof (result->password));
-      if (serv_signal_if_found (mt_ctx) == S_FAILURE)
+      if (srv_trysignal (mt_ctx) == S_FAILURE)
         return;
-      event_base_loopbreak (ctx->context->base);
+      event_base_loopbreak (ctx->rsrv_ctx->ev_base);
     }
 
   trace ("Received %s result %s with id %d from client",
@@ -572,7 +572,7 @@ handle_starving_clients (void *arg)
       trace ("Got id for a starving client: %d", id);
 
       task_t *task = &client->registry[id];
-      if (queue_pop (&ctx->context.context.queue, task) != QS_SUCCESS)
+      if (queue_pop (&ctx->srv_base.mt_ctx.queue, task) != QS_SUCCESS)
         {
           error ("Could not pop from the global queue");
           return (NULL);
@@ -621,7 +621,7 @@ handle_io (void *arg)
         }
     }
 
-  event_base_loopbreak (ctx->base);
+  event_base_loopbreak (ctx->ev_base);
   return (NULL);
 }
 
@@ -629,7 +629,7 @@ static void *
 dispatch_event_loop (void *arg)
 {
   rsrv_context_t *ctx = *(rsrv_context_t **)arg;
-  if (event_base_dispatch (ctx->base) != 0)
+  if (event_base_dispatch (ctx->ev_base) != 0)
     error ("Could not dispatch the event loop");
 
   return (NULL);
@@ -642,7 +642,7 @@ handle_accept_error (struct evconnlistener *listener, void *arg)
 
   warn ("Got error on connection accept: %m");
   rsrv_context_t *ctx = arg;
-  event_base_loopbreak (ctx->base);
+  event_base_loopbreak (ctx->ev_base);
 }
 
 static void
@@ -697,19 +697,19 @@ run_reactor_server (task_t *task, config_t *config)
   rsrv_context_t rsrv_ctx;
   rsrv_context_t *context_ptr = &rsrv_ctx;
 
-  if (serv_base_context_init (&rsrv_ctx.context, config) == S_FAILURE)
+  if (srv_base_context_init (&rsrv_ctx.srv_base, config) == S_FAILURE)
     {
       error ("Could not initialize server context");
-      serv_base_context_destroy (&rsrv_ctx.context);
+      srv_base_context_destroy (&rsrv_ctx.srv_base);
       return (false);
     }
 
   if (rsrv_ctx_init (context_ptr) == S_FAILURE)
     goto fail;
 
-  struct evconnlistener *listener
-      = evconnlistener_new (rsrv_ctx.base, handle_accept, &rsrv_ctx,
-                            LEV_OPT_REUSEABLE, -1, rsrv_ctx.context.socket_fd);
+  struct evconnlistener *listener = evconnlistener_new (
+      rsrv_ctx.ev_base, handle_accept, &rsrv_ctx, LEV_OPT_REUSEABLE, -1,
+      rsrv_ctx.srv_base.socket_fd);
   if (!listener)
     {
       error ("Could not create a listener");
@@ -717,7 +717,7 @@ run_reactor_server (task_t *task, config_t *config)
     }
   evconnlistener_set_error_cb (listener, handle_accept_error);
 
-  thread_pool_t *thread_pool = &rsrv_ctx.context.context.thread_pool;
+  thread_pool_t *thread_pool = &rsrv_ctx.srv_base.mt_ctx.thread_pool;
 
   int number_of_threads
       = (config->number_of_threads > 2) ? config->number_of_threads - 2 : 1;

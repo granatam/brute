@@ -79,7 +79,7 @@ mt_context_destroy (mt_context_t *context)
 }
 
 static status_t
-signal_if_found (mt_context_t *ctx)
+trysignal (mt_context_t *ctx)
 {
   if (pthread_mutex_lock (&ctx->mutex) != 0)
     {
@@ -123,7 +123,7 @@ mt_password_check (void *context)
         memcpy (mt_ctx->password, task.task.password,
                 sizeof (task.task.password));
 
-      if (signal_if_found (mt_ctx) == S_FAILURE)
+      if (trysignal (mt_ctx) == S_FAILURE)
         return (NULL);
     }
 

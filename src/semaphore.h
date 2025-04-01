@@ -1,7 +1,6 @@
 #ifndef SEMAPHORE_H
 #define SEMAPHORE_H
 
-#include "common.h"
 #include <pthread.h>
 
 typedef enum sem_status_t
