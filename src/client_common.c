@@ -1,6 +1,5 @@
 #include "client_common.h"
 
-#include "common.h"
 #include "log.h"
 
 #include <arpa/inet.h>
