@@ -62,9 +62,7 @@ thread_run (void *arg)
   memcpy (args, local_ctx.arg, local_ctx.arg_size);
 
   if (pthread_setcancelstate (PTHREAD_CANCEL_DISABLE, NULL) != 0)
-    {
-      error ("Could not set cancel state");
-    }
+    error ("Could not set cancel state");
 
   if (pthread_mutex_unlock (&tp_ctx->mutex) != 0)
     {
@@ -100,14 +98,10 @@ thread_run (void *arg)
   pthread_cleanup_push (thread_cleanup, &tcc);
 
   if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
-    {
-      error ("Could not unlock mutex");
-    }
+    error ("Could not unlock mutex");
 
   if (pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL) != 0)
-    {
-      error ("Could not set cancel state for a thread");
-    }
+    error ("Could not set cancel state for a thread");
   else
     local_ctx.func (args);
 
@@ -175,9 +169,7 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg,
 
       --thread_pool->count;
       if (pthread_cond_signal (&thread_pool->cond) != 0)
-        {
-          error ("Could not signal a conditional semaphore");
-        }
+        error ("Could not signal a conditional semaphore");
 
       pthread_cleanup_pop (!0);
 
@@ -230,9 +222,7 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
 
       if (cancel)
         if (pthread_cancel (thread) != 0)
-          {
-            error ("Could not cancel a thread");
-          }
+          error ("Could not cancel a thread");
 
       while (thread_pool->threads.next->thread == thread)
         if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
@@ -300,9 +290,7 @@ create_threads (thread_pool_t *thread_pool, int number_of_threads,
       ++active_threads;
 
   if (active_threads == 0)
-    {
-      error ("Could not create a single thread");
-    }
+    error ("Could not create a single thread");
 
   return (active_threads);
 }

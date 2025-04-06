@@ -33,7 +33,7 @@ queue_init (queue_t *queue, size_t unit_size)
   return (QS_SUCCESS);
 
 fail:
-  trace ("queue init failed");
+  trace ("Failed to initialize queue");
   queue->active = false;
   return (QS_FAILURE);
 }
