@@ -1,5 +1,6 @@
 #include "client_common.h"
 
+#include "common.h"
 #include "log.h"
 
 #include <arpa/inet.h>
@@ -22,6 +23,7 @@ handle_alph (int socket_fd, char *alph)
       error ("Could not receive alphabet from server");
       return (S_FAILURE);
     }
+  alph[length] = 0;
 
   return (S_SUCCESS);
 }

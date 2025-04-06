@@ -137,7 +137,7 @@ run_client (config_t *config, task_callback_t task_callback)
               error ("Could not handle alphabet");
               goto end;
             }
-          trace ("Received alphabet from server");
+          trace ("Received alphabet '%s' from server", alph);
           break;
         case CMD_HASH:
           if (handle_hash (socket_fd, hash) == S_FAILURE)
@@ -146,7 +146,7 @@ run_client (config_t *config, task_callback_t task_callback)
               goto end;
             }
           st_context.hash = hash;
-          trace ("Received hash from server");
+          trace ("Received hash '%s' from server", hash);
           break;
         case CMD_TASK:
           trace ("Received task command from server");
