@@ -20,6 +20,12 @@ with warnings.catch_warnings():
 
 from hypothesis import Phase
 
+from hypothesis import settings
+
+MAX_EXAMPLES = os.getenv("HYPOTHESIS_MAX_EXAMPLES", "100")
+settings.register_profile("custom", max_examples=int(MAX_EXAMPLES))
+settings.load_profile("custom")
+
 phases = (Phase.explicit, Phase.reuse, Phase.generate, Phase.target)
 
 CPU_COUNT = os.cpu_count() or 8
