@@ -21,16 +21,11 @@ typedef struct rsrv_context_t
 
 typedef struct client_state_t
 {
-  struct iovec vec[3];
+  struct iovec vec[5];
   size_t vec_sz;
-  command_t cmd;
+  command_t cmd[2];
+  int32_t length;
 } client_state_t;
-
-typedef struct old_client_state_t
-{
-  void *buf;
-  size_t len;
-} old_client_state_t;
 
 typedef struct cl_ctx_t
 {
@@ -43,7 +38,7 @@ typedef struct cl_ctx_t
   task_t registry[QUEUE_SIZE];
   queue_t registry_idx;
   client_state_t write_state;
-  old_client_state_t read_state;
+  client_state_t read_state;
   result_t read_buffer;
   pthread_mutex_t is_writing_mutex;
   pthread_mutex_t write_state_mutex;

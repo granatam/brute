@@ -153,12 +153,32 @@ cl_ctx_init (rsrv_context_t *srv_ctx, evutil_socket_t fd)
       return (NULL);
     }
   trace ("Allocated memory for client context");
+
   cl_ctx->socket_fd = fd;
   cl_ctx->context = srv_ctx;
-  cl_ctx->read_state = (old_client_state_t){
-    .len = 0,
-    .buf = &cl_ctx->read_buffer,
-  };
+  cl_ctx->read_state.vec[0].iov_base = &cl_ctx->read_buffer;
+  cl_ctx->read_state.vec[0].iov_len = sizeof (cl_ctx->read_buffer);
+  cl_ctx->read_state.vec_sz = 1;
+
+  mt_context_t *mt_ctx = &cl_ctx->context->context.context;
+
+  cl_ctx->write_state.cmd[0] = CMD_HASH;
+  cl_ctx->write_state.vec[0].iov_base = &cl_ctx->write_state.cmd[0];
+  cl_ctx->write_state.vec[0].iov_len = sizeof (cl_ctx->write_state.cmd[0]);
+  cl_ctx->write_state.vec[1].iov_base = mt_ctx->config->hash;
+  cl_ctx->write_state.vec[1].iov_len = HASH_LENGTH;
+
+  cl_ctx->write_state.cmd[1] = CMD_ALPH;
+  cl_ctx->write_state.length = strlen (mt_ctx->config->alph);
+  cl_ctx->write_state.vec[2].iov_base = &cl_ctx->write_state.cmd[1];
+  cl_ctx->write_state.vec[2].iov_len = sizeof (cl_ctx->write_state.cmd[1]);
+  cl_ctx->write_state.vec[3].iov_base = &cl_ctx->write_state.length;
+  cl_ctx->write_state.vec[3].iov_len = sizeof (cl_ctx->write_state.length);
+  cl_ctx->write_state.vec[4].iov_base = mt_ctx->config->alph;
+  cl_ctx->write_state.vec[4].iov_len = cl_ctx->write_state.length;
+
+  cl_ctx->write_state.vec_sz = 5;
+
   cl_ctx->is_starving = false;
 
   pthread_mutex_init (&cl_ctx->is_writing_mutex, NULL);
@@ -198,18 +218,44 @@ fail:
   return (NULL);
 }
 
+static status_t
+return_tasks (cl_ctx_t *ctx)
+{
+  mt_context_t *mt_ctx = &ctx->context->context.context;
+  status_t status = S_SUCCESS;
+
+  int i;
+  for (i = 0; i < QUEUE_SIZE; ++i)
+    {
+      if (ctx->registry_used[i])
+        {
+          if (queue_push_back (&mt_ctx->queue, &ctx->registry[i])
+              != QS_SUCCESS)
+            {
+              status = S_FAILURE;
+              break;
+            }
+          ctx->registry_used[i] = false;
+        }
+    }
+
+  return (status);
+}
+
 static void
 cl_ctx_destroy (cl_ctx_t *ctx)
 {
+  /* TODO: Remove braces in one-line statements.  */
+  if (return_tasks (ctx) == S_FAILURE)
+    error ("Could not return tasks to global queue");
+
   pthread_mutex_destroy (&ctx->is_writing_mutex);
   pthread_mutex_destroy (&ctx->is_starving_mutex);
   pthread_mutex_destroy (&ctx->registry_used_mutex);
   trace ("Destroyed client's mutexes");
 
   if (queue_destroy (&ctx->registry_idx) != QS_SUCCESS)
-    {
-      error ("Could not destroy registry indices queue");
-    }
+    error ("Could not destroy registry indices queue");
   trace ("Destroyed registry indices queue");
 
   shutdown (ctx->socket_fd, SHUT_RDWR);
@@ -217,9 +263,7 @@ cl_ctx_destroy (cl_ctx_t *ctx)
   trace ("Closed client socket");
 
   if (event_del (ctx->read_event) == -1)
-    {
-      error ("Could not delete read event");
-    }
+    error ("Could not delete read event");
   event_free (ctx->read_event);
   free (ctx);
   trace ("Deleted and deallocated event, free'd client context");
@@ -244,48 +288,48 @@ push_job (cl_ctx_t *ctx, status_t (*job_func) (void *))
 static status_t create_task_job (void *);
 
 static status_t
+write_state_write (int socket_fd, client_state_t *write_state)
+{
+  size_t actual_write
+      = writev (socket_fd, write_state->vec, write_state->vec_sz);
+
+  if ((ssize_t)actual_write <= 0)
+    {
+      error ("Could not send config data to client");
+      return (S_FAILURE);
+    }
+
+  size_t i = 0;
+  while (actual_write > 0 && write_state->vec[i].iov_len <= actual_write)
+    actual_write -= write_state->vec[i++].iov_len;
+
+  write_state->vec_sz -= i;
+  memmove (&write_state->vec[0], &write_state->vec[i],
+           sizeof (struct iovec) * write_state->vec_sz);
+
+  write_state->vec[i].iov_base += actual_write;
+  write_state->vec[i].iov_len -= actual_write;
+
+  return (S_SUCCESS);
+}
+
+static status_t
 send_task_job (void *arg)
 {
   if (!arg)
     return (S_FAILURE);
   cl_ctx_t *ctx = arg;
 
-  size_t i;
-  size_t expected_write = 0;
-  for (i = 0; i < ctx->write_state.vec_sz; ++i)
-    expected_write += ctx->write_state.vec[i].iov_len;
-
-  size_t actual_write = 0;
-  status_t status
-      = send_wrapper_nonblock (ctx->socket_fd, ctx->write_state.vec,
-                               ctx->write_state.vec_sz, &actual_write);
-  if (status == S_FAILURE)
+  status_t status = write_state_write (ctx->socket_fd, &ctx->write_state);
+  if (status != S_SUCCESS)
     {
-      error ("Could not send task to client, expected count: %d, actual: %d",
-             expected_write, actual_write);
+      error ("Could not send task to client");
       cl_ctx_destroy (ctx);
       return (S_SUCCESS);
     }
 
-  bool full = actual_write == expected_write;
-  i = 0;
-  while (actual_write > 0 && ctx->write_state.vec[i].iov_len <= actual_write)
-    {
-      actual_write -= ctx->write_state.vec[i].iov_len;
-      size_t j;
-      for (j = i; j < ctx->write_state.vec_sz; ++j)
-        memmove (&ctx->write_state.vec[j], &ctx->write_state.vec[j + 1],
-                 sizeof (struct iovec));
-      --ctx->write_state.vec_sz;
-      break;
-    }
-
-  ctx->write_state.vec[i].iov_base += actual_write;
-  ctx->write_state.vec[i].iov_len -= actual_write;
-  if (!full)
-    {
-      return (push_job (ctx, send_task_job));
-    }
+  if (ctx->write_state.vec_sz != 0)
+    return (push_job (ctx, send_task_job));
 
   trace ("Sent task to client");
 
@@ -294,6 +338,22 @@ send_task_job (void *arg)
   pthread_mutex_unlock (&ctx->is_writing_mutex);
 
   return (push_job (ctx, create_task_job));
+}
+
+static void
+task_write_state_setup (cl_ctx_t *ctx, int id)
+{
+  task_t *task = &ctx->registry[id];
+  task->task.id = id;
+  task->to = task->from;
+  task->from = 0;
+  task->task.is_correct = false;
+  ctx->write_state.cmd[0] = CMD_TASK;
+  ctx->write_state.vec[0].iov_base = &ctx->write_state.cmd[0];
+  ctx->write_state.vec[0].iov_len = sizeof (ctx->write_state.cmd[0]);
+  ctx->write_state.vec[1].iov_base = task;
+  ctx->write_state.vec[1].iov_len = sizeof (*task);
+  ctx->write_state.vec_sz = 2;
 }
 
 static status_t
@@ -380,18 +440,9 @@ create_task_job (void *arg)
   pthread_mutex_lock (&ctx->registry_used_mutex);
   ctx->registry_used[id] = true;
   pthread_mutex_unlock (&ctx->registry_used_mutex);
-  trace ("%p: Set id %d in registry_used as true", ctx, id);
+  trace ("Set id %d in registry_used as true", id);
 
-  task->task.id = id;
-  task->to = task->from;
-  task->from = 0;
-  task->task.is_correct = false;
-  ctx->write_state.cmd = CMD_TASK;
-  ctx->write_state.vec[0].iov_base = &ctx->write_state.cmd;
-  ctx->write_state.vec[0].iov_len = sizeof (ctx->write_state.cmd);
-  ctx->write_state.vec[1].iov_base = task;
-  ctx->write_state.vec[1].iov_len = sizeof (*task);
-  ctx->write_state.vec_sz = 2;
+  task_write_state_setup (ctx, id);
 
   return (push_job (ctx, send_task_job));
 }
@@ -403,15 +454,16 @@ send_config_job (void *arg)
     return (S_FAILURE);
 
   cl_ctx_t *ctx = arg;
-  mt_context_t *mt_ctx = &ctx->context->context.context;
 
-  // TODO: async write (send_task)
-  // Impl abstract function that supports set of buffers (write_state, fixed
-  // size = 2, pointer and len)
-  if (send_config_data (ctx->socket_fd, mt_ctx) == S_FAILURE)
-    return (S_FAILURE);
+  status_t status = write_state_write (ctx->socket_fd, &ctx->write_state);
+  if (status != S_SUCCESS)
+    {
+      error ("Could not send config data to client");
+      return (S_FAILURE);
+    }
 
-  return (push_job (ctx, create_task_job));
+  return (push_job (ctx, ctx->write_state.vec_sz != 0 ? send_config_job
+                                                      : create_task_job));
 }
 
 static void
@@ -424,25 +476,24 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
   cl_ctx_t *ctx = arg;
   mt_context_t *mt_ctx = &ctx->context->context.context;
 
-  char *buf = ((char *)&ctx->read_buffer) + ctx->read_state.len;
-  ssize_t expected_read = sizeof (ctx->read_buffer) - ctx->read_state.len;
-  int actual_read = 0;
-  status_t status = recv_wrapper_nonblock (ctx->socket_fd, buf, expected_read,
-                                           0, &actual_read);
-
-  if (status == S_FAILURE || actual_read != expected_read)
+  size_t bytes_read
+      = readv (ctx->socket_fd, ctx->read_state.vec, ctx->read_state.vec_sz);
+  if ((ssize_t)bytes_read <= 0)
     {
-      if (actual_read == -1)
-        {
-          error ("Could not read result from a client");
-          cl_ctx_destroy (ctx);
-          return;
-        }
-
-      ctx->read_state.len += actual_read;
+      error ("Could not read result from a client");
+      cl_ctx_destroy (ctx);
       return;
     }
-  ctx->read_state.len = 0;
+
+  ctx->read_state.vec[0].iov_len -= bytes_read;
+  ctx->read_state.vec[0].iov_base += bytes_read;
+
+  if (ctx->read_state.vec[0].iov_len > 0)
+    return;
+
+  ctx->read_state.vec[0].iov_len = sizeof (ctx->read_buffer);
+  ctx->read_state.vec[0].iov_base = &ctx->read_buffer;
+  ctx->read_state.vec_sz = 1;
 
   result_t *result = &ctx->read_buffer;
 
@@ -453,7 +504,7 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
 
   if (!is_used)
     {
-      warn ("%p: Unexpected result id: %d", ctx, result->id);
+      warn ("Unexpected result id: %d", result->id);
       return;
     }
 
@@ -533,16 +584,7 @@ handle_starving_clients (void *arg)
         }
       trace ("Got task for a starving client");
 
-      task->task.id = id;
-      task->to = task->from;
-      task->from = 0;
-      task->task.is_correct = false;
-      client->write_state.cmd = CMD_TASK;
-      client->write_state.vec[0].iov_base = &client->write_state.cmd;
-      client->write_state.vec[0].iov_len = sizeof (client->write_state.cmd);
-      client->write_state.vec[1].iov_base = task;
-      client->write_state.vec[1].iov_len = sizeof (*task);
-      client->write_state.vec_sz = 2;
+      task_write_state_setup (client, id);
 
       trace ("Set up starving client write state");
 
@@ -682,10 +724,6 @@ run_reactor_server (task_t *task, config_t *config)
 
   thread_pool_t *thread_pool = &rsrv_ctx.context.context.thread_pool;
 
-  // TODO: define PTR_SIZE 8 to get rid of annoying clang-tidy warning?
-  // Or maybe better solution will be to disable this warning in .clang-tidy
-  // config file
-  // Suspicious usage of sizeof() on an expression of pointer type
   int number_of_threads
       = (config->number_of_threads > 2) ? config->number_of_threads - 2 : 1;
   if (create_threads (thread_pool, number_of_threads, handle_io, &context_ptr,

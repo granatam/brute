@@ -74,12 +74,12 @@ typedef enum log_level_t
 #define LOG_LEVEL ERROR
 #endif
 
-#define trace(...) PASTE2 (TRACE, LOG_LEVEL) (LL_TRACE, __VA_ARGS__)
-#define debug(...) PASTE2 (DEBUG, LOG_LEVEL) (LL_DEBUG, __VA_ARGS__)
-#define info(...) PASTE2 (INFO, LOG_LEVEL) (LL_INFO, __VA_ARGS__)
-#define warn(...) PASTE2 (WARN, LOG_LEVEL) (LL_WARN, __VA_ARGS__)
-#define error(...) PASTE2 (ERROR, LOG_LEVEL) (LL_ERROR, __VA_ARGS__)
-#define fatal(...) PASTE2 (FATAL, LOG_LEVEL) (LL_FATAL, __VA_ARGS__)
+#define trace(...) ({ PASTE2 (TRACE, LOG_LEVEL) (LL_TRACE, __VA_ARGS__); })
+#define debug(...) ({ PASTE2 (DEBUG, LOG_LEVEL) (LL_DEBUG, __VA_ARGS__); })
+#define info(...) ({ PASTE2 (INFO, LOG_LEVEL) (LL_INFO, __VA_ARGS__); })
+#define warn(...) ({ PASTE2 (WARN, LOG_LEVEL) (LL_WARN, __VA_ARGS__); })
+#define error(...) ({ PASTE2 (ERROR, LOG_LEVEL) (LL_ERROR, __VA_ARGS__); })
+#define fatal(...) ({ PASTE2 (FATAL, LOG_LEVEL) (LL_FATAL, __VA_ARGS__); })
 
 status_t message_impl (log_level_t log_level, const char *file_name,
                        const char *func_name, int line, const char *msg, ...);
