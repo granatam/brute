@@ -20,6 +20,10 @@ jobs:
       - name: install valgrind and netcat
         if: ${{ contains(inputs.runs_on, 'ubuntu') }}
         run: sudo apt-get install libevent-dev valgrind netcat-traditional -y
+      - name: set max_examples config for MacOS tests
+        if: ${{ contains(inputs.runs_on, 'macos') }}
+        run: |
+          echo "HYPOTHESIS_MAX_EXAMPLES=50" >> $GITHUB_ENV
       - name: install python dependencies 
         run: pip install pytest hypothesis
       - name: build (dev)

@@ -20,7 +20,7 @@ jobs:
                 export CFLAGS="-I$(brew --prefix libevent)/include $CFLAGS"
                 export LIBS="-L$(brew --prefix libevent)/lib"
           - name: x86 MacOS (clang)
-            runs_on: macos-13 
+            runs_on: macos-13
     name: ${{ matrix.name }}
     uses: ./.github/workflows/test-common.yml
     with:
