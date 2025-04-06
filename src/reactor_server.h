@@ -27,7 +27,7 @@ typedef struct client_state_t
   int32_t length;
 } client_state_t;
 
-typedef struct cl_ctx_t
+typedef struct client_context_t
 {
   struct event *read_event;
   rsrv_context_t *context;
@@ -44,7 +44,7 @@ typedef struct cl_ctx_t
   pthread_mutex_t write_state_mutex;
   pthread_mutex_t is_starving_mutex;
   pthread_mutex_t registry_used_mutex;
-} cl_ctx_t;
+} client_context_t;
 
 typedef struct job_t
 {
