@@ -66,14 +66,10 @@ client_context_init (serv_base_context_t *global_ctx)
 
 cleanup:
   if (queue_cancel (&ctx->registry_idx) != QS_SUCCESS)
-    {
-      error ("Could not cancel registry indices queue");
-    }
+    error ("Could not cancel registry indices queue");
 
   if (queue_destroy (&ctx->registry_idx) != QS_SUCCESS)
-    {
-      error ("Could not destroy registry indices queue");
-    }
+    error ("Could not destroy registry indices queue");
 
   free (ctx);
 
@@ -88,23 +84,17 @@ client_context_destroy (client_context_t *ctx)
   trace ("Destroying client context");
 
   if (queue_cancel (&ctx->registry_idx) != QS_SUCCESS)
-    {
-      error ("Could not cancel registry indices queue");
-    }
+    error ("Could not cancel registry indices queue");
 
   trace ("Cancelled registry indices queue");
 
   if (queue_destroy (&ctx->registry_idx) != QS_SUCCESS)
-    {
-      error ("Could not destroy registry indices queue");
-    }
+    error ("Could not destroy registry indices queue");
 
   trace ("Destroyed registry indices queue");
 
   if (pthread_mutex_destroy (&ctx->mutex) != 0)
-    {
-      error ("Could not destroy mutex");
-    }
+    error ("Could not destroy mutex");
   close_client (ctx->socket_fd);
 
   pthread_cleanup_pop (!0);
@@ -249,9 +239,7 @@ task_sender (void *arg)
         {
           error ("Could not send task to client");
           if (queue_push_back (&mt_ctx->queue, task) != QS_SUCCESS)
-            {
-              error ("Could not push back task to global queue");
-            }
+            error ("Could not push back task to global queue");
           cl_ctx->registry_used[task->task.id] = false;
           break;
         }
@@ -352,9 +340,7 @@ run_async_server (task_t *task, config_t *config)
     goto fail;
 
   if (serv_base_context_destroy (&context) == S_FAILURE)
-    {
-      error ("Could not destroy server context");
-    }
+    error ("Could not destroy server context");
 
   trace ("Destroyed server context");
 
@@ -364,9 +350,7 @@ fail:
   trace ("Failed, destroying server context");
 
   if (serv_base_context_destroy (&context) == S_FAILURE)
-    {
-      error ("Could not destroy server context");
-    }
+    error ("Could not destroy server context");
 
   return (false);
 }

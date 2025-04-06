@@ -245,7 +245,6 @@ return_tasks (cl_ctx_t *ctx)
 static void
 cl_ctx_destroy (cl_ctx_t *ctx)
 {
-  /* TODO: Remove braces in one-line statements.  */
   if (return_tasks (ctx) == S_FAILURE)
     error ("Could not return tasks to global queue");
 
@@ -256,6 +255,7 @@ cl_ctx_destroy (cl_ctx_t *ctx)
 
   if (queue_destroy (&ctx->registry_idx) != QS_SUCCESS)
     error ("Could not destroy registry indices queue");
+
   trace ("Destroyed registry indices queue");
 
   shutdown (ctx->socket_fd, SHUT_RDWR);
@@ -426,9 +426,7 @@ create_task_job (void *arg)
   if (qs == QS_FAILURE)
     {
       if (queue_push_back (&ctx->registry_idx, &id) != QS_SUCCESS)
-        {
-          error ("Could not push back id to registry indices queue");
-        }
+        error ("Could not push back id to registry indices queue");
       pthread_mutex_lock (&ctx->is_writing_mutex);
       ctx->is_writing = false;
       pthread_mutex_unlock (&ctx->is_writing_mutex);
@@ -749,9 +747,7 @@ run_reactor_server (task_t *task, config_t *config)
   evconnlistener_free (listener);
 
   if (rsrv_context_destroy (&rsrv_ctx) == S_FAILURE)
-    {
-      error ("Could not destroy server context");
-    }
+    error ("Could not destroy server context");
 
   return (mt_ctx->password[0] != 0);
 
@@ -761,9 +757,7 @@ free_listener:
 fail:
   trace ("Failed, destroying server context");
   if (rsrv_context_destroy (&rsrv_ctx) == S_FAILURE)
-    {
-      error ("Could not destroy server context");
-    }
+    error ("Could not destroy server context");
 
   return (false);
 }

@@ -44,11 +44,8 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
     }
   trace ("Received task from server");
 
-  if (config->timeout > 0)
-    if (ms_sleep (config->timeout) != 0)
-      {
-        error ("Could not sleep");
-      }
+  if (config->timeout > 0 && ms_sleep (config->timeout) != 0)
+    error ("Could not sleep");
 
   if (task_callback != NULL)
     task_callback (task, config, ctx);
@@ -200,9 +197,7 @@ spawn_clients (config_t *config, task_callback_t task_callback)
     return;
 
   if (thread_pool_join (&thread_pool) == S_FAILURE)
-    {
-      error ("Could not wait for all threads to end");
-    }
+    error ("Could not wait for all threads to end");
 
   trace ("Waited for all threads to end");
 }

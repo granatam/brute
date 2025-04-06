@@ -103,9 +103,7 @@ cleanup:
 
   shutdown (ctx->socket_fd, SHUT_RDWR);
   if (close (ctx->socket_fd) != 0)
-    {
-      error ("Could not close socket");
-    }
+    error ("Could not close socket");
   return (S_FAILURE);
 }
 
@@ -123,9 +121,7 @@ client_worker (void *arg)
     {
       if (ctx->config->timeout > 0)
         if (ms_sleep (ctx->config->timeout) != 0)
-          {
-            error ("Could not sleep");
-          }
+          error ("Could not sleep");
 
       task_t task;
       if (queue_pop (&ctx->task_queue, &task) != QS_SUCCESS)
@@ -195,9 +191,7 @@ end:
   trace ("Disconnected from server, not receiving anything from now");
   ctx->done = true;
   if (pthread_cond_signal (&ctx->cond_sem) != 0)
-    {
-      error ("Could not signal on a conditional semaphore");
-    }
+    error ("Could not signal on a conditional semaphore");
 
   trace ("Signaled to main thread about receiving end");
 
@@ -332,9 +326,7 @@ cleanup:
 
   shutdown (ctx.socket_fd, SHUT_RDWR);
   if (close (ctx.socket_fd) != 0)
-    {
-      error ("Could not close socket");
-    }
+    error ("Could not close socket");
 
   return (false);
 }
