@@ -155,17 +155,13 @@ cl_ctx_init (rsrv_context_t *srv_ctx, evutil_socket_t fd)
   trace ("Allocated memory for client context");
   cl_ctx->socket_fd = fd;
   cl_ctx->context = srv_ctx;
-  cl_ctx->write_state = (client_state_t){
-    .len = 0,
-  };
-  cl_ctx->read_state = (client_state_t){
+  cl_ctx->read_state = (old_client_state_t){
     .len = 0,
     .buf = &cl_ctx->read_buffer,
   };
   cl_ctx->is_starving = false;
 
   pthread_mutex_init (&cl_ctx->is_writing_mutex, NULL);
-  pthread_mutex_init (&cl_ctx->write_state_mutex, NULL);
   pthread_mutex_init (&cl_ctx->is_starving_mutex, NULL);
   pthread_mutex_init (&cl_ctx->registry_used_mutex, NULL);
 
@@ -206,7 +202,6 @@ static void
 cl_ctx_destroy (cl_ctx_t *ctx)
 {
   pthread_mutex_destroy (&ctx->is_writing_mutex);
-  pthread_mutex_destroy (&ctx->write_state_mutex);
   pthread_mutex_destroy (&ctx->is_starving_mutex);
   pthread_mutex_destroy (&ctx->registry_used_mutex);
   trace ("Destroyed client's mutexes");
@@ -255,52 +250,44 @@ send_task_job (void *arg)
     return (S_FAILURE);
   cl_ctx_t *ctx = arg;
 
-  command_t cmd = CMD_TASK;
+  size_t i;
+  size_t expected_write = 0;
+  for (i = 0; i < ctx->write_state.vec_sz; ++i)
+    expected_write += ctx->write_state.vec[i].iov_len;
 
-  task_t task = *(task_t *)ctx->write_state.buf;
-  pthread_mutex_unlock (&ctx->write_state_mutex);
-  task.task.is_correct = false;
-  struct iovec vec[] = { { .iov_base = &cmd, .iov_len = sizeof (cmd) },
-                         { .iov_base = &task, .iov_len = sizeof (task) } };
-  struct iovec *_vec = vec;
-  int iovcnt = sizeof (vec) / sizeof (vec[0]);
-  int expected_write = vec[0].iov_len + vec[1].iov_len;
-  if (ctx->write_state.len > vec[0].iov_len)
-    {
-      _vec = &vec[1];
-      iovcnt = 1;
-      ctx->write_state.len -= vec[0].iov_len;
-      _vec->iov_base += ctx->write_state.len;
-      _vec->iov_len -= ctx->write_state.len;
-      expected_write = _vec->iov_len;
-    }
-  else
-    {
-      vec[0].iov_base += ctx->write_state.len;
-      vec[0].iov_len -= ctx->write_state.len;
-      expected_write -= ctx->write_state.len;
-    }
-
-  int actual_write = 0;
+  size_t actual_write = 0;
   status_t status
-      = send_wrapper_nonblock (ctx->socket_fd, _vec, iovcnt, &actual_write);
-  if (status == S_FAILURE || actual_write != expected_write)
+      = send_wrapper_nonblock (ctx->socket_fd, ctx->write_state.vec,
+                               ctx->write_state.vec_sz, &actual_write);
+  if (status == S_FAILURE)
     {
       error ("Could not send task to client, expected count: %d, actual: %d",
              expected_write, actual_write);
-      if (status == S_FAILURE)
-        {
-          cl_ctx_destroy (ctx);
-          return (S_SUCCESS);
-        }
-      ctx->write_state.len += actual_write;
+      cl_ctx_destroy (ctx);
+      return (S_SUCCESS);
+    }
+
+  bool full = actual_write == expected_write;
+  i = 0;
+  while (actual_write > 0 && ctx->write_state.vec[i].iov_len <= actual_write)
+    {
+      actual_write -= ctx->write_state.vec[i].iov_len;
+      size_t j;
+      for (j = i; j < ctx->write_state.vec_sz; ++j)
+        memmove (&ctx->write_state.vec[j], &ctx->write_state.vec[j + 1],
+                 sizeof (struct iovec));
+      --ctx->write_state.vec_sz;
+      break;
+    }
+
+  ctx->write_state.vec[i].iov_base += actual_write;
+  ctx->write_state.vec[i].iov_len -= actual_write;
+  if (!full)
+    {
       return (push_job (ctx, send_task_job));
     }
 
-  ctx->write_state.len = 0;
-
-  trace ("%p: Sent task '%s' with id %d to client", ctx,
-         task.task.password + task.to, task.task.id);
+  trace ("Sent task to client");
 
   pthread_mutex_lock (&ctx->is_writing_mutex);
   ctx->is_writing = false;
@@ -395,12 +382,16 @@ create_task_job (void *arg)
   pthread_mutex_unlock (&ctx->registry_used_mutex);
   trace ("%p: Set id %d in registry_used as true", ctx, id);
 
-  pthread_mutex_lock (&ctx->write_state_mutex);
-  ctx->write_state.buf = task;
-  task_t *buf = ctx->write_state.buf;
-  buf->task.id = id;
-  buf->to = task->from;
-  buf->from = 0;
+  task->task.id = id;
+  task->to = task->from;
+  task->from = 0;
+  task->task.is_correct = false;
+  ctx->write_state.cmd = CMD_TASK;
+  ctx->write_state.vec[0].iov_base = &ctx->write_state.cmd;
+  ctx->write_state.vec[0].iov_len = sizeof (ctx->write_state.cmd);
+  ctx->write_state.vec[1].iov_base = task;
+  ctx->write_state.vec[1].iov_len = sizeof (*task);
+  ctx->write_state.vec_sz = 2;
 
   return (push_job (ctx, send_task_job));
 }
@@ -517,6 +508,15 @@ handle_starving_clients (void *arg)
         }
       trace ("Got starving client from queue");
 
+      pthread_mutex_lock (&client->is_writing_mutex);
+      if (client->is_writing)
+        {
+          pthread_mutex_unlock (&client->is_writing_mutex);
+          continue;
+        }
+      client->is_writing = true;
+      pthread_mutex_unlock (&client->is_writing_mutex);
+
       int id;
       if (queue_pop (&client->registry_idx, &id) != QS_SUCCESS)
         {
@@ -525,25 +525,24 @@ handle_starving_clients (void *arg)
         }
       trace ("Got id for a starving client: %d", id);
 
-      task_t task;
-      if (queue_pop (&ctx->context.context.queue, &task) != QS_SUCCESS)
+      task_t *task = &client->registry[id];
+      if (queue_pop (&ctx->context.context.queue, task) != QS_SUCCESS)
         {
           error ("Could not pop from the global queue");
           return (NULL);
         }
       trace ("Got task for a starving client");
 
-      pthread_mutex_lock (&client->is_writing_mutex);
-      client->is_writing = true;
-      pthread_mutex_unlock (&client->is_writing_mutex);
-
-      pthread_mutex_lock (&client->write_state_mutex);
-      memcpy (client->write_state.buf, &task, sizeof (task));
-      client->write_state.len = 0;
-      task_t *buf = client->write_state.buf;
-      buf->task.id = id;
-      buf->to = buf->from;
-      buf->from = 0;
+      task->task.id = id;
+      task->to = task->from;
+      task->from = 0;
+      task->task.is_correct = false;
+      client->write_state.cmd = CMD_TASK;
+      client->write_state.vec[0].iov_base = &client->write_state.cmd;
+      client->write_state.vec[0].iov_len = sizeof (client->write_state.cmd);
+      client->write_state.vec[1].iov_base = task;
+      client->write_state.vec[1].iov_len = sizeof (*task);
+      client->write_state.vec_sz = 2;
 
       trace ("Set up starving client write state");
 
