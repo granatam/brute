@@ -10,7 +10,7 @@
 typedef struct srv_base_context_t
 {
   mt_context_t mt_ctx;
-  int socket_fd;
+  int listen_fd;
 } srv_base_context_t;
 
 status_t srv_base_context_init (srv_base_context_t *ctx, config_t *config);

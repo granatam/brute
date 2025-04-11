@@ -120,8 +120,8 @@ mt_password_check (void *context)
       task.from = 0;
 
       if (brute (&task, mt_ctx->config, st_password_check, &st_ctx))
-        memcpy (mt_ctx->password, task.task.password,
-                sizeof (task.task.password));
+        memcpy (mt_ctx->password, task.result.password,
+                sizeof (task.result.password));
 
       if (trysignal (mt_ctx) == S_FAILURE)
         return (NULL);
@@ -217,7 +217,8 @@ run_multi (task_t *task, config_t *config)
     }
 
   if (context.password[0] != 0)
-    memcpy (task->task.password, context.password, sizeof (context.password));
+    memcpy (task->result.password, context.password,
+            sizeof (context.password));
 
   if (mt_context_destroy (&context) == S_FAILURE)
     {

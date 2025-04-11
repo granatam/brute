@@ -27,10 +27,10 @@ typedef struct client_context_t
 void
 find_password (task_t *task, config_t *config, st_context_t *ctx)
 {
-  task->task.is_correct = brute (task, config, st_password_check, ctx);
+  task->result.is_correct = brute (task, config, st_password_check, ctx);
 
-  if (!task->task.is_correct)
-    memset (task->task.password, 0, sizeof (task->task.password));
+  if (!task->result.is_correct)
+    memset (task->result.password, 0, sizeof (task->result.password));
 }
 
 static status_t
@@ -50,7 +50,7 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
   if (task_callback != NULL)
     task_callback (task, config, ctx);
 
-  result_t task_result = task->task;
+  result_t task_result = task->result;
   struct iovec vec[]
       = { { .iov_base = &task_result, .iov_len = sizeof (task_result) } };
   if (send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]))

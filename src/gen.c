@@ -119,8 +119,8 @@ gen_worker (void *context)
               = !gen_ctx->state_next (gen_ctx->state);
           /* Correct password in the last state corner case.  */
           if (cancelled && st_password_check (&task, &st_ctx))
-            memcpy (gen_ctx->password, task.task.password,
-                    sizeof (task.task.password));
+            memcpy (gen_ctx->password, task.result.password,
+                    sizeof (task.result.password));
         }
       if (pthread_mutex_unlock (&gen_ctx->mutex) != 0)
         {
@@ -140,8 +140,8 @@ gen_worker (void *context)
               error ("Could not lock a mutex");
               return (NULL);
             }
-          memcpy (gen_ctx->password, task.task.password,
-                  sizeof (task.task.password));
+          memcpy (gen_ctx->password, task.result.password,
+                  sizeof (task.result.password));
           if (pthread_mutex_unlock (&gen_ctx->mutex) != 0)
             {
               error ("Could not unlock a mutex");
@@ -182,7 +182,8 @@ run_generator (task_t *task, config_t *config)
     }
 
   if (context.password[0] != 0)
-    memcpy (task->task.password, context.password, sizeof (context.password));
+    memcpy (task->result.password, context.password,
+            sizeof (context.password));
 
   return (context.password[0] != 0);
 

@@ -21,7 +21,7 @@ typedef struct result_t
 
 typedef struct task_t
 {
-  result_t task;
+  result_t result;
   int from;
   int to;
 } task_t;

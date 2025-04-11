@@ -20,14 +20,14 @@ srv_base_context_init (srv_base_context_t *srv_base, config_t *config)
   if (mt_context_init ((mt_context_t *)srv_base, config) == S_FAILURE)
     return (S_FAILURE);
 
-  if ((srv_base->socket_fd = socket (AF_INET, SOCK_STREAM, 0)) == -1)
+  if ((srv_base->listen_fd = socket (AF_INET, SOCK_STREAM, 0)) == -1)
     {
       error ("Could not initialize server socket");
       return (S_FAILURE);
     }
 
   int option = 1;
-  if (setsockopt (srv_base->socket_fd, SOL_SOCKET, SO_REUSEADDR, &option,
+  if (setsockopt (srv_base->listen_fd, SOL_SOCKET, SO_REUSEADDR, &option,
                   sizeof (option))
       == -1)
     {
@@ -40,7 +40,7 @@ srv_base_context_init (srv_base_context_t *srv_base, config_t *config)
   srv_addr.sin_addr.s_addr = inet_addr (config->addr);
   srv_addr.sin_port = htons (config->port);
 
-  if (bind (srv_base->socket_fd, (struct sockaddr *)&srv_addr,
+  if (bind (srv_base->listen_fd, (struct sockaddr *)&srv_addr,
             sizeof (srv_addr))
       == -1)
     {
@@ -48,7 +48,7 @@ srv_base_context_init (srv_base_context_t *srv_base, config_t *config)
       goto fail;
     }
 
-  if (listen (srv_base->socket_fd, 10) == -1)
+  if (listen (srv_base->listen_fd, 10) == -1)
     {
       error ("Could not start listening to incoming connections");
       goto fail;
@@ -57,7 +57,7 @@ srv_base_context_init (srv_base_context_t *srv_base, config_t *config)
   return (S_SUCCESS);
 
 fail:
-  close (srv_base->socket_fd);
+  close (srv_base->listen_fd);
   return (S_FAILURE);
 }
 
@@ -67,15 +67,15 @@ srv_base_context_destroy (srv_base_context_t *srv_base)
   if (mt_context_destroy ((mt_context_t *)srv_base) == S_FAILURE)
     return (S_FAILURE);
 
-  if (srv_base->socket_fd >= 0)
+  if (srv_base->listen_fd >= 0)
     {
-      shutdown (srv_base->socket_fd, SHUT_RDWR);
-      if (close (srv_base->socket_fd) != 0)
+      shutdown (srv_base->listen_fd, SHUT_RDWR);
+      if (close (srv_base->listen_fd) != 0)
         {
           error ("Could not close server socket");
           return (S_FAILURE);
         }
-      srv_base->socket_fd = -1;
+      srv_base->listen_fd = -1;
     }
 
   return (S_SUCCESS);
@@ -194,7 +194,7 @@ send_task (int socket_fd, task_t *task)
 {
   command_t cmd = CMD_TASK;
 
-  task->task.is_correct = false;
+  task->result.is_correct = false;
   struct iovec vec[] = { { .iov_base = &cmd, .iov_len = sizeof (cmd) },
                          { .iov_base = task, .iov_len = sizeof (*task) } };
 
@@ -205,7 +205,7 @@ send_task (int socket_fd, task_t *task)
       return (S_FAILURE);
     }
 
-  trace ("Sent task %s to client", task->task.password);
+  trace ("Sent task %s to client", task->result.password);
 
   return (S_SUCCESS);
 }
@@ -264,7 +264,8 @@ process_tasks (task_t *task, config_t *config, mt_context_t *mt_ctx)
   trace ("Cancelled global queue");
 
   if (mt_ctx->password[0] != 0)
-    memcpy (task->task.password, mt_ctx->password, sizeof (mt_ctx->password));
+    memcpy (task->result.password, mt_ctx->password,
+            sizeof (mt_ctx->password));
 
   return (S_SUCCESS);
 }

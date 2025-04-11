@@ -106,7 +106,7 @@ handle_clients (void *arg)
   while (true)
     {
       /* TODO: Probably we should not continue here */
-      if (accept_client (srv_base->socket_fd, &client_ctx.socket_fd)
+      if (accept_client (srv_base->listen_fd, &client_ctx.socket_fd)
           == S_FAILURE)
         continue;
 

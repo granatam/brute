@@ -128,11 +128,11 @@ client_worker (void *arg)
         return (NULL);
       trace ("Got new task to process");
 
-      task.task.is_correct
+      task.result.is_correct
           = brute (&task, ctx->config, st_password_check, &st_context);
       trace ("Processed task");
 
-      if (queue_push (&ctx->result_queue, &task.task) != QS_SUCCESS)
+      if (queue_push (&ctx->result_queue, &task.result) != QS_SUCCESS)
         return (NULL);
       trace ("Pushed processed task to result queue");
     }

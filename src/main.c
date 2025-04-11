@@ -253,7 +253,7 @@ main (int argc, char *argv[])
     return (EXIT_SUCCESS);
 
   if (is_found)
-    printf ("Password found: %s\n", task.task.password);
+    printf ("Password found: %s\n", task.result.password);
   else
     printf ("Password not found\n");
 

@@ -231,7 +231,7 @@ task_sender (void *arg)
       client_ctx->registry_used[id] = true;
 
       task_t task_copy = *task;
-      task_copy.task.id = id;
+      task_copy.result.id = id;
       task_copy.to = task->from;
       task_copy.from = 0;
 
@@ -240,7 +240,7 @@ task_sender (void *arg)
           error ("Could not send task to client");
           if (queue_push_back (&mt_ctx->queue, task) != QS_SUCCESS)
             error ("Could not push back task to global queue");
-          client_ctx->registry_used[task->task.id] = false;
+          client_ctx->registry_used[task->result.id] = false;
           break;
         }
     }
@@ -278,7 +278,7 @@ handle_clients (void *arg)
       if (!client_ctx)
         break;
 
-      if (accept_client (srv_base->socket_fd, &client_ctx->socket_fd)
+      if (accept_client (srv_base->listen_fd, &client_ctx->socket_fd)
           == S_FAILURE)
         goto cleanup;
 

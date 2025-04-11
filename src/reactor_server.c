@@ -46,7 +46,7 @@ rsrv_ctx_init (rsrv_context_t *ctx)
     }
   trace ("Allocated memory for event loop base");
 
-  if (evutil_make_socket_nonblocking (ctx->srv_base.socket_fd) < 0)
+  if (evutil_make_socket_nonblocking (ctx->srv_base.listen_fd) < 0)
     {
       error ("Could not change socket to be nonblocking");
       return (S_FAILURE);
@@ -347,10 +347,10 @@ static void
 task_write_state_setup (client_context_t *ctx, int id)
 {
   task_t *task = &ctx->registry[id];
-  task->task.id = id;
+  task->result.id = id;
   task->to = task->from;
   task->from = 0;
-  task->task.is_correct = false;
+  task->result.is_correct = false;
   ctx->write_state.cmd[0] = CMD_TASK;
   ctx->write_state.vec[0].iov_base = &ctx->write_state.cmd[0];
   ctx->write_state.vec[0].iov_len = sizeof (ctx->write_state.cmd[0]);
@@ -709,7 +709,7 @@ run_reactor_server (task_t *task, config_t *config)
 
   struct evconnlistener *listener = evconnlistener_new (
       rsrv_ctx.ev_base, handle_accept, &rsrv_ctx, LEV_OPT_REUSEABLE, -1,
-      rsrv_ctx.srv_base.socket_fd);
+      rsrv_ctx.srv_base.listen_fd);
   if (!listener)
     {
       error ("Could not create a listener");
