@@ -23,16 +23,13 @@
 
 typedef struct client_context_t
 {
-  int socket_fd;
+  client_base_context_t client_base;
   thread_pool_t thread_pool;
   queue_t task_queue;
   queue_t result_queue;
   pthread_mutex_t mutex;
-  config_t *config;
   bool done;
   pthread_cond_t cond_sem;
-  char hash[HASH_LENGTH];
-  char alph[MAX_ALPH_LENGTH];
 } client_context_t;
 
 static status_t
@@ -66,32 +63,12 @@ client_context_init (client_context_t *ctx, config_t *config)
       error ("Could not initialize conditional semaphore");
       goto cleanup;
     }
-  ctx->config = config;
+
   ctx->done = false;
-  ctx->config->hash = ctx->hash;
-  ctx->config->alph = ctx->alph;
 
-  ctx->socket_fd = socket (AF_INET, SOCK_STREAM, 0);
-  if (ctx->socket_fd == -1)
+  if (client_base_context_init (&ctx->client_base, config, NULL) == S_FAILURE)
     {
-      error ("Could not initialize client socket");
-      goto cleanup;
-    }
-
-  int option = 1;
-  if (setsockopt (ctx->socket_fd, SOL_SOCKET, SO_KEEPALIVE, &option,
-                  sizeof (option))
-      == -1)
-    {
-      error ("Could not set socket option");
-      goto cleanup;
-    }
-
-  if (setsockopt (ctx->socket_fd, IPPROTO_TCP, TCP_NODELAY, &option,
-                  sizeof (option))
-      == -1)
-    {
-      error ("Could not set socket option");
+      error ("Could not initialize client base context");
       goto cleanup;
     }
 
@@ -101,10 +78,44 @@ cleanup:
   queue_destroy (&ctx->task_queue);
   queue_destroy (&ctx->result_queue);
 
-  shutdown (ctx->socket_fd, SHUT_RDWR);
-  if (close (ctx->socket_fd) != 0)
-    error ("Could not close socket");
+  client_base_context_destroy (&ctx->client_base);
+
   return (S_FAILURE);
+}
+
+static status_t
+client_context_destroy (client_context_t *ctx)
+{
+  status_t status = S_SUCCESS;
+
+  if (queue_cancel (&ctx->task_queue) != QS_SUCCESS)
+    {
+      error ("Could not cancel task queue");
+      status = S_FAILURE;
+      goto cleanup;
+    }
+  if (queue_cancel (&ctx->result_queue) != QS_SUCCESS)
+    {
+      error ("Could not cancel result queue");
+      status = S_FAILURE;
+      goto cleanup;
+    }
+  if (thread_pool_join (&ctx->thread_pool) == S_FAILURE)
+    {
+      error ("Could not cancel thread pool");
+      status = S_FAILURE;
+      goto cleanup;
+    }
+
+  trace ("Waited for all threads to end, closing the connection now");
+
+cleanup:
+  queue_destroy (&ctx->task_queue);
+  queue_destroy (&ctx->result_queue);
+
+  client_base_context_destroy (&ctx->client_base);
+
+  return (status);
 }
 
 static void *
@@ -113,14 +124,14 @@ client_worker (void *arg)
   client_context_t *ctx = *(client_context_t **)arg;
 
   st_context_t st_context = {
-    .hash = ctx->config->hash,
+    .hash = ctx->client_base.config->hash,
     .data = { .initialized = 0 },
   };
 
   while (true)
     {
-      if (ctx->config->timeout > 0)
-        if (ms_sleep (ctx->config->timeout) != 0)
+      if (ctx->client_base.config->timeout > 0)
+        if (ms_sleep (ctx->client_base.config->timeout) != 0)
           error ("Could not sleep");
 
       task_t task;
@@ -128,8 +139,8 @@ client_worker (void *arg)
         return (NULL);
       trace ("Got new task to process");
 
-      task.result.is_correct
-          = brute (&task, ctx->config, st_password_check, &st_context);
+      task.result.is_correct = brute (&task, ctx->client_base.config,
+                                      st_password_check, &st_context);
       trace ("Processed task");
 
       if (queue_push (&ctx->result_queue, &task.result) != QS_SUCCESS)
@@ -139,56 +150,30 @@ client_worker (void *arg)
   return (NULL);
 }
 
+static status_t
+handle_task (client_base_context_t *client_base, task_t *task, void *arg)
+{
+  (void)client_base;
+
+  client_context_t *ctx = arg;
+
+  if (queue_push (&ctx->task_queue, task) != QS_SUCCESS)
+    {
+      error ("Could not push to task queue");
+      return (S_FAILURE);
+    }
+
+  return (S_SUCCESS);
+}
+
 static void *
 task_receiver (void *arg)
 {
   client_context_t *ctx = *(client_context_t **)arg;
 
   task_t task;
-  while (true)
-    {
-      command_t cmd;
-      if (recv_wrapper (ctx->socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
-        {
-          error ("Could not receive command from server");
-          goto end;
-        }
+  client_base_recv_loop (&ctx->client_base, &task, handle_task, ctx);
 
-      switch (cmd)
-        {
-        case CMD_ALPH:
-          if (handle_alph (ctx->socket_fd, ctx->alph) == S_FAILURE)
-            {
-              error ("Could not handle alphabet");
-              goto end;
-            }
-          trace ("Received alphabet %s from server", ctx->alph);
-          break;
-        case CMD_HASH:
-          if (handle_hash (ctx->socket_fd, ctx->hash) == S_FAILURE)
-            {
-              error ("Could not handle hash");
-              goto end;
-            }
-          trace ("Received hash %s from server", ctx->hash);
-          break;
-        case CMD_TASK:
-          if (recv_wrapper (ctx->socket_fd, &task, sizeof (task_t), 0)
-              == S_FAILURE)
-            {
-              error ("Could not receive task from server");
-              goto end;
-            }
-          trace ("Received task from server");
-          if (queue_push (&ctx->task_queue, &task) != QS_SUCCESS)
-            goto end;
-          trace ("Pushed received task to queue");
-          break;
-        }
-    }
-
-end:
-  trace ("Disconnected from server, not receiving anything from now");
   ctx->done = true;
   if (pthread_cond_signal (&ctx->cond_sem) != 0)
     error ("Could not signal on a conditional semaphore");
@@ -214,7 +199,8 @@ result_sender (void *arg)
         { .iov_base = &result, .iov_len = sizeof (result) },
       };
 
-      if (send_wrapper (ctx->socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
+      if (send_wrapper (ctx->client_base.socket_fd, vec,
+                        sizeof (vec) / sizeof (vec[0]))
           == S_FAILURE)
         {
           error ("Could not send result to server");
@@ -225,12 +211,12 @@ result_sender (void *arg)
     }
 
 end:
-  trace ("Disconnected from server, not receiving anything from now");
   ctx->done = true;
+
   if (pthread_cond_signal (&ctx->cond_sem) != 0)
     error ("Could not signal on a conditional semaphore");
 
-  trace ("Signaled to main thread about receiving end");
+  trace ("Sent a signal to main thread about work finishing");
 
   return (NULL);
 }
@@ -248,7 +234,9 @@ run_async_client (config_t *config)
   addr.sin_addr.s_addr = inet_addr (config->addr);
   addr.sin_port = htons (config->port);
 
-  if (connect (ctx.socket_fd, (struct sockaddr *)&addr, sizeof (addr)) == -1)
+  if (connect (ctx.client_base.socket_fd, (struct sockaddr *)&addr,
+               sizeof (addr))
+      == -1)
     {
       error ("Could not connect to server");
       goto cleanup;
@@ -302,31 +290,9 @@ run_async_client (config_t *config)
 
   trace ("Got signal on conditional semaphore");
 
-  if (queue_cancel (&ctx.task_queue) != QS_SUCCESS)
-    {
-      error ("Could not cancel task queue");
-      goto cleanup;
-    }
-  if (queue_cancel (&ctx.result_queue) != QS_SUCCESS)
-    {
-      error ("Could not cancel result queue");
-      goto cleanup;
-    }
-  if (thread_pool_join (&ctx.thread_pool) == S_FAILURE)
-    {
-      error ("Could not cancel thread pool");
-      goto cleanup;
-    }
-
-  trace ("Waited for all threads to end, closing the connection now");
-
 cleanup:
-  queue_destroy (&ctx.task_queue);
-  queue_destroy (&ctx.result_queue);
-
-  shutdown (ctx.socket_fd, SHUT_RDWR);
-  if (close (ctx.socket_fd) != 0)
-    error ("Could not close socket");
+  if (client_context_destroy (&ctx) == S_FAILURE)
+    error ("Could not destroy asynchronous client context");
 
   return (false);
 }

@@ -236,7 +236,7 @@ main (int argc, char *argv[])
       run_async_client (&config);
       break;
     case RM_CLIENT:
-      run_client (&config, find_password);
+      run_client (&config, sync_client_find_password);
       break;
     case RM_LOAD_CLIENT:
       spawn_clients (&config, NULL);

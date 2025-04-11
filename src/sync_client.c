@@ -2,6 +2,7 @@
 
 #include "brute.h"
 #include "client_common.h"
+#include "common.h"
 #include "log.h"
 #include "thread_pool.h"
 
@@ -17,15 +18,8 @@
 #include <sys/types.h>
 #endif
 
-typedef struct client_context_t
-{
-  task_t *task;
-  config_t *config;
-  task_callback_t task_callback;
-} client_context_t;
-
 void
-find_password (task_t *task, config_t *config, st_context_t *ctx)
+sync_client_find_password (task_t *task, config_t *config, st_context_t *ctx)
 {
   task->result.is_correct = brute (task, config, st_password_check, ctx);
 
@@ -34,26 +28,24 @@ find_password (task_t *task, config_t *config, st_context_t *ctx)
 }
 
 static status_t
-handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
-             task_callback_t task_callback)
+handle_task (client_base_context_t *client_base, task_t *task, void *arg)
 {
-  if (recv_wrapper (socket_fd, task, sizeof (task_t), 0) == S_FAILURE)
-    {
-      error ("Could not receive task from server");
-      return (S_FAILURE);
-    }
-  trace ("Received task from server");
+  st_context_t *st_ctx = arg;
 
-  if (config->timeout > 0 && ms_sleep (config->timeout) != 0)
+  st_ctx->hash = client_base->hash;
+
+  if (client_base->config->timeout > 0
+      && ms_sleep (client_base->config->timeout) != 0)
     error ("Could not sleep");
 
-  if (task_callback != NULL)
-    task_callback (task, config, ctx);
+  if (client_base->task_cb != NULL)
+    client_base->task_cb (task, client_base->config, st_ctx);
 
   result_t task_result = task->result;
   struct iovec vec[]
       = { { .iov_base = &task_result, .iov_len = sizeof (task_result) } };
-  if (send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
+  if (send_wrapper (client_base->socket_fd, vec,
+                    sizeof (vec) / sizeof (vec[0]))
       == S_FAILURE)
     {
       error ("Could not send result to server");
@@ -68,21 +60,12 @@ handle_task (int socket_fd, task_t *task, config_t *config, st_context_t *ctx,
 }
 
 bool
-run_client (config_t *config, task_callback_t task_callback)
+run_client (config_t *config, task_callback_t task_cb)
 {
-  int socket_fd = socket (AF_INET, SOCK_STREAM, 0);
-  if (socket_fd == -1)
+  client_base_context_t client_base;
+  if (client_base_context_init (&client_base, config, task_cb) == S_FAILURE)
     {
-      error ("Could not initialize client socket");
-      return (false);
-    }
-
-  int option = 1;
-  if (setsockopt (socket_fd, SOL_SOCKET, SO_KEEPALIVE, &option,
-                  sizeof (option))
-      == -1)
-    {
-      error ("Could not set socket option");
+      error ("Could not initialize client base context");
       return (false);
     }
 
@@ -91,76 +74,20 @@ run_client (config_t *config, task_callback_t task_callback)
   addr.sin_addr.s_addr = inet_addr (config->addr);
   addr.sin_port = htons (config->port);
 
-  if (connect (socket_fd, (struct sockaddr *)&addr, sizeof (addr)) == -1)
+  if (connect (client_base.socket_fd, (struct sockaddr *)&addr, sizeof (addr))
+      == -1)
     {
       error ("Could not connect to server");
       return (false);
     }
 
-  if (setsockopt (socket_fd, IPPROTO_TCP, TCP_NODELAY, &option,
-                  sizeof (option))
-      == -1)
-    {
-      error ("Could not set socket option");
-      return (false);
-    }
-
-  char hash[HASH_LENGTH];
-  char alph[MAX_ALPH_LENGTH];
   task_t task;
-
   st_context_t st_context = {
     .data = { .initialized = 0 },
   };
 
-  while (true)
-    {
-      trace ("Waiting for a command");
-
-      command_t cmd;
-      if (recv_wrapper (socket_fd, &cmd, sizeof (cmd), 0) == S_FAILURE)
-        {
-          error ("Could not receive command from server");
-          goto end;
-        }
-
-      trace ("Received command from server");
-
-      switch (cmd)
-        {
-        case CMD_ALPH:
-          if (handle_alph (socket_fd, alph) == S_FAILURE)
-            {
-              error ("Could not handle alphabet");
-              goto end;
-            }
-          trace ("Received alphabet '%s' from server", alph);
-          break;
-        case CMD_HASH:
-          if (handle_hash (socket_fd, hash) == S_FAILURE)
-            {
-              error ("Could not handle hash");
-              goto end;
-            }
-          st_context.hash = hash;
-          trace ("Received hash '%s' from server", hash);
-          break;
-        case CMD_TASK:
-          trace ("Received task command from server");
-          if (handle_task (socket_fd, &task, config, &st_context,
-                           task_callback)
-              == S_FAILURE)
-            goto end;
-          break;
-        }
-    }
-
-end:
-  trace ("Disconnected from server, not receiving anything from now");
-
-  shutdown (socket_fd, SHUT_RDWR);
-  close (socket_fd);
-  trace ("Closed connection with server");
+  client_base_recv_loop (&client_base, &task, handle_task, &st_context);
+  client_base_context_destroy (&client_base);
 
   return (false);
 }
@@ -168,14 +95,14 @@ end:
 static void *
 client_thread_helper (void *arg)
 {
-  client_context_t *ctx = *(client_context_t **)arg;
-  run_client (ctx->config, ctx->task_callback);
+  client_base_context_t *ctx = *(client_base_context_t **)arg;
+  run_client (ctx->config, ctx->task_cb);
 
   return (NULL);
 }
 
 void
-spawn_clients (config_t *config, task_callback_t task_callback)
+spawn_clients (config_t *config, task_callback_t task_cb)
 {
   thread_pool_t thread_pool;
   if (thread_pool_init (&thread_pool) == S_FAILURE)
@@ -184,11 +111,11 @@ spawn_clients (config_t *config, task_callback_t task_callback)
       return;
     }
 
-  client_context_t context = {
+  client_base_context_t context = {
     .config = config,
-    .task_callback = task_callback,
+    .task_cb = task_cb,
   };
-  client_context_t *context_ptr = &context;
+  client_base_context_t *context_ptr = &context;
 
   if (create_threads (&thread_pool, config->number_of_threads,
                       &client_thread_helper, &context_ptr,
