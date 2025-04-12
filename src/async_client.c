@@ -28,7 +28,7 @@ typedef struct client_context_t
   queue_t task_queue;
   queue_t result_queue;
   pthread_mutex_t mutex;
-  bool done;
+  volatile bool done;
   pthread_cond_t cond_sem;
 } client_context_t;
 
@@ -118,6 +118,16 @@ cleanup:
   return (status);
 }
 
+static void
+client_finish (client_context_t *ctx)
+{
+  ctx->done = true;
+  if (pthread_cond_signal (&ctx->cond_sem) != 0)
+    error ("Could not signal on a conditional semaphore");
+
+  trace ("Sent a signal to main thread about work finishing");
+}
+
 static void *
 client_worker (void *arg)
 {
@@ -174,12 +184,7 @@ task_receiver (void *arg)
   task_t task;
   client_base_recv_loop (&ctx->client_base, &task, handle_task, ctx);
 
-  ctx->done = true;
-  if (pthread_cond_signal (&ctx->cond_sem) != 0)
-    error ("Could not signal on a conditional semaphore");
-
-  trace ("Signaled to main thread about receiving end");
-
+  client_finish (ctx);
   return (NULL);
 }
 
@@ -192,7 +197,7 @@ result_sender (void *arg)
   while (true)
     {
       if (queue_pop (&ctx->result_queue, &result) != QS_SUCCESS)
-        goto end;
+        break;
       trace ("Got new result from result queue");
 
       struct iovec vec[] = {
@@ -204,20 +209,13 @@ result_sender (void *arg)
           == S_FAILURE)
         {
           error ("Could not send result to server");
-          goto end;
+          break;
         }
       trace ("Sent %s result %s to server",
              result.is_correct ? "correct" : "incorrect", result.password);
     }
 
-end:
-  ctx->done = true;
-
-  if (pthread_cond_signal (&ctx->cond_sem) != 0)
-    error ("Could not signal on a conditional semaphore");
-
-  trace ("Sent a signal to main thread about work finishing");
-
+  client_finish (ctx);
   return (NULL);
 }
 
