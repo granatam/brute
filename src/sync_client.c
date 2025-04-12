@@ -69,17 +69,8 @@ run_client (config_t *config, task_callback_t task_cb)
       return (false);
     }
 
-  struct sockaddr_in addr;
-  addr.sin_family = AF_INET;
-  addr.sin_addr.s_addr = inet_addr (config->addr);
-  addr.sin_port = htons (config->port);
-
-  if (connect (client_base.socket_fd, (struct sockaddr *)&addr, sizeof (addr))
-      == -1)
-    {
-      error ("Could not connect to server");
-      return (false);
-    }
+  if (srv_connect (&client_base) == S_FAILURE)
+    return (false);
 
   task_t task;
   st_context_t st_context = {
