@@ -229,18 +229,8 @@ run_async_client (config_t *config)
   if (client_context_init (&ctx, config) == S_FAILURE)
     return (false);
 
-  struct sockaddr_in addr;
-  addr.sin_family = AF_INET;
-  addr.sin_addr.s_addr = inet_addr (config->addr);
-  addr.sin_port = htons (config->port);
-
-  if (connect (ctx.client_base.socket_fd, (struct sockaddr *)&addr,
-               sizeof (addr))
-      == -1)
-    {
-      error ("Could not connect to server");
-      goto cleanup;
-    }
+  if (srv_connect (&ctx.client_base) == S_FAILURE)
+    goto cleanup;
 
   client_context_t *ctx_ptr = &ctx;
 

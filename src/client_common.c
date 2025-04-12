@@ -43,6 +43,24 @@ client_base_context_init (client_base_context_t *client_base, config_t *config,
 }
 
 status_t
+srv_connect (client_base_context_t *client_base)
+{
+  struct sockaddr_in addr;
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = inet_addr (client_base->config->addr);
+  addr.sin_port = htons (client_base->config->port);
+
+  if (connect (client_base->socket_fd, (struct sockaddr *)&addr, sizeof (addr))
+      == -1)
+    {
+      error ("Could not connect to server");
+      return (S_FAILURE);
+    }
+
+  return (S_SUCCESS);
+}
+
+status_t
 client_base_context_destroy (client_base_context_t *client_base)
 {
   shutdown (client_base->socket_fd, SHUT_RDWR);
