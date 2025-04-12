@@ -322,14 +322,14 @@ static inline status_t
 write_state_write (int socket_fd, write_state_t *write_state)
 {
   return (write_state_write_wrapper (socket_fd, write_state->base_state.vec,
-                                    &write_state->base_state.vec_sz));
+                                     &write_state->base_state.vec_sz));
 }
 
 static inline status_t
 write_state_write_extra (int socket_fd, write_state_t *write_state)
 {
   return (write_state_write_wrapper (socket_fd, write_state->vec_extra,
-                                    &write_state->vec_extra_sz));
+                                     &write_state->vec_extra_sz));
 }
 
 static status_t
