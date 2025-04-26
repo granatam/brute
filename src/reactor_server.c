@@ -163,25 +163,27 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
 
   mt_context_t *mt_ctx = &client_ctx->rsrv_ctx->srv_base.mt_ctx;
 
-  client_ctx->write_state.cmd[0] = CMD_HASH;
-  client_ctx->write_state.vec[0].iov_base = &client_ctx->write_state.cmd[0];
-  client_ctx->write_state.vec[0].iov_len
-      = sizeof (client_ctx->write_state.cmd[0]);
-  client_ctx->write_state.vec[1].iov_base = mt_ctx->config->hash;
-  client_ctx->write_state.vec[1].iov_len = HASH_LENGTH;
+  write_state_t *write_state = &client_ctx->write_state;
+  io_state_t *write_state_base = &write_state->base_state;
 
-  client_ctx->write_state.cmd[1] = CMD_ALPH;
-  client_ctx->write_state.length = strlen (mt_ctx->config->alph);
-  client_ctx->write_state.vec[2].iov_base = &client_ctx->write_state.cmd[1];
-  client_ctx->write_state.vec[2].iov_len
-      = sizeof (client_ctx->write_state.cmd[1]);
-  client_ctx->write_state.vec[3].iov_base = &client_ctx->write_state.length;
-  client_ctx->write_state.vec[3].iov_len
-      = sizeof (client_ctx->write_state.length);
-  client_ctx->write_state.vec[4].iov_base = mt_ctx->config->alph;
-  client_ctx->write_state.vec[4].iov_len = client_ctx->write_state.length;
+  /* Set up vector for hash sending */
+  write_state_base->cmd = CMD_HASH;
+  write_state_base->vec[0].iov_base = &write_state_base->cmd;
+  write_state_base->vec[0].iov_len = sizeof (write_state_base->cmd);
+  write_state_base->vec[1].iov_base = mt_ctx->config->hash;
+  write_state_base->vec[1].iov_len = HASH_LENGTH;
+  write_state_base->vec_sz = 2;
 
-  client_ctx->write_state.vec_sz = 5;
+  /* Set up vector for alphabet sending */
+  write_state->cmd_extra = CMD_ALPH;
+  write_state->length = strlen (mt_ctx->config->alph);
+  write_state->vec_extra[0].iov_base = &write_state->cmd_extra;
+  write_state->vec_extra[0].iov_len = sizeof (write_state->cmd_extra);
+  write_state->vec_extra[1].iov_base = &write_state->length;
+  write_state->vec_extra[1].iov_len = sizeof (write_state->length);
+  write_state->vec_extra[2].iov_base = mt_ctx->config->alph;
+  write_state->vec_extra[2].iov_len = write_state->length;
+  write_state->vec_extra_sz = 3;
 
   client_ctx->is_starving = false;
 
@@ -293,10 +295,9 @@ push_job (client_context_t *ctx, status_t (*job_func) (void *))
 static status_t create_task_job (void *);
 
 static status_t
-write_state_write (int socket_fd, client_state_t *write_state)
+write_state_write_wrapper (int socket_fd, struct iovec *vec, size_t *vec_sz)
 {
-  size_t actual_write
-      = writev (socket_fd, write_state->vec, write_state->vec_sz);
+  size_t actual_write = writev (socket_fd, vec, *vec_sz);
 
   if ((ssize_t)actual_write <= 0)
     {
@@ -305,17 +306,30 @@ write_state_write (int socket_fd, client_state_t *write_state)
     }
 
   size_t i = 0;
-  while (actual_write > 0 && write_state->vec[i].iov_len <= actual_write)
-    actual_write -= write_state->vec[i++].iov_len;
+  while (actual_write > 0 && vec[i].iov_len <= actual_write)
+    actual_write -= vec[i++].iov_len;
 
-  write_state->vec_sz -= i;
-  memmove (&write_state->vec[0], &write_state->vec[i],
-           sizeof (struct iovec) * write_state->vec_sz);
+  *vec_sz -= i;
+  memmove (&vec[0], &vec[i], sizeof (struct iovec) * *vec_sz);
 
-  write_state->vec[i].iov_base += actual_write;
-  write_state->vec[i].iov_len -= actual_write;
+  vec[i].iov_base += actual_write;
+  vec[i].iov_len -= actual_write;
 
   return (S_SUCCESS);
+}
+
+static inline status_t
+write_state_write (int socket_fd, write_state_t *write_state)
+{
+  return (write_state_write_wrapper (socket_fd, write_state->base_state.vec,
+                                     &write_state->base_state.vec_sz));
+}
+
+static inline status_t
+write_state_write_extra (int socket_fd, write_state_t *write_state)
+{
+  return (write_state_write_wrapper (socket_fd, write_state->vec_extra,
+                                     &write_state->vec_extra_sz));
 }
 
 static status_t
@@ -331,7 +345,7 @@ send_task_job (void *arg)
       return (S_SUCCESS);
     }
 
-  if (ctx->write_state.vec_sz != 0)
+  if (ctx->write_state.base_state.vec_sz != 0)
     return (push_job (ctx, send_task_job));
 
   trace ("Sent task to client");
@@ -351,12 +365,13 @@ task_write_state_setup (client_context_t *ctx, int id)
   task->to = task->from;
   task->from = 0;
   task->result.is_correct = false;
-  ctx->write_state.cmd[0] = CMD_TASK;
-  ctx->write_state.vec[0].iov_base = &ctx->write_state.cmd[0];
-  ctx->write_state.vec[0].iov_len = sizeof (ctx->write_state.cmd[0]);
-  ctx->write_state.vec[1].iov_base = task;
-  ctx->write_state.vec[1].iov_len = sizeof (*task);
-  ctx->write_state.vec_sz = 2;
+  io_state_t *write_state_base = &ctx->write_state.base_state;
+  write_state_base->cmd = CMD_TASK;
+  write_state_base->vec[0].iov_base = &write_state_base->cmd;
+  write_state_base->vec[0].iov_len = sizeof (write_state_base->cmd);
+  write_state_base->vec[1].iov_base = task;
+  write_state_base->vec[1].iov_len = sizeof (*task);
+  write_state_base->vec_sz = 2;
 }
 
 static status_t
@@ -450,15 +465,30 @@ send_config_job (void *arg)
 {
   client_context_t *ctx = arg;
 
-  status_t status = write_state_write (ctx->socket_fd, &ctx->write_state);
+  status_t status;
+  if (ctx->write_state.base_state.vec_sz != 0)
+    {
+      status = write_state_write (ctx->socket_fd, &ctx->write_state);
+      if (status != S_SUCCESS)
+        {
+          error ("Could not send hash to client");
+          return (S_FAILURE);
+        }
+
+      if (ctx->write_state.base_state.vec_sz != 0)
+        return (push_job (ctx, send_config_job));
+    }
+
+  status = write_state_write_extra (ctx->socket_fd, &ctx->write_state);
   if (status != S_SUCCESS)
     {
-      error ("Could not send config data to client");
+      error ("Could not send alphabet to client");
       return (S_FAILURE);
     }
 
-  return (push_job (ctx, ctx->write_state.vec_sz != 0 ? send_config_job
-                                                      : create_task_job));
+  return (push_job (ctx, ctx->write_state.vec_extra_sz != 0
+                             ? send_config_job
+                             : create_task_job));
 }
 
 static void

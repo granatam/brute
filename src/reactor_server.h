@@ -19,13 +19,21 @@ typedef struct rsrv_context_t
   pthread_mutex_t mutex;
 } rsrv_context_t;
 
-typedef struct client_state_t
+typedef struct io_state_t
 {
-  struct iovec vec[5];
+  struct iovec vec[2];
   size_t vec_sz;
-  command_t cmd[2];
+  command_t cmd;
+} io_state_t;
+
+typedef struct write_state_t
+{
+  io_state_t base_state;
+  struct iovec vec_extra[3];
+  command_t cmd_extra;
   int32_t length;
-} client_state_t;
+  size_t vec_extra_sz;
+} write_state_t;
 
 typedef struct client_context_t
 {
@@ -37,8 +45,8 @@ typedef struct client_context_t
   bool registry_used[QUEUE_SIZE];
   task_t registry[QUEUE_SIZE];
   queue_t registry_idx;
-  client_state_t write_state;
-  client_state_t read_state;
+  write_state_t write_state;
+  io_state_t read_state;
   result_t read_buffer;
   pthread_mutex_t is_writing_mutex;
   pthread_mutex_t is_starving_mutex;
