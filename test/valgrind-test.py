@@ -86,8 +86,8 @@ def test_valgrind_async_client_sync_server(data):
             port=9021,
         ),
     ).run(CommandMode.VALGRIND)
-    
-    
+
+
 @given(data=data())
 @settings(deadline=timedelta(seconds=5), phases=phases, max_examples=5)
 def test_valgrind_two_sync_clients_sync_server(data):
