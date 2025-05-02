@@ -259,7 +259,7 @@ accepter_cleanup (void *arg)
   if (!client_ctx)
     return;
 
-  sender_receiver_cleanup (client_ctx);
+  client_context_destroy (client_ctx);
 }
 
 static void *
@@ -280,7 +280,7 @@ handle_clients (void *arg)
 
       if (accept_client (srv_base->listen_fd, &client_ctx->socket_fd)
           == S_FAILURE)
-        goto cleanup;
+        break;
 
       pthread_t sender, receiver;
       if (!(sender
@@ -308,7 +308,7 @@ handle_clients (void *arg)
       client_ctx = NULL;
       trace ("Created a receiver thread: %08x", receiver);
     }
-cleanup:
+
   pthread_cleanup_pop (!0);
 
   return (NULL);

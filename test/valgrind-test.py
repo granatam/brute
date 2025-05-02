@@ -66,41 +66,7 @@ def test_valgrind_sync_client_sync_server(data):
             run_mode=RunMode.SYNC_SERVER,
             brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
             client_run_modes=[RunMode.SYNC_CLIENT],
-            port=9009,
-        ),
-    ).run(CommandMode.VALGRIND)
-
-
-# Asynchronous server, one synchronous client
-@given(data=data())
-@settings(deadline=timedelta(seconds=5), phases=phases, max_examples=5)
-def test_valgrind_sync_client_async_server(data):
-    _TestRunner(
-        data,
-        Config(
-            (2, 3),
-            (2, 3),
-            run_mode=RunMode.ASYNC_SERVER,
-            brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
-            client_run_modes=[RunMode.SYNC_CLIENT],
-            port=9010,
-        ),
-    ).run(CommandMode.VALGRIND)
-
-
-# Asynchronous server, one asynchronous client
-@given(data=data())
-@settings(deadline=timedelta(seconds=5), phases=phases, max_examples=5)
-def test_valgrind_async_client_async_server(data):
-    _TestRunner(
-        data,
-        Config(
-            (2, 3),
-            (2, 3),
-            run_mode=RunMode.ASYNC_SERVER,
-            brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
-            client_run_modes=[RunMode.SYNC_CLIENT],
-            port=9011,
+            port=9020,
         ),
     ).run(CommandMode.VALGRIND)
 
@@ -117,7 +83,137 @@ def test_valgrind_async_client_sync_server(data):
             run_mode=RunMode.SYNC_SERVER,
             brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
             client_run_modes=[RunMode.ASYNC_CLIENT],
-            port=9012,
+            port=9021,
+        ),
+    ).run(CommandMode.VALGRIND)
+    
+    
+@given(data=data())
+@settings(deadline=timedelta(seconds=5), phases=phases, max_examples=5)
+def test_valgrind_two_sync_clients_sync_server(data):
+    _TestRunner(
+        data,
+        Config(
+            (2, 3),
+            (2, 3),
+            run_mode=RunMode.SYNC_SERVER,
+            brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
+            client_run_modes=[RunMode.SYNC_CLIENT, RunMode.SYNC_CLIENT],
+            port=9022,
+        ),
+    ).run(CommandMode.VALGRIND)
+
+
+@given(data=data())
+@settings(deadline=timedelta(seconds=5), phases=phases, max_examples=5)
+def test_valgrind_two_async_clients_sync_server(data):
+    _TestRunner(
+        data,
+        Config(
+            (2, 3),
+            (2, 3),
+            run_mode=RunMode.SYNC_SERVER,
+            brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
+            client_run_modes=[RunMode.ASYNC_CLIENT, RunMode.ASYNC_CLIENT],
+            port=9023,
+        ),
+    ).run(CommandMode.VALGRIND)
+
+
+@given(data=data())
+@settings(deadline=timedelta(seconds=5), phases=phases, max_examples=5)
+def test_valgrind_netcat_sync_client_sync_server(data):
+    _TestRunner(
+        data,
+        Config(
+            (2, 3),
+            (2, 3),
+            run_mode=RunMode.SYNC_SERVER,
+            brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
+            client_run_modes=[RunMode.NETCAT, RunMode.SYNC_CLIENT],
+            port=9024,
+        ),
+    ).run(CommandMode.VALGRIND)
+
+
+@given(data=data())
+@settings(deadline=timedelta(seconds=5), phases=phases, max_examples=5)
+def test_valgrind_netcat_async_client_sync_server(data):
+    _TestRunner(
+        data,
+        Config(
+            (2, 3),
+            (2, 3),
+            run_mode=RunMode.SYNC_SERVER,
+            brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
+            client_run_modes=[RunMode.NETCAT, RunMode.ASYNC_CLIENT],
+            port=9025,
+        ),
+    ).run(CommandMode.VALGRIND)
+
+
+# Asynchronous server, one synchronous client
+@given(data=data())
+@settings(deadline=timedelta(seconds=5), phases=phases, max_examples=5)
+def test_valgrind_sync_client_async_server(data):
+    _TestRunner(
+        data,
+        Config(
+            (2, 3),
+            (2, 3),
+            run_mode=RunMode.ASYNC_SERVER,
+            brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
+            client_run_modes=[RunMode.SYNC_CLIENT],
+            port=9026,
+        ),
+    ).run(CommandMode.VALGRIND)
+
+
+# Asynchronous server, one asynchronous client
+@given(data=data())
+@settings(deadline=timedelta(seconds=5), phases=phases, max_examples=5)
+def test_valgrind_async_client_async_server(data):
+    _TestRunner(
+        data,
+        Config(
+            (2, 3),
+            (2, 3),
+            run_mode=RunMode.ASYNC_SERVER,
+            brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
+            client_run_modes=[RunMode.SYNC_CLIENT],
+            port=9027,
+        ),
+    ).run(CommandMode.VALGRIND)
+
+
+@given(data=data())
+@settings(deadline=timedelta(seconds=5), phases=phases, max_examples=5)
+def test_valgrind_two_sync_clients_async_server(data):
+    _TestRunner(
+        data,
+        Config(
+            (2, 3),
+            (2, 3),
+            run_mode=RunMode.ASYNC_SERVER,
+            brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
+            client_run_modes=[RunMode.SYNC_CLIENT, RunMode.SYNC_CLIENT],
+            port=9028,
+        ),
+    ).run(CommandMode.VALGRIND)
+
+
+@given(data=data())
+@settings(deadline=timedelta(seconds=5), phases=phases, max_examples=5)
+def test_valgrind_two_async_clients_async_server(data):
+    _TestRunner(
+        data,
+        Config(
+            (2, 3),
+            (2, 3),
+            run_mode=RunMode.ASYNC_SERVER,
+            brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
+            client_run_modes=[RunMode.ASYNC_CLIENT, RunMode.ASYNC_CLIENT],
+            port=9029,
         ),
     ).run(CommandMode.VALGRIND)
 
@@ -133,7 +229,7 @@ def test_valgrind_netcat_sync_client_async_server(data):
             run_mode=RunMode.ASYNC_SERVER,
             brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
             client_run_modes=[RunMode.NETCAT, RunMode.SYNC_CLIENT],
-            port=9013,
+            port=9030,
         ),
     ).run(CommandMode.VALGRIND)
 
@@ -149,7 +245,7 @@ def test_valgrind_netcat_async_client_async_server(data):
             run_mode=RunMode.ASYNC_SERVER,
             brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
             client_run_modes=[RunMode.NETCAT, RunMode.ASYNC_CLIENT],
-            port=9014,
+            port=9031,
         ),
     ).run(CommandMode.VALGRIND)
 
@@ -166,7 +262,7 @@ def test_valgrind_sync_client_reactor_server(data):
             run_mode=RunMode.REACTOR_SERVER,
             brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
             client_run_modes=[RunMode.SYNC_CLIENT],
-            port=9010,
+            port=9032,
         ),
     ).run(CommandMode.VALGRIND)
 
@@ -183,7 +279,7 @@ def test_valgrind_async_client_reactor_server(data):
             run_mode=RunMode.REACTOR_SERVER,
             brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
             client_run_modes=[RunMode.SYNC_CLIENT],
-            port=9011,
+            port=9033,
         ),
     ).run(CommandMode.VALGRIND)
 
@@ -199,7 +295,7 @@ def test_valgrind_two_sync_clients_reactor_server(data):
             run_mode=RunMode.REACTOR_SERVER,
             brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
             client_run_modes=[RunMode.SYNC_CLIENT, RunMode.SYNC_CLIENT],
-            port=9013,
+            port=9034,
         ),
     ).run(CommandMode.VALGRIND)
 
@@ -215,7 +311,7 @@ def test_valgrind_two_async_clients_reactor_server(data):
             run_mode=RunMode.REACTOR_SERVER,
             brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
             client_run_modes=[RunMode.ASYNC_CLIENT, RunMode.ASYNC_CLIENT],
-            port=9014,
+            port=9035,
         ),
     ).run(CommandMode.VALGRIND)
 
@@ -231,7 +327,7 @@ def test_valgrind_netcat_sync_client_reactor_server(data):
             run_mode=RunMode.REACTOR_SERVER,
             brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
             client_run_modes=[RunMode.NETCAT, RunMode.SYNC_CLIENT],
-            port=9013,
+            port=9036,
         ),
     ).run(CommandMode.VALGRIND)
 
@@ -247,6 +343,6 @@ def test_valgrind_netcat_async_client_reactor_server(data):
             run_mode=RunMode.REACTOR_SERVER,
             brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
             client_run_modes=[RunMode.NETCAT, RunMode.ASYNC_CLIENT],
-            port=9014,
+            port=9037,
         ),
     ).run(CommandMode.VALGRIND)
