@@ -132,7 +132,7 @@ run_server (task_t *task, config_t *config)
   if (srv_base_context_init (base_ptr, config) == S_FAILURE)
     {
       error ("Could not initialize server context");
-      return (false);
+      goto fail;
     }
 
   if (!thread_create (&base_ptr->mt_ctx.thread_pool, handle_clients, &base_ptr,
