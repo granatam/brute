@@ -119,7 +119,7 @@ parse_params (config_t *config, int argc, char *argv[])
           }
         case 'p':
           config->port = atoi (optarg);
-          if (config->length <= 0 || config->length > MAX_TCP_PORT)
+          if (config->port <= 0 || config->port > MAX_TCP_PORT)
             {
               error ("Port must be a number between 0 and %d", MAX_TCP_PORT);
               return (S_FAILURE);
