@@ -30,6 +30,17 @@ ifeq (${WITH_VALGRIND}, true)
 	TESTS+=test/valgrind-test.py
 endif
 
+ifeq ($(shell uname -s), Darwin)
+	BREW_EXISTS := $(shell command -v brew >/dev/null 2>&1 && echo 1)
+ifdef BREW_EXISTS
+	BREW_PREFIX := $(shell brew --prefix libevent)
+	CFLAGS += -I$(BREW_PREFIX)/include
+	LIBS += -L$(BREW_PREFIX)/lib
+else
+$(warning Warning: macOS build configuration requires brew and libevent installed from it. Install brew and libevent or set paths manually.)
+endif
+endif
+
 all: ${TARGET}
 
 ${OBJ_DIR}:
