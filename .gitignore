@@ -1,12 +1,15 @@
+.*
+!.git/
+!.github/
+!.gitignore
+!.clang-format
+!.editor-config
+
 obj/
-.hypothesis/
-.pytest_cache/
-.vscode/
-.venv/
 __pycache__/
 
 *.a
 *.o
 brute
 
-.DS_Store
+compile_commands.json
