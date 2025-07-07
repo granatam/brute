@@ -37,7 +37,7 @@ jobs:
       - name: build with ASan (release)
         run: |
             export CFLAGS="$CFLAGS -O2 -Wall -Wextra -gdwarf-4 -fsanitize=address -fno-omit-frame-pointer"
-            ${{ inputs.cc_prefix }} make release
+            ${{ inputs.cc_prefix }} make dev
       - name: test with ASan (release)
         run: make check
       - name: build with UBSan (release)
