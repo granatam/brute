@@ -99,6 +99,11 @@ class Config:
 class _TestRunner:
     def __init__(self, data, config: Config = Config()):
         self.config = config
+        if os.getenv("ASAN"):
+            self.config.brute_mode_pool = [
+                BruteMode.ITERATIVE,
+                BruteMode.RECURSIVE,
+            ]
         self.generated_params = self.generate_test_params(data)
 
     def generate_test_params(self, data):
