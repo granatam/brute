@@ -65,7 +65,7 @@ ${CRYPT_LIB}:
 	@${MAKE} -C crypt
 
 check: all
-	@pytest --hypothesis-show-statistics ${TESTS}
+	@pytest -n auto --tb=short -vv --hypothesis-show-statistics ${TESTS}
 
 perf: all
 	@pytest -rA ${PERF_TESTS}

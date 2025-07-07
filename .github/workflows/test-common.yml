@@ -25,7 +25,7 @@ jobs:
         run: |
           echo "HYPOTHESIS_MAX_EXAMPLES=50" >> $GITHUB_ENV
       - name: install python dependencies 
-        run: pip install pytest hypothesis
+        run: pip install pytest pytest-xdist hypothesis
       - name: build (dev)
         run: ${{ inputs.cc_prefix }} make dev
       - name: test (dev)

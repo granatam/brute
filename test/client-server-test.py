@@ -144,7 +144,7 @@ def test_sync_client_reactor_server(data):
             (2, 3),
             run_mode=RunMode.REACTOR_SERVER,
             client_run_modes=[RunMode.SYNC_CLIENT],
-            port=9015,
+            port=9009,
         ),
     ).run()
 
@@ -160,7 +160,7 @@ def test_two_sync_clients_reactor_server(data):
             (4, 5),
             run_mode=RunMode.REACTOR_SERVER,
             client_run_modes=[RunMode.SYNC_CLIENT, RunMode.SYNC_CLIENT],
-            port=9016,
+            port=9010,
         ),
     ).run()
 
@@ -176,7 +176,7 @@ def test_async_client_reactor_server(data):
             (2, 3),
             run_mode=RunMode.REACTOR_SERVER,
             client_run_modes=[RunMode.SYNC_CLIENT],
-            port=9017,
+            port=9011,
         ),
     ).run()
 
@@ -192,7 +192,7 @@ def test_two_async_clients_reactor_server(data):
             (4, 5),
             run_mode=RunMode.REACTOR_SERVER,
             client_run_modes=[RunMode.ASYNC_CLIENT, RunMode.ASYNC_CLIENT],
-            port=9018,
+            port=9012,
         ),
     ).run()
 
