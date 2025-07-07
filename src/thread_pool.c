@@ -263,6 +263,10 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
   if (strstr (var, "valgrind"))
     nanosleep (&time, &time2);
 
+#ifdef __SANITIZE_ADDRESS__
+  nanosleep (&time, &time2); /* Same thing with ASan. */
+#endif
+
   return (S_SUCCESS);
 }
 
