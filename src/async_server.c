@@ -269,18 +269,25 @@ handle_clients (void *arg)
   mt_context_t *mt_ctx = &srv_base->mt_ctx;
 
   client_context_t *client_ctx = NULL;
+  int socket_fd = 0;
+
   pthread_cleanup_push (accepter_cleanup, &client_ctx);
   while (true)
     {
-      if (!client_ctx)
-        client_ctx = client_context_init (srv_base);
+      if (accept_client (srv_base->listen_fd, &socket_fd) == S_FAILURE)
+        {
+          error ("Could not accept client");
+          sender_receiver_cleanup (client_ctx);
+          continue;
+        }
 
       if (!client_ctx)
-        break;
-
-      if (accept_client (srv_base->listen_fd, &client_ctx->socket_fd)
-          == S_FAILURE)
-        goto cleanup;
+        {
+          client_ctx = client_context_init (srv_base);
+          if (!client_ctx)
+            break;
+          client_ctx->socket_fd = socket_fd;
+        }
 
       pthread_t sender, receiver;
       if (!(sender
