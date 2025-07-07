@@ -3,6 +3,7 @@
 !.github/
 !.gitignore
 !.clang-format
+!.clang-tidy
 !.editor-config
 
 obj/
