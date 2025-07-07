@@ -80,7 +80,6 @@ static void
 client_context_destroy (client_context_t *ctx)
 {
   pthread_cleanup_push (free, ctx);
-  pthread_cleanup_push (free, ctx->registry_idx.queue);
 
   trace ("Destroying client context");
 
@@ -98,7 +97,6 @@ client_context_destroy (client_context_t *ctx)
     error ("Could not destroy mutex");
   close_client (ctx->socket_fd);
 
-  pthread_cleanup_pop (0);
   pthread_cleanup_pop (!0);
 
   trace ("Freed client context");
@@ -279,7 +277,6 @@ handle_clients (void *arg)
       if (accept_client (srv_base->listen_fd, &socket_fd) == S_FAILURE)
         {
           error ("Could not accept client");
-          sender_receiver_cleanup (client_ctx);
           continue;
         }
 
@@ -315,6 +312,7 @@ handle_clients (void *arg)
         }
 
       client_ctx = NULL;
+      socket_fd = 0;
       trace ("Created a receiver thread: %08x", receiver);
     }
 cleanup:
