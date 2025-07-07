@@ -80,6 +80,7 @@ static void
 client_context_destroy (client_context_t *ctx)
 {
   pthread_cleanup_push (free, ctx);
+  pthread_cleanup_push (free, ctx->registry_idx.queue);
 
   trace ("Destroying client context");
 
@@ -97,6 +98,7 @@ client_context_destroy (client_context_t *ctx)
     error ("Could not destroy mutex");
   close_client (ctx->socket_fd);
 
+  pthread_cleanup_pop (0);
   pthread_cleanup_pop (!0);
 
   trace ("Freed client context");
