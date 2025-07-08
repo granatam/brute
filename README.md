@@ -31,11 +31,11 @@ Run modes:
         -m, --multi              multithreaded mode
         -g, --gen                generator mode
         -c, --client             synchronous client mode
-        -L, --load-clients uint  spawn N load clients
         -S, --server             synchronous server mode
         -v, --async-client       asynchronous client mode
         -w, --async-server       asynchronous server mode
         -R, --reactor-server     reactor server mode
+        -L, --load-clients uint  spawn N load clients
 
 Brute modes:
         -i, --iter               iterative bruteforce

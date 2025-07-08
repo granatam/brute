@@ -10,7 +10,7 @@ from testrunner import (
     BruteMode,
     CommandMode,
     Config,
-    # RunMode,
+    RunMode,
     _TestRunner,
     phases,
 )
@@ -46,6 +46,23 @@ def test_valgrind_one_client_server(data, client_mode, server_mode):
             brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
         ),
     ).run(CommandMode.VALGRIND)
+
+
+@pytest.mark.parametrize("server_mode", SERVER_MODES)
+@given(data=data())
+@settings(deadline=timedelta(seconds=15), phases=phases, max_examples=5)
+def test_valgrind_load_clients(data, server_mode):
+    _TestRunner(
+        data,
+        Config(
+            (4, 5),
+            (4, 5),
+            run_mode=server_mode,
+            brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
+            client_run_modes=[RunMode.LOAD_CLIENTS],
+            load_clients_range=(5, 10),
+        ),
+    ).run(CommandMode.VALGRIND, expected_output="Password not found\n")
 
 
 @pytest.mark.parametrize("first_client_mode", CLIENT_MODES)

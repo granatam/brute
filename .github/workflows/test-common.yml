@@ -24,7 +24,7 @@ jobs:
         if: ${{ contains(inputs.runs_on, 'macos') }}
         run: |
           echo "HYPOTHESIS_MAX_EXAMPLES=50" >> $GITHUB_ENV
-      - name: install python dependencies 
+      - name: install python dependencies
         run: pip install pytest hypothesis pytest-xdist
       - name: build (dev)
         run: ${{ inputs.cc_prefix }} make dev
@@ -34,15 +34,15 @@ jobs:
         run: ${{ inputs.cc_prefix }} make release
       - name: test (release)
         run: ${{ inputs.valgrind_prefix }} make check
-      # - name: build with ASan (release)
-      #   run: |
-      #       export CFLAGS="$CFLAGS -O2 -Wall -Wextra -gdwarf-4 -fsanitize=address -fno-omit-frame-pointer"
-      #       ${{ inputs.cc_prefix }} make release
-      # - name: test with ASan (release)
-      #   run: make check
+      - name: build with UBSan (dev)
+        run: |
+          export CFLAGS="$CFLAGS -O0 -g3 -gdwarf-4 -fsanitize=undefined -fno-omit-frame-pointer"
+          ${{ inputs.cc_prefix }} make dev
+      - name: test with UBSan (dev)
+        run: UBSAN_OPTIONS=print_stacktrace=1 make check
       - name: build with UBSan (release)
         run: |
-            export CFLAGS="$CFLAGS -O2 -Wall -Wextra -gdwarf-4 -fsanitize=undefined -fno-omit-frame-pointer"
-            ${{ inputs.cc_prefix }} make release
+          export CFLAGS="$CFLAGS -O3 -DNDEBUG -g0 -fsanitize=undefined -fno-omit-frame-pointer"
+          ${{ inputs.cc_prefix }} make release
       - name: test with UBSan (release)
-        run: make check
+        run: UBSAN_OPTIONS=print_stacktrace=1 make check
