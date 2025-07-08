@@ -1,6 +1,5 @@
 #include "sync_server.h"
 
-#include "brute.h"
 #include "brute_engine.h"
 #include "log.h"
 #include "queue.h"

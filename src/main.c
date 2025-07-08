@@ -3,6 +3,7 @@
 #include "common.h"
 #include "config.h"
 #include "gen.h"
+#include "load_client.h"
 #include "log.h"
 #include "multi.h"
 #include "reactor_server.h"
@@ -43,11 +44,11 @@ usage (char *first_arg)
            "\t-m, --multi              multithreaded mode\n"
            "\t-g, --gen                generator mode\n"
            "\t-c, --client             synchronous client mode\n"
-           "\t-L, --load-clients uint  spawn N load clients\n"
            "\t-S, --server             synchronous server mode\n"
            "\t-v, --async-client       asynchronous client mode\n"
            "\t-w, --async-server       asynchronous server mode\n"
            "\t-R, --reactor-server     reactor server mode\n"
+           "\t-L, --load-clients uint  spawn N load clients\n"
            "brute modes:\n"
            "\t-i, --iter               iterative bruteforce\n"
            "\t-r, --rec                recursive bruteforce\n"
@@ -68,7 +69,6 @@ parse_params (config_t *config, int argc, char *argv[])
           { "threads", required_argument, 0, 't' },
           { "port", required_argument, 0, 'p' },
           { "addr", required_argument, 0, 'A' },
-          { "load-clients", required_argument, 0, 'L' },
           { "timeout", required_argument, 0, 'T' },
           { "single", no_argument, 0, 's' },
           { "multi", no_argument, 0, 'm' },
@@ -78,6 +78,7 @@ parse_params (config_t *config, int argc, char *argv[])
           { "async-client", no_argument, 0, 'v' },
           { "async-server", no_argument, 0, 'w' },
           { "reactor-server", no_argument, 0, 'R' },
+          { "load-clients", required_argument, 0, 'L' },
           { "iter", no_argument, 0, 'i' },
           { "rec", no_argument, 0, 'r' },
           { "rec-gen", no_argument, 0, 'y' },
@@ -155,16 +156,6 @@ parse_params (config_t *config, int argc, char *argv[])
         case 'c':
           config->run_mode = RM_CLIENT;
           break;
-        case 'L':
-          config->number_of_threads = atoi (optarg);
-          if (config->number_of_threads < 1)
-            {
-              error ("Number of load clients to spawn must be a number "
-                     "greater than 1");
-              return (S_FAILURE);
-            }
-          config->run_mode = RM_LOAD_CLIENT;
-          break;
         case 'S':
           config->run_mode = RM_SERVER;
           break;
@@ -185,6 +176,16 @@ parse_params (config_t *config, int argc, char *argv[])
           break;
         case 'y':
           config->brute_mode = BM_REC_GEN;
+          break;
+        case 'L':
+          config->number_of_threads = atoi (optarg);
+          if (config->number_of_threads < 1)
+            {
+              error ("Number of load clients to spawn must be a number "
+                     "greater than 1");
+              return (S_FAILURE);
+            }
+          config->run_mode = RM_LOAD_CLIENT;
           break;
         case 'h':
           usage (argv[0]);
@@ -245,11 +246,11 @@ main (int argc, char *argv[])
     case RM_CLIENT:
       run_client (&config, sync_client_find_password);
       return (EXIT_SUCCESS);
-    case RM_LOAD_CLIENT:
-      spawn_clients (&config, NULL);
-      return (EXIT_SUCCESS);
     case RM_REACTOR_SERVER:
       is_found = run_reactor_server (&task, &config);
+      break;
+    case RM_LOAD_CLIENT:
+      spawn_load_clients (&config);
       break;
     }
 
