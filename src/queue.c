@@ -222,7 +222,7 @@ queue_push_back (queue_t *queue, void *payload)
   pthread_cleanup_push (free, node);
   memcpy (node->payload, payload, queue->unit_size);
 
-  bool list_used = true;
+  volatile bool list_used = true;
   if (pthread_mutex_lock (&queue->head_mutex) != 0)
     {
       error ("Could not lock queue head mutex");
