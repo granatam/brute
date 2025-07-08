@@ -159,6 +159,8 @@ queue_trypop (queue_t *queue, void *payload)
     case SS_SUCCESS:
       return (queue_pop_internal (queue, payload));
     }
+
+  return (QS_FAILURE);
 }
 
 queue_status_t
