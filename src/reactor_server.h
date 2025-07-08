@@ -4,6 +4,7 @@
 #include "common.h"
 #include "config.h"
 #include "queue.h"
+#include "reactor_common.h"
 #include "server_common.h"
 
 #include <event.h>
@@ -52,12 +53,6 @@ typedef struct client_context_t
   pthread_mutex_t is_starving_mutex;
   pthread_mutex_t registry_used_mutex;
 } client_context_t;
-
-typedef struct job_t
-{
-  void *arg;
-  status_t (*job_func) (void *);
-} job_t;
 
 bool run_reactor_server (task_t *, config_t *);
 
