@@ -24,7 +24,7 @@ typedef struct client_context_t
 {
   client_base_context_t client_base;
   thread_pool_t thread_pool;
-  queue_t jobs_queue;
+  reactor_context_t rctr_ctx;
   pthread_mutex_t mutex;
   volatile bool done;
   pthread_cond_t cond_sem;
@@ -41,7 +41,7 @@ client_context_init (client_context_t *ctx, config_t *config)
       error ("Could not initialize thread pool");
       return (S_FAILURE);
     }
-  if (queue_init (&ctx->jobs_queue, sizeof (job_t)) != QS_SUCCESS)
+  if (queue_init (&ctx->rctr_ctx.jobs_queue, sizeof (job_t)) != QS_SUCCESS)
     {
       error ("Could not initialize jobs queue");
       return (S_FAILURE);
@@ -68,7 +68,7 @@ client_context_init (client_context_t *ctx, config_t *config)
   return (S_SUCCESS);
 
 cleanup:
-  queue_destroy (&ctx->jobs_queue);
+  queue_destroy (&ctx->rctr_ctx.jobs_queue);
 
   client_base_context_destroy (&ctx->client_base);
 
@@ -80,7 +80,7 @@ client_context_destroy (client_context_t *ctx)
 {
   status_t status = S_SUCCESS;
 
-  if (queue_cancel (&ctx->jobs_queue) != QS_SUCCESS)
+  if (queue_cancel (&ctx->rctr_ctx.jobs_queue) != QS_SUCCESS)
     {
       error ("Could not cancel jobs queue");
       status = S_FAILURE;
@@ -96,21 +96,11 @@ client_context_destroy (client_context_t *ctx)
   trace ("Waited for all threads to end, closing the connection now");
 
 cleanup:
-  queue_destroy (&ctx->jobs_queue);
+  queue_destroy (&ctx->rctr_ctx.jobs_queue);
 
   client_base_context_destroy (&ctx->client_base);
 
   return (status);
-}
-
-static void *
-dispatch_event_loop (void *arg)
-{
-  client_context_t *ctx = *(client_context_t **)arg;
-  if (event_base_dispatch (ctx->ev_base) != 0)
-    error ("Could not dispatch the event loop");
-
-  return (NULL);
 }
 
 bool
@@ -125,18 +115,18 @@ run_reactor_client (config_t *config)
     goto cleanup;
 
   client_context_t *ctx_ptr = &ctx;
+  reactor_context_t *rctr_ctx_ptr = &ctx.rctr_ctx;
 
   int number_of_threads
       = (config->number_of_threads > 2) ? config->number_of_threads - 2 : 1;
-  // if (create_threads (&ctx.thread_pool, number_of_threads, handle_io,
-  // &ctx_ptr,
-  //                     sizeof (ctx_ptr), "i/o handler")
-  //     == 0)
-  //   goto cleanup;
+  if (create_threads (&ctx.thread_pool, number_of_threads, handle_io,
+                      &rctr_ctx_ptr, sizeof (rctr_ctx_ptr), "i/o handler")
+      == 0)
+    goto cleanup;
   trace ("Created I/O handler thread");
 
-  if (!thread_create (&ctx.thread_pool, dispatch_event_loop, &ctx_ptr,
-                      sizeof (ctx_ptr), "event loop dispatcher"))
+  if (!thread_create (&ctx.thread_pool, dispatch_event_loop, &ctx.rctr_ctx,
+                      sizeof (ctx.rctr_ctx), "event loop dispatcher"))
     goto cleanup;
   trace ("Created event loop dispatcher thread");
 
