@@ -14,9 +14,8 @@
 typedef struct rsrv_context_t
 {
   srv_base_context_t srv_base;
-  queue_t jobs_queue;
+  reactor_context_t rctr_ctx;
   queue_t starving_clients;
-  struct event_base *ev_base;
   pthread_mutex_t mutex;
 } rsrv_context_t;
 
