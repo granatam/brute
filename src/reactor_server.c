@@ -738,6 +738,7 @@ run_reactor_server (task_t *task, config_t *config)
   if (process_tasks (task, config, mt_ctx) == S_FAILURE)
     goto free_listener;
 
+  /* Why there is no check for listener but below there is a check? */
   evconnlistener_free (listener);
 
   if (rsrv_context_destroy (&rsrv_ctx) == S_FAILURE)

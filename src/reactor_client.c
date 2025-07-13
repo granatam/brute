@@ -8,6 +8,7 @@
 #include "thread_pool.h"
 
 #include <arpa/inet.h>
+#include <assert.h>
 #include <event2/event.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -20,6 +21,15 @@
 #include <sys/types.h>
 #endif
 
+/* NOTE: io_state_t could be reused here. We might save first element in cmd
+ * field and then we'd need only 2-element vector. */
+typedef struct read_state_t
+{
+  struct iovec vec[3];
+  size_t vec_sz;
+  command_t cmd;
+} read_state_t;
+
 typedef struct client_context_t
 {
   client_base_context_t client_base;
@@ -29,7 +39,12 @@ typedef struct client_context_t
   volatile bool done;
   pthread_cond_t cond_sem;
   struct event_base *ev_base;
+  struct event *read_event;
+  read_state_t read_state;
+  /* Seems like we'll need a task queue and a result queue here. */
 } client_context_t;
+
+static void handle_read (evutil_socket_t, short, void *);
 
 static status_t
 client_context_init (client_context_t *ctx, config_t *config)
@@ -59,9 +74,26 @@ client_context_init (client_context_t *ctx, config_t *config)
 
   ctx->done = false;
 
+  ctx->rctr_ctx.ev_base = event_base_new ();
+  if (!ctx->rctr_ctx.ev_base)
+    {
+      error ("Could not initialize event base");
+      return (S_FAILURE);
+    }
+  trace ("Allocated memory for event loop base");
+
   if (client_base_context_init (&ctx->client_base, config, NULL) == S_FAILURE)
     {
       error ("Could not initialize client base context");
+      goto cleanup;
+    }
+
+  ctx->read_event
+      = event_new (ctx->rctr_ctx.ev_base, ctx->client_base.socket_fd,
+                   EV_READ | EV_PERSIST, handle_read, ctx);
+  if (!ctx->read_event)
+    {
+      error ("Could not create read event");
       goto cleanup;
     }
 
@@ -79,6 +111,11 @@ static status_t
 client_context_destroy (client_context_t *ctx)
 {
   status_t status = S_SUCCESS;
+
+  event_base_free (ctx->rctr_ctx.ev_base);
+  if (event_del (ctx->read_event) == -1)
+    error ("Could not delete read event");
+  event_free (ctx->read_event);
 
   if (queue_cancel (&ctx->rctr_ctx.jobs_queue) != QS_SUCCESS)
     {
@@ -103,6 +140,56 @@ cleanup:
   return (status);
 }
 
+static status_t
+send_task_job (void *arg)
+{
+  (void)arg;
+  /* 1. Try to pop a result from a result queue.
+   * 2. If a result queue is empty, something wrong happened, because amount
+   *    of send_task jobs must be equal to amount of processed tasks.
+   * 3. Send task to the server. It'd be cool to reuse `send_task_job` from
+   *    reactor server here. `write_state_t`?
+   */
+
+  return (S_SUCCESS);
+}
+
+static status_t
+process_task_job (void *arg)
+{
+  (void)arg;
+  /* 1. Initialize st_context.
+   * 2. Call brute.
+   * 3. Save result to a result queue.
+   * 4. Push send_task_job to a job queue.
+   */
+
+  return (S_SUCCESS);
+}
+
+static void
+handle_read (evutil_socket_t socket_fd, short what, void *arg)
+{
+  assert (what == EV_READ);
+  /* We already have socket_fd in client_context_t */
+  (void)socket_fd; /* to suppress "unused parameter" warning */
+
+  client_context_t *ctx = arg;
+
+  /* 1. Read the first element of vector from ctx->client_base.socket_fd.
+   * 2. Convert data to command_t and if it is an alphabet, read other 2
+   *    elements, else read just one.
+   * 3. Based on a command, do the following:
+   *    - If we've received an alphabet, set config->alph.
+   *    - If this is a hash, set config->hash.
+   *    - Otherwise, add task to a task queue and push a process_task job to
+   *      a jobs queue.
+   *
+   * We should use io_state with three elements because we could receive either
+   * 2 elements or 3 elements, and we should handle all possible cases.
+   */
+}
+
 bool
 run_reactor_client (config_t *config)
 {
@@ -114,7 +201,6 @@ run_reactor_client (config_t *config)
   if (srv_connect (&ctx.client_base) == S_FAILURE)
     goto cleanup;
 
-  client_context_t *ctx_ptr = &ctx;
   reactor_context_t *rctr_ctx_ptr = &ctx.rctr_ctx;
 
   int number_of_threads
@@ -151,10 +237,8 @@ run_reactor_client (config_t *config)
       goto cleanup;
     }
 
-  if (S_FAILURE == status)
-    goto cleanup;
-
-  trace ("Got signal on conditional semaphore");
+  if (status != S_FAILURE)
+    trace ("Got signal on conditional semaphore");
 
 cleanup:
   if (client_context_destroy (&ctx) == S_FAILURE)
