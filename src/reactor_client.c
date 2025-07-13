@@ -16,11 +16,6 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#ifdef __FreeBSD__
-#include <sys/socket.h>
-#include <sys/types.h>
-#endif
-
 /* NOTE: io_state_t could be reused here. We might save first element in cmd
  * field and then we'd need only 2-element vector. */
 typedef struct read_state_t

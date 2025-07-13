@@ -1,11 +1,7 @@
 .PHONY: all dev debug release check perf clean
 
 CFLAGS ?= -O2 -Wall -Wextra -gdwarf-4
-ifeq ($(shell uname), FreeBSD)
-	LIBS+=-lpthread
-else
-	CFLAGS+=-pthread
-endif
+CFLAGS+=-pthread
 CFLAGS+=-I./crypt
 LIBS+=-levent
 
