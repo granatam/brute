@@ -17,6 +17,13 @@
 #include <string.h>
 #include <unistd.h>
 
+#define DEFAULT_LENGTH 3
+#define DEFAULT_ALPH "abc"
+#define DEFAULT_HASH "abFZSxKKdq5s6" /* crypt ("abc", "abc"); */
+#define DEFAULT_PORT 9000
+#define DEFAULT_ADDR "127.0.0.1"
+#define DEFAULT_TIMEOUT 0
+
 static void
 usage (char *first_arg)
 {
@@ -196,13 +203,13 @@ main (int argc, char *argv[])
   config_t config = {
     .run_mode = RM_SINGLE,
     .brute_mode = BM_ITER,
-    .length = 3,
+    .length = DEFAULT_LENGTH,
     .number_of_threads = sysconf (_SC_NPROCESSORS_ONLN),
-    .alph = "abc",
-    .hash = "abFZSxKKdq5s6", /* crypt ("abc", "abc"); */
-    .port = 9000,
-    .addr = "127.0.0.1",
-    .timeout = 0,
+    .alph = DEFAULT_ALPH,
+    .hash = DEFAULT_HASH,
+    .port = DEFAULT_PORT,
+    .addr = DEFAULT_ADDR,
+    .timeout = DEFAULT_TIMEOUT,
   };
 
   if (parse_params (&config, argc, argv) == S_FAILURE)

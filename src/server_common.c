@@ -18,6 +18,8 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+#define MAX_CONN_QUEUE_LEN (10)
+
 status_t
 srv_base_context_init (srv_base_context_t *srv_base, config_t *config)
 {
@@ -52,7 +54,7 @@ srv_base_context_init (srv_base_context_t *srv_base, config_t *config)
       goto fail;
     }
 
-  if (listen (srv_base->listen_fd, 10) == -1)
+  if (listen (srv_base->listen_fd, MAX_CONN_QUEUE_LEN) == -1)
     {
       error ("Could not start listening to incoming connections");
       goto fail;
