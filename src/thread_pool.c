@@ -8,6 +8,9 @@
 #include <string.h>
 #include <time.h>
 
+#define NSEC_IN_MS (1000000L)
+#define TP_CLEANUP_DELAY_MS (100L * NSEC_IN_MS)
+
 status_t
 thread_pool_init (thread_pool_t *thread_pool)
 {
@@ -258,7 +261,7 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
     return (S_SUCCESS);
   struct timespec time, time2;
   time.tv_sec = 0;
-  time.tv_nsec = 100000000L;
+  time.tv_nsec = TP_CLEANUP_DELAY_MS;
   if (strstr (var, "valgrind"))
     nanosleep (&time, &time2);
 

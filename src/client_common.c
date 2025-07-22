@@ -11,6 +11,9 @@
 #include <time.h>
 #include <unistd.h>
 
+#define MS_IN_SEC (1000L)
+#define NS_IN_MSEC (1000000L)
+
 status_t
 client_base_context_init (client_base_context_t *client_base, config_t *config,
                           task_callback_t task_cb)
@@ -167,15 +170,15 @@ int
 ms_sleep (long milliseconds)
 {
   struct timespec duration, rem;
-  if (milliseconds >= 1000)
+  if (milliseconds >= MS_IN_SEC)
     {
-      duration.tv_sec = milliseconds / 1000;
-      duration.tv_nsec = (milliseconds % 1000) * 1000000;
+      duration.tv_sec = milliseconds / MS_IN_SEC;
+      duration.tv_nsec = (milliseconds % MS_IN_SEC) * NS_IN_MSEC;
     }
   else
     {
       duration.tv_sec = 0;
-      duration.tv_nsec = milliseconds * 1000000;
+      duration.tv_nsec = milliseconds * NS_IN_MSEC;
     }
   return nanosleep (&duration, &rem);
 }
