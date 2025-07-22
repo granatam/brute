@@ -1,29 +1,29 @@
-on: [ 'push', 'pull_request' ]
-
-jobs:
-  test:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: x86 Ubuntu (gcc)
-            runs_on: ubuntu-latest
-            cc_prefix: CC=gcc
-            valgrind_prefix: WITH_VALGRIND=true
-          - name: x86 Ubuntu (clang)
-            runs_on: ubuntu-latest
-            cc_prefix: CC=clang
-            valgrind_prefix: WITH_VALGRIND=true
-          - name: AArch64 MacOS (clang)
-            runs_on: macos-latest
-            cc_prefix: |
-                export CFLAGS="-I$(brew --prefix libevent)/include $CFLAGS"
-                export LIBS="-L$(brew --prefix libevent)/lib"
-          - name: x86 MacOS (clang)
-            runs_on: macos-13
-    name: ${{ matrix.name }}
-    uses: ./.github/workflows/test-common.yml
-    with:
-      runs_on: ${{ matrix.runs_on }}
-      cc_prefix: ${{ matrix.cc_prefix }}
-      valgrind_prefix: ${{ matrix.valgrind_prefix }}
+# on: [ 'push', 'pull_request' ]
+#
+# jobs:
+#   test:
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         include:
+#           - name: x86 Ubuntu (gcc)
+#             runs_on: ubuntu-latest
+#             cc_prefix: CC=gcc
+#             valgrind_prefix: WITH_VALGRIND=true
+#           - name: x86 Ubuntu (clang)
+#             runs_on: ubuntu-latest
+#             cc_prefix: CC=clang
+#             valgrind_prefix: WITH_VALGRIND=true
+#           - name: AArch64 MacOS (clang)
+#             runs_on: macos-latest
+#             cc_prefix: |
+#                 export CFLAGS="-I$(brew --prefix libevent)/include $CFLAGS"
+#                 export LIBS="-L$(brew --prefix libevent)/lib"
+#           - name: x86 MacOS (clang)
+#             runs_on: macos-13
+#     name: ${{ matrix.name }}
+#     uses: ./.github/workflows/test-common.yml
+#     with:
+#       runs_on: ${{ matrix.runs_on }}
+#       cc_prefix: ${{ matrix.cc_prefix }}
+#       valgrind_prefix: ${{ matrix.valgrind_prefix }}

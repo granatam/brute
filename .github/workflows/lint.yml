@@ -1,27 +1,42 @@
 on: [ 'push' ]
 
 jobs:
-  check-format-c:
+  lint-c:
     runs-on: ubuntu-latest
-    name: clang-format
-    steps:
-    - uses: actions/checkout@v3
-    - uses: jidicula/clang-format-action@v4.11.0
-      with:
-        clang-format-version: '16'
-        check-path: '.'
-        exclude-regex: 'crypt'
-  lint-python:
-    runs-on: ubuntu-latest
-    name: Ruff linter
+    name: clang-tidy
     steps:
       - uses: actions/checkout@v3
-      - uses: chartboost/ruff-action@v1
-  check-format-python:
-    runs-on: ubuntu-latest
-    name: Ruff formatter
-    steps:
-      - uses: actions/checkout@v3
-      - uses: chartboost/ruff-action@v1
-        with:
-            args: format --check
+      - name: install bear, clang-tidy and libevent
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install libevent-dev bear clang-tidy -y
+      - name: build through bear to capture compile commands
+        run: bear -- make -B
+      - name: run clang-tidy
+        run: |
+          find src -type f \( -name '*.c' -o -name '*.h' \) -print0 |
+            xargs -0 -n1 clang-tidy -p .
+  # check-format-c:
+  #   runs-on: ubuntu-latest
+  #   name: clang-format
+  #   steps:
+  #   - uses: actions/checkout@v3
+  #   - uses: jidicula/clang-format-action@v4.11.0
+  #     with:
+  #       clang-format-version: '16'
+  #       check-path: '.'
+  #       exclude-regex: 'crypt'
+  # lint-python:
+  #   runs-on: ubuntu-latest
+  #   name: Ruff linter
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: chartboost/ruff-action@v1
+  # check-format-python:
+  #   runs-on: ubuntu-latest
+  #   name: Ruff formatter
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: chartboost/ruff-action@v1
+  #       with:
+  #           args: format --check

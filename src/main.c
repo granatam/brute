@@ -17,6 +17,13 @@
 #include <string.h>
 #include <unistd.h>
 
+#define DEFAULT_LENGTH 3
+#define DEFAULT_ALPH "abc"
+#define DEFAULT_HASH "abFZSxKKdq5s6" /* crypt ("abc", "abc"); */
+#define DEFAULT_PORT 9000
+#define DEFAULT_ADDR "127.0.0.1"
+#define DEFAULT_TIMEOUT 0
+
 static void
 usage (char *first_arg)
 {
@@ -83,7 +90,15 @@ parse_params (config_t *config, int argc, char *argv[])
       switch (opt)
         {
         case 'l':
-          config->length = atoi (optarg);
+          char *endptr;
+          config->length = strtol (optarg, &endptr, 10);
+          if (endptr == optarg || *endptr != '\0'
+              || ((config->length == LONG_MIN || config->length == LONG_MAX)
+                  && errno == ERANGE))
+            {
+              error ("Could not parse length");
+              return (S_FAILURE);
+            }
           if (config->length <= 0 || config->length > MAX_PASSWORD_LENGTH)
             {
               error ("Password's length must be a number between 0 and %d",
@@ -196,13 +211,13 @@ main (int argc, char *argv[])
   config_t config = {
     .run_mode = RM_SINGLE,
     .brute_mode = BM_ITER,
-    .length = 3,
+    .length = DEFAULT_LENGTH,
     .number_of_threads = sysconf (_SC_NPROCESSORS_ONLN),
-    .alph = "abc",
-    .hash = "abFZSxKKdq5s6", /* crypt ("abc", "abc"); */
-    .port = 9000,
-    .addr = "127.0.0.1",
-    .timeout = 0,
+    .alph = DEFAULT_ALPH,
+    .hash = DEFAULT_HASH,
+    .port = DEFAULT_PORT,
+    .addr = DEFAULT_ADDR,
+    .timeout = DEFAULT_TIMEOUT,
   };
 
   if (parse_params (&config, argc, argv) == S_FAILURE)
@@ -234,28 +249,20 @@ main (int argc, char *argv[])
       break;
     case RM_ASYNC_CLIENT:
       run_async_client (&config);
-      break;
+      return (EXIT_SUCCESS);
     case RM_CLIENT:
       run_client (&config, sync_client_find_password);
-      break;
+      return (EXIT_SUCCESS);
     case RM_LOAD_CLIENT:
       spawn_clients (&config, NULL);
-      break;
+      return (EXIT_SUCCESS);
     case RM_REACTOR_SERVER:
       is_found = run_reactor_server (&task, &config);
       break;
     }
 
-  /* Clients should not output anything, only computations and data exchange
-   * with the server */
-  if (config.run_mode == RM_CLIENT || config.run_mode == RM_LOAD_CLIENT
-      || config.run_mode == RM_ASYNC_CLIENT)
-    return (EXIT_SUCCESS);
-
-  if (is_found)
-    printf ("Password found: %s\n", task.result.password);
-  else
-    printf ("Password not found\n");
+  printf ("Password %s%s\n", is_found ? "found: " : "not found",
+          is_found ? task.result.password : "");
 
   return (EXIT_SUCCESS);
 }
