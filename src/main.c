@@ -55,7 +55,7 @@ usage (char *first_arg)
 static status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
-  const char short_opts[] = "l:a:H:t:p:A:L:T:smgcSvwRiryh";
+  const char short_opts[] = "l:a:H:t:p:A:L:T:smgcSvwRxiryh";
   const struct option long_opts[]
       = { { "length", required_argument, 0, 'l' },
           { "alph", required_argument, 0, 'a' },
