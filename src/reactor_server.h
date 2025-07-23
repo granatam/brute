@@ -19,22 +19,6 @@ typedef struct rsrv_context_t
   pthread_mutex_t mutex;
 } rsrv_context_t;
 
-typedef struct io_state_t
-{
-  struct iovec vec[2];
-  size_t vec_sz;
-  command_t cmd;
-} io_state_t;
-
-typedef struct write_state_t
-{
-  io_state_t base_state;
-  struct iovec vec_extra[3];
-  command_t cmd_extra;
-  int32_t length;
-  size_t vec_extra_sz;
-} write_state_t;
-
 typedef struct client_context_t
 {
   struct event *read_event;

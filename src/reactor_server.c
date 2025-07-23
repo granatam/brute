@@ -278,55 +278,7 @@ client_context_destroy (client_context_t *ctx)
   trace ("Deleted and deallocated event, free'd client context");
 }
 
-static status_t
-push_job (client_context_t *ctx, status_t (*job_func) (void *))
-{
-  job_t job = {
-    .arg = ctx,
-    .job_func = job_func,
-  };
-  if (queue_push_back (&ctx->rsrv_ctx->rctr_ctx.jobs_queue, &job)
-      != QS_SUCCESS)
-    {
-      error ("Could not push job to a job queue");
-      return (S_FAILURE);
-    }
-
-  return (S_SUCCESS);
-}
-
 static status_t create_task_job (void *);
-
-static status_t
-write_state_write_wrapper (int socket_fd, struct iovec *vec, size_t *vec_sz)
-{
-  size_t actual_write = writev (socket_fd, vec, *vec_sz);
-
-  if ((ssize_t)actual_write <= 0)
-    {
-      error ("Could not send config data to client");
-      return (S_FAILURE);
-    }
-
-  size_t i = 0;
-  while (actual_write > 0 && vec[i].iov_len <= actual_write)
-    actual_write -= vec[i++].iov_len;
-
-  *vec_sz -= i;
-  memmove (&vec[0], &vec[i], sizeof (struct iovec) * *vec_sz);
-
-  vec[i].iov_base += actual_write;
-  vec[i].iov_len -= actual_write;
-
-  return (S_SUCCESS);
-}
-
-static inline status_t
-write_state_write (int socket_fd, write_state_t *write_state)
-{
-  return (write_state_write_wrapper (socket_fd, write_state->base_state.vec,
-                                     &write_state->base_state.vec_sz));
-}
 
 static inline status_t
 write_state_write_extra (int socket_fd, write_state_t *write_state)
@@ -349,7 +301,7 @@ send_task_job (void *arg)
     }
 
   if (ctx->write_state.base_state.vec_sz != 0)
-    return (push_job (ctx, send_task_job));
+    return (push_job (&ctx->rsrv_ctx->rctr_ctx, ctx, send_task_job));
 
   trace ("Sent task to client");
 
@@ -357,7 +309,7 @@ send_task_job (void *arg)
   ctx->is_writing = false;
   pthread_mutex_unlock (&ctx->is_writing_mutex);
 
-  return (push_job (ctx, create_task_job));
+  return (push_job (&ctx->rsrv_ctx->rctr_ctx, ctx, create_task_job));
 }
 
 static void
@@ -460,7 +412,7 @@ create_task_job (void *arg)
 
   task_write_state_setup (ctx, id);
 
-  return (push_job (ctx, send_task_job));
+  return (push_job (&ctx->rsrv_ctx->rctr_ctx, ctx, send_task_job));
 }
 
 static status_t
@@ -479,7 +431,7 @@ send_config_job (void *arg)
         }
 
       if (ctx->write_state.base_state.vec_sz != 0)
-        return (push_job (ctx, send_config_job));
+        return (push_job (&ctx->rsrv_ctx->rctr_ctx, ctx, send_config_job));
     }
 
   status = write_state_write_extra (ctx->socket_fd, &ctx->write_state);
@@ -489,9 +441,9 @@ send_config_job (void *arg)
       return (S_FAILURE);
     }
 
-  return (push_job (ctx, ctx->write_state.vec_extra_sz != 0
-                             ? send_config_job
-                             : create_task_job));
+  return (push_job (&ctx->rsrv_ctx->rctr_ctx, ctx,
+                    ctx->write_state.vec_extra_sz != 0 ? send_config_job
+                                                       : create_task_job));
 }
 
 static void
@@ -567,7 +519,7 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
 
   if (!is_writing)
     {
-      push_job (ctx, create_task_job);
+      push_job (&ctx->rsrv_ctx->rctr_ctx, ctx, create_task_job);
       trace ("Pushed create task job from read event");
     }
 }
@@ -620,7 +572,7 @@ handle_starving_clients (void *arg)
       client->registry_used[id] = true;
       pthread_mutex_unlock (&client->registry_used_mutex);
 
-      push_job (client, send_task_job);
+      push_job (&client->rsrv_ctx->rctr_ctx, client, send_task_job);
       trace ("Pushed send job to jobs queue");
 
       pthread_mutex_lock (&client->is_starving_mutex);
@@ -668,7 +620,8 @@ handle_accept (struct evconnlistener *listener, evutil_socket_t fd,
 
   trace ("Added new event");
 
-  if (push_job (client_ctx, send_config_job) == S_FAILURE)
+  if (push_job (&client_ctx->rsrv_ctx->rctr_ctx, client_ctx, send_config_job)
+      == S_FAILURE)
     {
       error ("Could not add send_config job");
       goto destroy_ctx;

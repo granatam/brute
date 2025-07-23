@@ -1,5 +1,6 @@
 #include "reactor_client.h"
 
+#include "brute.h"
 #include "client_common.h"
 #include "common.h"
 #include "log.h"
@@ -36,7 +37,11 @@ typedef struct client_context_t
   struct event_base *ev_base;
   struct event *read_event;
   read_state_t read_state;
-  /* Seems like we'll need a task queue and a result queue here. */
+  bool is_writing;
+  pthread_mutex_t is_writing_mutex;
+  write_state_t write_state;
+  queue_t task_queue;
+  queue_t result_queue;
 } client_context_t;
 
 static void handle_read (evutil_socket_t, short, void *);
@@ -65,6 +70,17 @@ client_context_init (client_context_t *ctx, config_t *config)
     {
       error ("Could not initialize conditional semaphore");
       goto cleanup;
+    }
+  if (queue_init (&ctx->task_queue, sizeof (task_t)) != QS_SUCCESS)
+    {
+      error ("Could not initialize task queue");
+      return (S_FAILURE);
+    }
+  if (queue_init (&ctx->result_queue, sizeof (result_t)) != QS_SUCCESS)
+    {
+      error ("Could not initialize result queue");
+      queue_destroy (&ctx->task_queue);
+      return (S_FAILURE);
     }
 
   ctx->done = false;
@@ -118,6 +134,19 @@ client_context_destroy (client_context_t *ctx)
       status = S_FAILURE;
       goto cleanup;
     }
+  if (queue_cancel (&ctx->task_queue) != QS_SUCCESS)
+    {
+      error ("Could not cancel task queue");
+      status = S_FAILURE;
+      goto cleanup;
+    }
+  if (queue_cancel (&ctx->result_queue) != QS_SUCCESS)
+    {
+      error ("Could not cancel result queue");
+      status = S_FAILURE;
+      goto cleanup;
+    }
+
   if (thread_pool_join (&ctx->thread_pool) == S_FAILURE)
     {
       error ("Could not cancel thread pool");
@@ -129,6 +158,8 @@ client_context_destroy (client_context_t *ctx)
 
 cleanup:
   queue_destroy (&ctx->rctr_ctx.jobs_queue);
+  queue_destroy (&ctx->task_queue);
+  queue_destroy (&ctx->result_queue);
 
   client_base_context_destroy (&ctx->client_base);
 
@@ -136,15 +167,34 @@ cleanup:
 }
 
 static status_t
-send_task_job (void *arg)
+send_result_job (void *arg)
 {
-  (void)arg;
-  /* 1. Try to pop a result from a result queue.
-   * 2. If a result queue is empty, something wrong happened, because amount
-   *    of send_task jobs must be equal to amount of processed tasks.
-   * 3. Send task to the server. It'd be cool to reuse `send_task_job` from
-   *    reactor server here. `write_state_t`?
-   */
+  client_context_t *ctx = *(client_context_t **)arg;
+
+  result_t result;
+  if (queue_pop (&ctx->result_queue, &result) != QS_SUCCESS)
+    return (S_FAILURE);
+  trace ("Got new result from result queue");
+
+  status_t status
+      = write_state_write (ctx->client_base.socket_fd, &ctx->write_state);
+  if (status != S_SUCCESS)
+    {
+      error ("Could not send task to client");
+      client_context_destroy (ctx);
+      return (S_SUCCESS);
+    }
+
+  if (ctx->write_state.base_state.vec_sz != 0)
+    return (push_job (&ctx->rctr_ctx, ctx, send_result_job));
+
+  trace ("Sent task to client");
+
+  pthread_mutex_lock (&ctx->is_writing_mutex);
+  ctx->is_writing = false;
+  pthread_mutex_unlock (&ctx->is_writing_mutex);
+  trace ("Sent %s result %s to server",
+         result.is_correct ? "correct" : "incorrect", result.password);
 
   return (S_SUCCESS);
 }
@@ -152,14 +202,39 @@ send_task_job (void *arg)
 static status_t
 process_task_job (void *arg)
 {
-  (void)arg;
-  /* 1. Initialize st_context.
-   * 2. Call brute.
-   * 3. Save result to a result queue.
-   * 4. Push send_task_job to a job queue.
-   */
+  client_context_t *ctx = arg;
 
-  return (S_SUCCESS);
+  pthread_mutex_lock (&ctx->is_writing_mutex);
+  if (ctx->is_writing)
+    {
+      pthread_mutex_unlock (&ctx->is_writing_mutex);
+      return (S_SUCCESS);
+    }
+  ctx->is_writing = true;
+  pthread_mutex_unlock (&ctx->is_writing_mutex);
+
+  st_context_t st_context = {
+    .hash = ctx->client_base.config->hash,
+    .data = { .initialized = 0 },
+  };
+
+  queue_status_t qs;
+
+  /* is_starving analogue? */
+
+  /* Call trypop, if queue is empty then something is wrong */
+  task_t task;
+
+  task.result.is_correct = brute (&task, ctx->client_base.config,
+                                  st_password_check, &st_context);
+  trace ("Processed task");
+
+  if (queue_push_back (&ctx->result_queue, &task.result) != QS_SUCCESS)
+    return (S_FAILURE);
+
+  /* Setup write state? */
+
+  return (push_job (&ctx->rctr_ctx, ctx, send_result_job));
 }
 
 static void
@@ -205,6 +280,12 @@ run_reactor_client (config_t *config)
       == 0)
     goto cleanup;
   trace ("Created I/O handler thread");
+
+  // What should be the argument here?
+  // if (!thread_create (&ctx.thread_pool, handle_waiting_tasks, &context_ptr,
+  //                     sizeof (context_ptr), "waiting tasks handler"))
+  //   goto cleanup;
+  // trace ("Created waiting tasks handler thread");
 
   if (!thread_create (&ctx.thread_pool, dispatch_event_loop, &ctx.rctr_ctx,
                       sizeof (ctx.rctr_ctx), "event loop dispatcher"))
