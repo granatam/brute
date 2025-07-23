@@ -14,11 +14,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#ifdef __FreeBSD__
-#include <sys/socket.h>
-#include <sys/types.h>
-#endif
-
 typedef struct client_context_t
 {
   srv_base_context_t *srv_base;

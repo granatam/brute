@@ -13,11 +13,6 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#ifdef __FreeBSD__
-#include <sys/socket.h>
-#include <sys/types.h>
-#endif
-
 void
 sync_client_find_password (task_t *task, config_t *config, st_context_t *ctx)
 {
