@@ -9,7 +9,7 @@ void *
 dispatch_event_loop (void *arg)
 {
   reactor_context_t *ctx = arg;
-  if (event_base_dispatch (ctx->ev_base) != 0)
+  if (event_base_loop (ctx->ev_base, EVLOOP_NO_EXIT_ON_EMPTY) != 0)
     error ("Could not dispatch the event loop");
 
   return (NULL);

@@ -17,26 +17,32 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-/* NOTE: io_state_t could be reused here. We might save first element in cmd
- * field and then we'd need only 2-element vector. */
+typedef enum read_progress_t
+{
+  RP_CMD,
+  RP_DATA,
+} read_progress_t;
+
 typedef struct read_state_t
 {
   struct iovec vec[3];
   size_t vec_sz;
   command_t cmd;
+  read_progress_t rp;
 } read_state_t;
 
 typedef struct client_context_t
 {
   client_base_context_t client_base;
-  thread_pool_t thread_pool;
   reactor_context_t rctr_ctx;
+  thread_pool_t thread_pool;
   pthread_mutex_t mutex;
   volatile bool done;
   pthread_cond_t cond_sem;
   struct event_base *ev_base;
   struct event *read_event;
   read_state_t read_state;
+  command_t curr_cmd;
   bool is_writing;
   pthread_mutex_t is_writing_mutex;
   write_state_t write_state;
@@ -89,22 +95,24 @@ client_context_init (client_context_t *ctx, config_t *config)
   if (!ctx->rctr_ctx.ev_base)
     {
       error ("Could not initialize event base");
+      goto cleanup;
+    }
+
+  if (evutil_make_socket_nonblocking (ctx->client_base.socket_fd) < 0)
+    {
+      error ("Could not change socket to be nonblocking");
       return (S_FAILURE);
     }
+
+  ctx->read_state.vec[0].iov_base = &ctx->read_state.cmd;
+  ctx->read_state.vec[0].iov_len = sizeof (command_t);
+  ctx->read_state.rp = RP_CMD;
+
   trace ("Allocated memory for event loop base");
 
   if (client_base_context_init (&ctx->client_base, config, NULL) == S_FAILURE)
     {
       error ("Could not initialize client base context");
-      goto cleanup;
-    }
-
-  ctx->read_event
-      = event_new (ctx->rctr_ctx.ev_base, ctx->client_base.socket_fd,
-                   EV_READ | EV_PERSIST, handle_read, ctx);
-  if (!ctx->read_event)
-    {
-      error ("Could not create read event");
       goto cleanup;
     }
 
@@ -169,33 +177,6 @@ cleanup:
 static status_t
 send_result_job (void *arg)
 {
-  client_context_t *ctx = *(client_context_t **)arg;
-
-  result_t result;
-  if (queue_pop (&ctx->result_queue, &result) != QS_SUCCESS)
-    return (S_FAILURE);
-  trace ("Got new result from result queue");
-
-  status_t status
-      = write_state_write (ctx->client_base.socket_fd, &ctx->write_state);
-  if (status != S_SUCCESS)
-    {
-      error ("Could not send task to client");
-      client_context_destroy (ctx);
-      return (S_SUCCESS);
-    }
-
-  if (ctx->write_state.base_state.vec_sz != 0)
-    return (push_job (&ctx->rctr_ctx, ctx, send_result_job));
-
-  trace ("Sent task to client");
-
-  pthread_mutex_lock (&ctx->is_writing_mutex);
-  ctx->is_writing = false;
-  pthread_mutex_unlock (&ctx->is_writing_mutex);
-  trace ("Sent %s result %s to server",
-         result.is_correct ? "correct" : "incorrect", result.password);
-
   return (S_SUCCESS);
 }
 
@@ -204,61 +185,55 @@ process_task_job (void *arg)
 {
   client_context_t *ctx = arg;
 
-  pthread_mutex_lock (&ctx->is_writing_mutex);
-  if (ctx->is_writing)
-    {
-      pthread_mutex_unlock (&ctx->is_writing_mutex);
-      return (S_SUCCESS);
-    }
-  ctx->is_writing = true;
-  pthread_mutex_unlock (&ctx->is_writing_mutex);
-
-  st_context_t st_context = {
-    .hash = ctx->client_base.config->hash,
-    .data = { .initialized = 0 },
-  };
-
-  queue_status_t qs;
-
-  /* is_starving analogue? */
-
-  /* Call trypop, if queue is empty then something is wrong */
-  task_t task;
-
-  task.result.is_correct = brute (&task, ctx->client_base.config,
-                                  st_password_check, &st_context);
-  trace ("Processed task");
-
-  if (queue_push_back (&ctx->result_queue, &task.result) != QS_SUCCESS)
-    return (S_FAILURE);
-
-  /* Setup write state? */
-
   return (push_job (&ctx->rctr_ctx, ctx, send_result_job));
 }
 
 static void
 handle_read (evutil_socket_t socket_fd, short what, void *arg)
 {
+  error ("Got read");
   assert (what == EV_READ);
   /* We already have socket_fd in client_context_t */
   (void)socket_fd; /* to suppress "unused parameter" warning */
 
   client_context_t *ctx = arg;
 
-  /* 1. Read the first element of vector from ctx->client_base.socket_fd.
-   * 2. Convert data to command_t and if it is an alphabet, read other 2
-   *    elements, else read just one.
-   * 3. Based on a command, do the following:
-   *    - If we've received an alphabet, set config->alph.
-   *    - If this is a hash, set config->hash.
-   *    - Otherwise, add task to a task queue and push a process_task job to
-   *      a jobs queue.
-   *
-   * We should use io_state with three elements because we could receive either
-   * 2 elements or 3 elements, and we should handle all possible cases.
-   */
+  if (ctx->read_state.rp == RP_CMD)
+    {
+      size_t bytes_read
+          = readv (ctx->client_base.socket_fd, ctx->read_state.vec, 1);
+      if ((ssize_t)bytes_read <= 0)
+        {
+          error ("Could not read command from a server");
+          client_context_destroy (ctx);
+          return;
+        }
+
+      ctx->read_state.vec[0].iov_len -= bytes_read;
+      ctx->read_state.vec[0].iov_base += bytes_read;
+
+      if (ctx->read_state.vec[0].iov_len == 0) ctx->read_state.rp = RP_DATA;
+      else return;
+    }
+
+  // struct iovec *remaining = &ctx->read_state.vec[1];
+
+  switch (ctx->read_state.cmd) {
+    case CMD_ALPH:
+      trace ("Got an alphabet");
+      break;
+    case CMD_HASH:
+      trace ("Got a hash");
+      break;
+    case CMD_TASK:
+      trace ("Got a task");
+      break;
+    default:
+      return;
+  }
 }
+
+// Handle connection
 
 bool
 run_reactor_client (config_t *config)
@@ -273,19 +248,20 @@ run_reactor_client (config_t *config)
 
   reactor_context_t *rctr_ctx_ptr = &ctx.rctr_ctx;
 
-  int number_of_threads
-      = (config->number_of_threads > 2) ? config->number_of_threads - 2 : 1;
-  if (create_threads (&ctx.thread_pool, number_of_threads, handle_io,
-                      &rctr_ctx_ptr, sizeof (rctr_ctx_ptr), "i/o handler")
-      == 0)
-    goto cleanup;
-  trace ("Created I/O handler thread");
+  ctx.read_event
+      = event_new (ctx.rctr_ctx.ev_base, ctx.client_base.socket_fd,
+                   EV_READ | EV_PERSIST, handle_read, &ctx);
+  if (!ctx.read_event)
+    {
+      error ("Could not create read event");
+      goto cleanup;
+    }
 
-  // What should be the argument here?
-  // if (!thread_create (&ctx.thread_pool, handle_waiting_tasks, &context_ptr,
-  //                     sizeof (context_ptr), "waiting tasks handler"))
-  //   goto cleanup;
-  // trace ("Created waiting tasks handler thread");
+  if (event_add (ctx.read_event, NULL) != 0)
+    {
+      error ("Could not add event to event base");
+      goto cleanup;
+    }
 
   if (!thread_create (&ctx.thread_pool, dispatch_event_loop, &ctx.rctr_ctx,
                       sizeof (ctx.rctr_ctx), "event loop dispatcher"))

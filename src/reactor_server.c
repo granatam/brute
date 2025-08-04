@@ -40,6 +40,7 @@ rsrv_ctx_init (rsrv_context_t *ctx)
     }
 
   ctx->rctr_ctx.ev_base = event_base_new ();
+
   if (!ctx->rctr_ctx.ev_base)
     {
       error ("Could not initialize event base");
