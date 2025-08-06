@@ -49,6 +49,7 @@ typedef struct client_context_t
   queue_t task_queue;
   queue_t result_queue;
   int alph_length;
+  task_t read_buffer;
 } client_context_t;
 
 static void handle_read (evutil_socket_t, short, void *);
@@ -176,13 +177,69 @@ cleanup:
 static status_t
 send_result_job (void *arg)
 {
+  trace ("send result");
+  client_context_t *ctx = arg;
+
+  queue_status_t qs;
+
+  task_t task;
+  trace ("before trypop");
+  qs = queue_trypop (&ctx->task_queue, &task);
+  if (qs == QS_EMPTY)
+    {
+      error ("Weird");
+      return (S_SUCCESS);
+    }
+  trace ("After trypop");
+
+  io_state_t *write_state_base = &ctx->write_state.base_state;
+  write_state_base->vec[0].iov_base = &task;
+  write_state_base->vec[0].iov_len = sizeof (task);
+  write_state_base->vec_sz = 1;
+
+  write_state_write (ctx->client_base.socket_fd, &ctx->write_state);
+
   return (S_SUCCESS);
 }
 
 static status_t
 process_task_job (void *arg)
 {
+  error ("process task: %p", arg);
   client_context_t *ctx = arg;
+
+  st_context_t st_context = {
+    .hash = ctx->client_base.hash,
+    .data = { .initialized = 0 },
+  };
+
+  queue_status_t qs;
+
+  task_t task;
+  trace ("before trypop");
+  error ("bad %p", ctx->task_queue);
+  qs = queue_trypop (&ctx->task_queue, &task);
+  if (qs == QS_EMPTY)
+    {
+      error ("Weird");
+      return (S_SUCCESS);
+    }
+  trace ("After trypop");
+
+  if (qs == QS_FAILURE)
+    {
+      error ("Could not pop a task from the task queue");
+      return (S_FAILURE);
+    }
+
+  trace ("Got task from global queue");
+
+  task.result.is_correct
+      = brute (&task, ctx->client_base.config, st_password_check, &st_context);
+  trace ("Processed task: %s", task.result.password);
+
+  if (queue_push_back (&ctx->result_queue, &task.result) != QS_SUCCESS)
+    return (S_FAILURE);
 
   return (push_job (&ctx->rctr_ctx, ctx, send_result_job));
 }
@@ -192,7 +249,7 @@ read_command (client_context_t *ctx)
 {
   ctx->read_state.vec[0].iov_base = &ctx->read_state.cmd;
   ctx->read_state.vec[0].iov_len = sizeof (command_t);
-  
+
   size_t bytes_read
       = readv (ctx->client_base.socket_fd, ctx->read_state.vec, 1);
   if ((ssize_t)bytes_read <= 0)
@@ -217,8 +274,8 @@ read_command (client_context_t *ctx)
 static status_t
 tryread (client_context_t *ctx)
 {
-  size_t bytes_read = readv (ctx->client_base.socket_fd, ctx->read_state.vec, 1);
-  trace ("%d", bytes_read);
+  size_t bytes_read
+      = readv (ctx->client_base.socket_fd, ctx->read_state.vec, 1);
   if ((ssize_t)bytes_read <= 0)
     {
       client_context_destroy (ctx);
@@ -231,15 +288,25 @@ tryread (client_context_t *ctx)
   return (ctx->read_state.vec->iov_len == 0 ? S_SUCCESS : S_FAILURE);
 }
 
-static status_t
-read_data (client_context_t *ctx)
+static void
+handle_read (evutil_socket_t socket_fd, short what, void *arg)
 {
+  error ("Got read");
+  assert (what == EV_READ);
+  /* We already have socket_fd in client_context_t */
+  (void)socket_fd; /* to suppress "unused parameter" warning */
+
+  client_context_t *ctx = arg;
+
+  if (ctx->read_state.rp == RP_CMD && read_command (ctx) == S_FAILURE)
+    return;
+
   switch (ctx->read_state.cmd)
     {
     case CMD_ALPH:
       trace ("Got an alphabet");
       ctx->read_state.vec[0].iov_base = &ctx->alph_length;
-      ctx->read_state.vec[0].iov_len = sizeof(int);
+      ctx->read_state.vec[0].iov_len = sizeof (int);
       if (tryread (ctx) == S_FAILURE)
         {
           error ("Could not read alphabet length from a server");
@@ -267,38 +334,26 @@ read_data (client_context_t *ctx)
       trace ("Hash is %s", ctx->client_base.hash);
       break;
     case CMD_TASK:
-      ctx->read_state.vec[0].iov_base = &ctx->read_state.cmd;
+      ctx->read_state.vec[0].iov_base = &ctx->read_buffer;
       ctx->read_state.vec[0].iov_len = sizeof (task_t);
       trace ("Got a task");
       if (tryread (ctx) == S_FAILURE)
-        error ("Could not read task from a server");
+        {
+          error ("Could not read task from a server");
+          return;
+        }
+      error ("good %p %p", ctx, ctx->task_queue);
+      if (queue_push_back (&ctx->task_queue, &ctx->read_buffer) != QS_SUCCESS)
+        error ("Could not push a task to the task queue");
+      error ("good %p", ctx->task_queue);
+      push_job (&ctx->rctr_ctx, ctx, process_task_job);
       break;
     default:
       break;
     }
 
   ctx->read_state.rp = RP_CMD;
-
-  return (S_SUCCESS);
 }
-
-static void
-handle_read (evutil_socket_t socket_fd, short what, void *arg)
-{
-  error ("Got read");
-  assert (what == EV_READ);
-  /* We already have socket_fd in client_context_t */
-  (void)socket_fd; /* to suppress "unused parameter" warning */
-
-  client_context_t *ctx = arg;
-
-  if (ctx->read_state.rp == RP_CMD && read_command (ctx) == S_FAILURE)
-    return;
-  
-  read_data (ctx);
-}
-
-// Handle connection
 
 bool
 run_reactor_client (config_t *config)
@@ -326,6 +381,14 @@ run_reactor_client (config_t *config)
       error ("Could not add event to event base");
       goto cleanup;
     }
+
+  int number_of_threads
+      = (config->number_of_threads > 2) ? config->number_of_threads - 2 : 1;
+  if (create_threads (&ctx.thread_pool, 1, handle_io, &rctr_ctx_ptr,
+                      sizeof (rctr_ctx_ptr), "i/o handler")
+      == 0)
+    goto cleanup;
+  trace ("Created I/O handler thread");
 
   if (!thread_create (&ctx.thread_pool, dispatch_event_loop, &ctx.rctr_ctx,
                       sizeof (ctx.rctr_ctx), "event loop dispatcher"))
