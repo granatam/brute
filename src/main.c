@@ -5,6 +5,7 @@
 #include "gen.h"
 #include "log.h"
 #include "multi.h"
+#include "reactor_client.h"
 #include "reactor_server.h"
 #include "single.h"
 #include "sync_client.h"
@@ -41,6 +42,7 @@ usage (char *first_arg)
            "\t-v, --async-client       asynchronous client mode\n"
            "\t-w, --async-server       asynchronous server mode\n"
            "\t-R, --reactor-server     reactor server mode\n"
+           "\t-x, --reactor-client     reactor client mode\n"
            "brute modes:\n"
            "\t-i, --iter               iterative bruteforce\n"
            "\t-r, --rec                recursive bruteforce\n"
@@ -53,7 +55,7 @@ usage (char *first_arg)
 static status_t
 parse_params (config_t *config, int argc, char *argv[])
 {
-  const char short_opts[] = "l:a:H:t:p:A:L:T:smgcSvwRiryh";
+  const char short_opts[] = "l:a:H:t:p:A:L:T:smgcSvwRxiryh";
   const struct option long_opts[]
       = { { "length", required_argument, 0, 'l' },
           { "alph", required_argument, 0, 'a' },
@@ -71,6 +73,7 @@ parse_params (config_t *config, int argc, char *argv[])
           { "async-client", no_argument, 0, 'v' },
           { "async-server", no_argument, 0, 'w' },
           { "reactor-server", no_argument, 0, 'R' },
+          { "reactor-client", no_argument, 0, 'x' },
           { "iter", no_argument, 0, 'i' },
           { "rec", no_argument, 0, 'r' },
           { "rec-gen", no_argument, 0, 'y' },
@@ -170,6 +173,9 @@ parse_params (config_t *config, int argc, char *argv[])
         case 'R':
           config->run_mode = RM_REACTOR_SERVER;
           break;
+        case 'x':
+          config->run_mode = RM_REACTOR_CLIENT;
+          break;
         case 'i':
           config->brute_mode = BM_ITER;
           break;
@@ -243,6 +249,9 @@ main (int argc, char *argv[])
       break;
     case RM_REACTOR_SERVER:
       is_found = run_reactor_server (&task, &config);
+      break;
+    case RM_REACTOR_CLIENT:
+      run_reactor_client (&config);
       break;
     }
 

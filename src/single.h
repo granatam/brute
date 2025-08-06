@@ -6,12 +6,7 @@
 
 #include <stdbool.h>
 
-#ifndef __FreeBSD__
 #include <crypt.h>
-#else
-#define _XOPEN_SOURCE
-#include <unistd.h>
-#endif
 
 typedef struct st_context_t
 {
