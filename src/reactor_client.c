@@ -188,6 +188,86 @@ process_task_job (void *arg)
   return (push_job (&ctx->rctr_ctx, ctx, send_result_job));
 }
 
+static status_t
+read_command (client_context_t *ctx)
+{
+  size_t bytes_read
+      = readv (ctx->client_base.socket_fd, ctx->read_state.vec, 1);
+  if ((ssize_t)bytes_read <= 0)
+    {
+      error ("Could not read command from a server");
+      client_context_destroy (ctx);
+      return (S_FAILURE);
+    }
+
+  ctx->read_state.vec[0].iov_len -= bytes_read;
+  ctx->read_state.vec[0].iov_base += bytes_read;
+
+  if (ctx->read_state.vec[0].iov_len == 0)
+    {
+      ctx->read_state.rp = RP_DATA;
+      return (S_SUCCESS);
+    }
+
+  return (S_FAILURE);
+}
+
+static status_t
+tryread (client_context_t *ctx, struct iovec *vec, size_t vec_sz)
+{
+  size_t bytes_read = readv (ctx->client_base.socket_fd, vec, vec_sz);
+  if ((ssize_t)bytes_read <= 0)
+    {
+      client_context_destroy (ctx);
+      return (S_FAILURE);
+    }
+
+  vec->iov_len -= bytes_read;
+  vec->iov_base += bytes_read;
+
+  return (vec->iov_len == 0 ? S_SUCCESS : S_FAILURE);
+}
+
+static status_t
+read_data (client_context_t *ctx)
+{
+  struct iovec *remaining = &ctx->read_state.vec[1];
+
+  switch (ctx->read_state.cmd)
+    {
+    case CMD_ALPH:
+      trace ("Got an alphabet");
+      if (tryread (ctx, remaining, 2) == S_FAILURE)
+        {
+          error ("Could not read hash from a server");
+          return (S_FAILURE);
+        }
+      break;
+    case CMD_HASH:
+      trace ("Got a hash");
+      if (tryread (ctx, remaining, 1) == S_FAILURE)
+        {
+          error ("Could not read hash from a server");
+          return (S_FAILURE);
+        }
+      break;
+    case CMD_TASK:
+      trace ("Got a task");
+      if (tryread (ctx, remaining, 1) == S_FAILURE)
+        {
+          error ("Could not read task from a server");
+          return (S_FAILURE);
+        }
+      break;
+    default:
+      break;
+    }
+
+  ctx->read_state.rp = RP_CMD;
+
+  return (S_SUCCESS);
+}
+
 static void
 handle_read (evutil_socket_t socket_fd, short what, void *arg)
 {
@@ -198,39 +278,8 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
 
   client_context_t *ctx = arg;
 
-  if (ctx->read_state.rp == RP_CMD)
-    {
-      size_t bytes_read
-          = readv (ctx->client_base.socket_fd, ctx->read_state.vec, 1);
-      if ((ssize_t)bytes_read <= 0)
-        {
-          error ("Could not read command from a server");
-          client_context_destroy (ctx);
-          return;
-        }
-
-      ctx->read_state.vec[0].iov_len -= bytes_read;
-      ctx->read_state.vec[0].iov_base += bytes_read;
-
-      if (ctx->read_state.vec[0].iov_len == 0) ctx->read_state.rp = RP_DATA;
-      else return;
-    }
-
-  // struct iovec *remaining = &ctx->read_state.vec[1];
-
-  switch (ctx->read_state.cmd) {
-    case CMD_ALPH:
-      trace ("Got an alphabet");
-      break;
-    case CMD_HASH:
-      trace ("Got a hash");
-      break;
-    case CMD_TASK:
-      trace ("Got a task");
-      break;
-    default:
-      return;
-  }
+  if (ctx->read_state.rp == RP_CMD && read_command (ctx) == S_FAILURE)
+    return;
 }
 
 // Handle connection
@@ -248,9 +297,8 @@ run_reactor_client (config_t *config)
 
   reactor_context_t *rctr_ctx_ptr = &ctx.rctr_ctx;
 
-  ctx.read_event
-      = event_new (ctx.rctr_ctx.ev_base, ctx.client_base.socket_fd,
-                   EV_READ | EV_PERSIST, handle_read, &ctx);
+  ctx.read_event = event_new (ctx.rctr_ctx.ev_base, ctx.client_base.socket_fd,
+                              EV_READ | EV_PERSIST, handle_read, &ctx);
   if (!ctx.read_event)
     {
       error ("Could not create read event");
