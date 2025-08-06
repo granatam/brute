@@ -25,7 +25,7 @@ typedef enum read_progress_t
 
 typedef struct read_state_t
 {
-  struct iovec vec[3];
+  struct iovec vec[1];
   size_t vec_sz;
   command_t cmd;
   read_progress_t rp;
@@ -48,6 +48,7 @@ typedef struct client_context_t
   write_state_t write_state;
   queue_t task_queue;
   queue_t result_queue;
+  int alph_length;
 } client_context_t;
 
 static void handle_read (evutil_socket_t, short, void *);
@@ -104,8 +105,6 @@ client_context_init (client_context_t *ctx, config_t *config)
       return (S_FAILURE);
     }
 
-  ctx->read_state.vec[0].iov_base = &ctx->read_state.cmd;
-  ctx->read_state.vec[0].iov_len = sizeof (command_t);
   ctx->read_state.rp = RP_CMD;
 
   trace ("Allocated memory for event loop base");
@@ -191,6 +190,9 @@ process_task_job (void *arg)
 static status_t
 read_command (client_context_t *ctx)
 {
+  ctx->read_state.vec[0].iov_base = &ctx->read_state.cmd;
+  ctx->read_state.vec[0].iov_len = sizeof (command_t);
+  
   size_t bytes_read
       = readv (ctx->client_base.socket_fd, ctx->read_state.vec, 1);
   if ((ssize_t)bytes_read <= 0)
@@ -213,51 +215,63 @@ read_command (client_context_t *ctx)
 }
 
 static status_t
-tryread (client_context_t *ctx, struct iovec *vec, size_t vec_sz)
+tryread (client_context_t *ctx)
 {
-  size_t bytes_read = readv (ctx->client_base.socket_fd, vec, vec_sz);
+  size_t bytes_read = readv (ctx->client_base.socket_fd, ctx->read_state.vec, 1);
+  trace ("%d", bytes_read);
   if ((ssize_t)bytes_read <= 0)
     {
       client_context_destroy (ctx);
       return (S_FAILURE);
     }
 
-  vec->iov_len -= bytes_read;
-  vec->iov_base += bytes_read;
+  ctx->read_state.vec->iov_len -= bytes_read;
+  ctx->read_state.vec->iov_base += bytes_read;
 
-  return (vec->iov_len == 0 ? S_SUCCESS : S_FAILURE);
+  return (ctx->read_state.vec->iov_len == 0 ? S_SUCCESS : S_FAILURE);
 }
 
 static status_t
 read_data (client_context_t *ctx)
 {
-  struct iovec *remaining = &ctx->read_state.vec[1];
-
   switch (ctx->read_state.cmd)
     {
     case CMD_ALPH:
       trace ("Got an alphabet");
-      if (tryread (ctx, remaining, 2) == S_FAILURE)
+      ctx->read_state.vec[0].iov_base = &ctx->alph_length;
+      ctx->read_state.vec[0].iov_len = sizeof(int);
+      if (tryread (ctx) == S_FAILURE)
         {
-          error ("Could not read hash from a server");
-          return (S_FAILURE);
+          error ("Could not read alphabet length from a server");
+          break;
         }
+      ctx->read_state.vec[0].iov_base = ctx->client_base.alph;
+      ctx->read_state.vec[0].iov_len = ctx->alph_length;
+      if (tryread (ctx) == S_FAILURE)
+        {
+          error ("Could not read alph from a server");
+          break;
+        }
+      ctx->client_base.alph[ctx->alph_length] = 0;
+      trace ("Alphabet is %s", ctx->client_base.alph);
       break;
     case CMD_HASH:
       trace ("Got a hash");
-      if (tryread (ctx, remaining, 1) == S_FAILURE)
+      ctx->read_state.vec[0].iov_base = ctx->client_base.hash;
+      ctx->read_state.vec[0].iov_len = HASH_LENGTH;
+      if (tryread (ctx) == S_FAILURE)
         {
           error ("Could not read hash from a server");
-          return (S_FAILURE);
+          break;
         }
+      trace ("Hash is %s", ctx->client_base.hash);
       break;
     case CMD_TASK:
+      ctx->read_state.vec[0].iov_base = &ctx->read_state.cmd;
+      ctx->read_state.vec[0].iov_len = sizeof (task_t);
       trace ("Got a task");
-      if (tryread (ctx, remaining, 1) == S_FAILURE)
-        {
-          error ("Could not read task from a server");
-          return (S_FAILURE);
-        }
+      if (tryread (ctx) == S_FAILURE)
+        error ("Could not read task from a server");
       break;
     default:
       break;
@@ -280,6 +294,8 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
 
   if (ctx->read_state.rp == RP_CMD && read_command (ctx) == S_FAILURE)
     return;
+  
+  read_data (ctx);
 }
 
 // Handle connection
