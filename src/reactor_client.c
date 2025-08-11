@@ -138,7 +138,7 @@ client_context_destroy (client_context_t *ctx)
     error ("Could not delete read event");
   event_free (ctx->read_event);
 
-  if (queue_cancel (&ctx->rctr_ctx.jobs_queue) != QS_SUCCESS)
+  if (queue_destroy (&ctx->rctr_ctx.jobs_queue) != QS_SUCCESS)
     {
       error ("Could not cancel jobs queue");
       status = S_FAILURE;
@@ -157,7 +157,7 @@ client_context_destroy (client_context_t *ctx)
       goto cleanup;
     }
 
-  if (thread_pool_join (&ctx->thread_pool) == S_FAILURE)
+  if (thread_pool_cancel (&ctx->thread_pool) == S_FAILURE)
     {
       error ("Could not cancel thread pool");
       status = S_FAILURE;
@@ -179,27 +179,31 @@ cleanup:
 static status_t
 send_result_job (void *arg)
 {
-  trace ("send result");
   client_context_t *ctx = arg;
 
   queue_status_t qs;
 
-  result_t task;
-  trace ("before trypop");
-  qs = queue_trypop (&ctx->result_queue, &task);
+  result_t result;
+  qs = queue_trypop (&ctx->result_queue, &result);
   if (qs == QS_EMPTY)
     {
-      error ("Weird");
+      error ("Result queue is empty");
       return (S_SUCCESS);
     }
-  trace ("After trypop");
+  
+  trace ("Got result from a result queue");
 
   io_state_t *write_state_base = &ctx->write_state.base_state;
-  write_state_base->vec[0].iov_base = &task;
-  write_state_base->vec[0].iov_len = sizeof (task);
+  write_state_base->vec[0].iov_base = &result;
+  write_state_base->vec[0].iov_len = sizeof (result);
   write_state_base->vec_sz = 1;
 
-  // write_state_write (ctx->client_base.socket_fd, &ctx->write_state);
+  write_state_write (ctx->client_base.socket_fd, &ctx->write_state);
+  
+  if (ctx->write_state.base_state.vec_sz != 0)
+    return (push_job (&ctx->rctr_ctx, ctx, send_result_job));
+  
+  trace ("Sent result %s to server", result.password);
 
   return (S_SUCCESS);
 }
@@ -217,7 +221,6 @@ process_task_job (void *arg)
   queue_status_t qs;
 
   task_t task;
-  error ("ctx->task_queue: %p", &ctx->task_queue);
   qs = queue_pop (&ctx->task_queue, &task);
   if (qs == QS_EMPTY)
     {
@@ -253,7 +256,7 @@ read_command (client_context_t *ctx)
   if ((ssize_t)bytes_read <= 0)
     {
       error ("Could not read command from a server");
-      // client_context_destroy (ctx);
+      client_context_destroy (ctx);
       return (S_FAILURE);
     }
 
@@ -276,7 +279,7 @@ tryread (client_context_t *ctx)
       = readv (ctx->client_base.socket_fd, ctx->read_state.vec, 1);
   if ((ssize_t)bytes_read <= 0)
     {
-      // client_context_destroy (ctx);
+      client_context_destroy (ctx);
       return (S_FAILURE);
     }
 
@@ -341,7 +344,6 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
         }
       if (queue_push_back (&ctx->task_queue, &ctx->read_buffer) != QS_SUCCESS)
         error ("Could not push a task to the task queue");
-      error ("ctx->task_queue: %p", &ctx->task_queue);
       push_job (&ctx->rctr_ctx, ctx, process_task_job);
       break;
     default:
@@ -359,8 +361,6 @@ run_reactor_client (config_t *config)
 
   if (client_context_init (&ctx, config) == S_FAILURE)
     return (false);
-
-  error ("ctx: %p, ctx->task_queue: %p", &ctx, &ctx.task_queue);
 
   if (srv_connect (&ctx.client_base) == S_FAILURE)
     goto cleanup;
