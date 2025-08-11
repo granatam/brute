@@ -29,7 +29,7 @@ handle_io (void *arg)
           break;
         }
 
-      error ("Got job from a job queue: %p", job.arg);
+      trace ("Got job from a job queue");
 
       if (job.job_func (job.arg) == S_FAILURE)
         {

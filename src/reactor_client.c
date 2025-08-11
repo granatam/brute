@@ -33,6 +33,7 @@ typedef struct read_state_t
 
 typedef struct client_context_t
 {
+  queue_t task_queue;
   client_base_context_t client_base;
   reactor_context_t rctr_ctx;
   thread_pool_t thread_pool;
@@ -46,7 +47,6 @@ typedef struct client_context_t
   bool is_writing;
   pthread_mutex_t is_writing_mutex;
   write_state_t write_state;
-  queue_t task_queue;
   queue_t result_queue;
   int alph_length;
   task_t read_buffer;
@@ -120,6 +120,8 @@ client_context_init (client_context_t *ctx, config_t *config)
 
 cleanup:
   queue_destroy (&ctx->rctr_ctx.jobs_queue);
+  queue_destroy (&ctx->task_queue);
+  queue_destroy (&ctx->result_queue);
 
   client_base_context_destroy (&ctx->client_base);
 
@@ -217,8 +219,8 @@ process_task_job (void *arg)
 
   task_t task;
   trace ("before trypop");
-  error ("bad %p", ctx->task_queue);
-  qs = queue_trypop (&ctx->task_queue, &task);
+  error ("ctx->task_queue: %p", ctx->task_queue);
+  qs = queue_pop (&ctx->task_queue, &task);
   if (qs == QS_EMPTY)
     {
       error ("Weird");
@@ -255,7 +257,7 @@ read_command (client_context_t *ctx)
   if ((ssize_t)bytes_read <= 0)
     {
       error ("Could not read command from a server");
-      client_context_destroy (ctx);
+      // client_context_destroy (ctx);
       return (S_FAILURE);
     }
 
@@ -278,7 +280,7 @@ tryread (client_context_t *ctx)
       = readv (ctx->client_base.socket_fd, ctx->read_state.vec, 1);
   if ((ssize_t)bytes_read <= 0)
     {
-      client_context_destroy (ctx);
+      // client_context_destroy (ctx);
       return (S_FAILURE);
     }
 
@@ -291,7 +293,6 @@ tryread (client_context_t *ctx)
 static void
 handle_read (evutil_socket_t socket_fd, short what, void *arg)
 {
-  error ("Got read");
   assert (what == EV_READ);
   /* We already have socket_fd in client_context_t */
   (void)socket_fd; /* to suppress "unused parameter" warning */
@@ -342,13 +343,13 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
           error ("Could not read task from a server");
           return;
         }
-      error ("good %p %p", ctx, ctx->task_queue);
       if (queue_push_back (&ctx->task_queue, &ctx->read_buffer) != QS_SUCCESS)
         error ("Could not push a task to the task queue");
-      error ("good %p", ctx->task_queue);
+      error ("ctx->task_queue: %p", &ctx->task_queue);
       push_job (&ctx->rctr_ctx, ctx, process_task_job);
       break;
     default:
+      error ("Unexpected read");
       break;
     }
 
@@ -362,6 +363,8 @@ run_reactor_client (config_t *config)
 
   if (client_context_init (&ctx, config) == S_FAILURE)
     return (false);
+  
+  error ("ctx: %p, ctx->task_queue: %p", &ctx, &ctx.task_queue);
 
   if (srv_connect (&ctx.client_base) == S_FAILURE)
     goto cleanup;
