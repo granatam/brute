@@ -190,7 +190,7 @@ send_result_job (void *arg)
       error ("Result queue is empty");
       return (S_SUCCESS);
     }
-  
+
   trace ("Got result from a result queue");
 
   io_state_t *write_state_base = &ctx->write_state.base_state;
@@ -199,10 +199,10 @@ send_result_job (void *arg)
   write_state_base->vec_sz = 1;
 
   write_state_write (ctx->client_base.socket_fd, &ctx->write_state);
-  
+
   if (ctx->write_state.base_state.vec_sz != 0)
     return (push_job (&ctx->rctr_ctx, ctx, send_result_job));
-  
+
   trace ("Sent result %s to server", result.password);
 
   return (S_SUCCESS);

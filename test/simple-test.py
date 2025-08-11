@@ -1,41 +1,16 @@
 from datetime import timedelta
 
+import pytest
 from hypothesis import given, settings
 from hypothesis.strategies import data
 from testrunner import Config, RunMode, _TestRunner, phases
 
 
-# @given(data=data())
-# @settings(deadline=timedelta(seconds=3), phases=phases)
-# def test_single_short_password(data):
-#     _TestRunner(data, Config((2, 6), (2, 6), run_mode=RunMode.SINGLE)).run()
-#
-#
-# @given(data=data())
-# @settings(deadline=timedelta(seconds=3), phases=phases)
-# def test_multi_short_password(data):
-#     _TestRunner(data, Config((2, 6), (2, 6), run_mode=RunMode.MULTI)).run()
-#
-#
-# @given(data=data())
-# @settings(deadline=timedelta(seconds=3), phases=phases)
-# def test_gen_short_password(data):
-#     _TestRunner(data, Config((2, 6), (2, 6), run_mode=RunMode.GENERATOR)).run()
-#
-#
-# @given(data=data())
-# @settings(deadline=timedelta(seconds=3), phases=phases, max_examples=20)
-# def test_single_corner_cases(data):
-#     _TestRunner(data, Config((5, 5), (5, 5), run_mode=RunMode.SINGLE)).run()
-#
-#
-# @given(data=data())
-# @settings(deadline=timedelta(seconds=3), phases=phases, max_examples=20)
-# def test_multi_corner_cases(data):
-#     _TestRunner(data, Config((5, 5), (5, 5), run_mode=RunMode.MULTI)).run()
-#
-#
-# @given(data=data())
-# @settings(deadline=timedelta(seconds=3), phases=phases, max_examples=20)
-# def test_gen_corner_cases(data):
-#     _TestRunner(data, Config((5, 5), (5, 5), run_mode=RunMode.GENERATOR)).run()
+@pytest.mark.parametrize(
+    "run_mode", [RunMode.SINGLE, RunMode.MULTI, RunMode.GENERATOR]
+)
+@pytest.mark.parametrize("bounds", [(2, 6), (5, 5)])
+@given(data=data())
+@settings(deadline=timedelta(seconds=3), phases=phases)
+def test_simple(data, run_mode, bounds):
+    _TestRunner(data, Config(bounds, bounds, run_mode=run_mode)).run()
