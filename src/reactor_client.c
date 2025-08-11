@@ -33,7 +33,6 @@ typedef struct read_state_t
 
 typedef struct client_context_t
 {
-  queue_t task_queue;
   client_base_context_t client_base;
   reactor_context_t rctr_ctx;
   thread_pool_t thread_pool;
@@ -47,6 +46,7 @@ typedef struct client_context_t
   bool is_writing;
   pthread_mutex_t is_writing_mutex;
   write_state_t write_state;
+  queue_t task_queue;
   queue_t result_queue;
   int alph_length;
   task_t read_buffer;
@@ -184,9 +184,9 @@ send_result_job (void *arg)
 
   queue_status_t qs;
 
-  task_t task;
+  result_t task;
   trace ("before trypop");
-  qs = queue_trypop (&ctx->task_queue, &task);
+  qs = queue_trypop (&ctx->result_queue, &task);
   if (qs == QS_EMPTY)
     {
       error ("Weird");
@@ -199,7 +199,7 @@ send_result_job (void *arg)
   write_state_base->vec[0].iov_len = sizeof (task);
   write_state_base->vec_sz = 1;
 
-  write_state_write (ctx->client_base.socket_fd, &ctx->write_state);
+  // write_state_write (ctx->client_base.socket_fd, &ctx->write_state);
 
   return (S_SUCCESS);
 }
@@ -207,7 +207,6 @@ send_result_job (void *arg)
 static status_t
 process_task_job (void *arg)
 {
-  error ("process task: %p", arg);
   client_context_t *ctx = arg;
 
   st_context_t st_context = {
@@ -218,23 +217,20 @@ process_task_job (void *arg)
   queue_status_t qs;
 
   task_t task;
-  trace ("before trypop");
-  error ("ctx->task_queue: %p", ctx->task_queue);
+  error ("ctx->task_queue: %p", &ctx->task_queue);
   qs = queue_pop (&ctx->task_queue, &task);
   if (qs == QS_EMPTY)
     {
-      error ("Weird");
+      error ("Task queue is empty");
       return (S_SUCCESS);
     }
-  trace ("After trypop");
-
   if (qs == QS_FAILURE)
     {
       error ("Could not pop a task from the task queue");
       return (S_FAILURE);
     }
 
-  trace ("Got task from global queue");
+  trace ("Got task from task queue");
 
   task.result.is_correct
       = brute (&task, ctx->client_base.config, st_password_check, &st_context);
@@ -363,7 +359,7 @@ run_reactor_client (config_t *config)
 
   if (client_context_init (&ctx, config) == S_FAILURE)
     return (false);
-  
+
   error ("ctx: %p, ctx->task_queue: %p", &ctx, &ctx.task_queue);
 
   if (srv_connect (&ctx.client_base) == S_FAILURE)
