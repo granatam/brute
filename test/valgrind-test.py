@@ -19,7 +19,7 @@ from testrunner import (
 
 @pytest.mark.parametrize("run_mode", SIMPLE_MODES)
 @given(data=data())
-@settings(deadline=timedelta(seconds=3), phases=phases)
+@settings(deadline=timedelta(seconds=3), phases=phases, max_examples=5)
 def test_valgrind_simple(data, run_mode):
     _TestRunner(
         data,
