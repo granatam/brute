@@ -131,12 +131,15 @@ cleanup:
 static status_t
 client_context_destroy (client_context_t *ctx)
 {
+  event_base_loopbreak (ctx->rctr_ctx.ev_base);
+
   status_t status = S_SUCCESS;
 
-  event_base_free (ctx->rctr_ctx.ev_base);
   if (event_del (ctx->read_event) == -1)
     error ("Could not delete read event");
   event_free (ctx->read_event);
+
+  event_base_free (ctx->rctr_ctx.ev_base);
 
   if (queue_destroy (&ctx->rctr_ctx.jobs_queue) != QS_SUCCESS)
     {
