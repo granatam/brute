@@ -131,6 +131,7 @@ cleanup:
 static status_t
 client_context_destroy (client_context_t *ctx)
 {
+  trace ("Destroying client context");
   event_base_loopbreak (ctx->rctr_ctx.ev_base);
 
   status_t status = S_SUCCESS;
@@ -170,7 +171,6 @@ client_context_destroy (client_context_t *ctx)
   trace ("Waited for all threads to end, closing the connection now");
 
 cleanup:
-  queue_destroy (&ctx->rctr_ctx.jobs_queue);
   queue_destroy (&ctx->task_queue);
   queue_destroy (&ctx->result_queue);
 
