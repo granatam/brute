@@ -132,20 +132,20 @@ static status_t
 client_context_destroy (client_context_t *ctx)
 {
   trace ("Destroying client context");
-  event_base_loopbreak (ctx->rctr_ctx.ev_base);
-
   status_t status = S_SUCCESS;
-
-  if (event_del (ctx->read_event) == -1)
-    error ("Could not delete read event");
-  event_free (ctx->read_event);
-
   if (queue_destroy (&ctx->rctr_ctx.jobs_queue) != QS_SUCCESS)
     {
       error ("Could not destroy jobs queue");
       status = S_FAILURE;
       goto cleanup;
     }
+
+  if (event_del (ctx->read_event) == -1)
+    error ("Could not delete read event");
+  event_free (ctx->read_event);
+
+  event_base_free (ctx->rctr_ctx.ev_base);
+  
   if (queue_cancel (&ctx->task_queue) != QS_SUCCESS)
     {
       error ("Could not cancel task queue");
@@ -158,22 +158,20 @@ client_context_destroy (client_context_t *ctx)
       status = S_FAILURE;
       goto cleanup;
     }
-  
+
   if (thread_pool_cancel (&ctx->thread_pool) == S_FAILURE)
     {
       error ("Could not cancel thread pool");
       status = S_FAILURE;
       goto cleanup;
     }
-  
-  event_base_free (ctx->rctr_ctx.ev_base);
 
   trace ("Waited for all threads to end, closing the connection now");
 
 cleanup:
   queue_destroy (&ctx->task_queue);
   queue_destroy (&ctx->result_queue);
-
+  
   client_base_context_destroy (&ctx->client_base);
 
   return (status);
@@ -386,7 +384,7 @@ run_reactor_client (config_t *config)
 
   int number_of_threads
       = (config->number_of_threads > 2) ? config->number_of_threads - 2 : 1;
-  if (create_threads (&ctx.thread_pool, 1, handle_io, &rctr_ctx_ptr,
+  if (create_threads (&ctx.thread_pool, number_of_threads, handle_io, &rctr_ctx_ptr,
                       sizeof (rctr_ctx_ptr), "i/o handler")
       == 0)
     goto cleanup;
