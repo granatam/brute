@@ -140,11 +140,9 @@ client_context_destroy (client_context_t *ctx)
     error ("Could not delete read event");
   event_free (ctx->read_event);
 
-  event_base_free (ctx->rctr_ctx.ev_base);
-
   if (queue_destroy (&ctx->rctr_ctx.jobs_queue) != QS_SUCCESS)
     {
-      error ("Could not cancel jobs queue");
+      error ("Could not destroy jobs queue");
       status = S_FAILURE;
       goto cleanup;
     }
@@ -160,13 +158,15 @@ client_context_destroy (client_context_t *ctx)
       status = S_FAILURE;
       goto cleanup;
     }
-
+  
   if (thread_pool_cancel (&ctx->thread_pool) == S_FAILURE)
     {
       error ("Could not cancel thread pool");
       status = S_FAILURE;
       goto cleanup;
     }
+  
+  event_base_free (ctx->rctr_ctx.ev_base);
 
   trace ("Waited for all threads to end, closing the connection now");
 
@@ -224,7 +224,7 @@ process_task_job (void *arg)
   queue_status_t qs;
 
   task_t task;
-  qs = queue_pop (&ctx->task_queue, &task);
+  qs = queue_trypop (&ctx->task_queue, &task);
   if (qs == QS_EMPTY)
     {
       error ("Task queue is empty");
