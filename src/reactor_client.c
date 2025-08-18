@@ -52,6 +52,16 @@ typedef struct client_context_t
   task_t read_buffer;
 } client_context_t;
 
+static void
+client_finish (client_context_t *ctx)
+{
+  ctx->done = true;
+  if (pthread_cond_signal (&ctx->cond_sem) != 0)
+    error ("Could not signal on a conditional semaphore");
+
+  trace ("Sent a signal to main thread about work finishing");
+}
+
 static void handle_read (evutil_socket_t, short, void *);
 
 static status_t
@@ -69,6 +79,19 @@ client_context_init (client_context_t *ctx, config_t *config)
       error ("Could not initialize jobs queue");
       return (S_FAILURE);
     }
+  if (queue_init (&ctx->task_queue, sizeof (task_t)) != QS_SUCCESS)
+    {
+      error ("Could not initialize task queue");
+      queue_destroy (&ctx->rctr_ctx.jobs_queue);
+      return (S_FAILURE);
+    }
+  if (queue_init (&ctx->result_queue, sizeof (result_t)) != QS_SUCCESS)
+    {
+      error ("Could not initialize result queue");
+      queue_destroy (&ctx->rctr_ctx.jobs_queue);
+      queue_destroy (&ctx->task_queue);
+      return (S_FAILURE);
+    }
   if (pthread_mutex_init (&ctx->mutex, NULL) != 0)
     {
       error ("Could not initialize mutex");
@@ -78,17 +101,6 @@ client_context_init (client_context_t *ctx, config_t *config)
     {
       error ("Could not initialize conditional semaphore");
       goto cleanup;
-    }
-  if (queue_init (&ctx->task_queue, sizeof (task_t)) != QS_SUCCESS)
-    {
-      error ("Could not initialize task queue");
-      return (S_FAILURE);
-    }
-  if (queue_init (&ctx->result_queue, sizeof (result_t)) != QS_SUCCESS)
-    {
-      error ("Could not initialize result queue");
-      queue_destroy (&ctx->task_queue);
-      return (S_FAILURE);
     }
 
   ctx->done = false;
@@ -103,7 +115,7 @@ client_context_init (client_context_t *ctx, config_t *config)
   if (evutil_make_socket_nonblocking (ctx->client_base.socket_fd) < 0)
     {
       error ("Could not change socket to be nonblocking");
-      return (S_FAILURE);
+      goto event_base_cleanup;
     }
 
   ctx->read_state.rp = RP_CMD;
@@ -113,18 +125,20 @@ client_context_init (client_context_t *ctx, config_t *config)
   if (client_base_context_init (&ctx->client_base, config, NULL) == S_FAILURE)
     {
       error ("Could not initialize client base context");
-      goto cleanup;
+      client_base_context_destroy (&ctx->client_base);
+      goto event_base_cleanup;
     }
 
   return (S_SUCCESS);
 
+event_base_cleanup:
+  event_base_free (ctx->rctr_ctx.ev_base);
+  
 cleanup:
   queue_destroy (&ctx->rctr_ctx.jobs_queue);
   queue_destroy (&ctx->task_queue);
   queue_destroy (&ctx->result_queue);
-
-  client_base_context_destroy (&ctx->client_base);
-
+  
   return (S_FAILURE);
 }
 
@@ -204,7 +218,9 @@ send_result_job (void *arg)
   if (ctx->write_state.base_state.vec_sz != 0)
     return (push_job (&ctx->rctr_ctx, ctx, send_result_job));
 
-  trace ("Sent result %s to server", result.password);
+  trace ("Sent %s result %s to server",
+         result.is_correct ? "correct" : "incorrect", result.password);
+
 
   return (S_SUCCESS);
 }
@@ -257,7 +273,7 @@ read_command (client_context_t *ctx)
   if ((ssize_t)bytes_read <= 0)
     {
       error ("Could not read command from a server");
-      client_context_destroy (ctx);
+      client_finish (ctx);
       return (S_FAILURE);
     }
 
@@ -280,7 +296,7 @@ tryread (client_context_t *ctx)
       = readv (ctx->client_base.socket_fd, ctx->read_state.vec, 1);
   if ((ssize_t)bytes_read <= 0)
     {
-      client_context_destroy (ctx);
+      client_finish (ctx);
       return (S_FAILURE);
     }
 
@@ -366,8 +382,6 @@ run_reactor_client (config_t *config)
   if (srv_connect (&ctx.client_base) == S_FAILURE)
     goto cleanup;
 
-  reactor_context_t *rctr_ctx_ptr = &ctx.rctr_ctx;
-
   ctx.read_event = event_new (ctx.rctr_ctx.ev_base, ctx.client_base.socket_fd,
                               EV_READ | EV_PERSIST, handle_read, &ctx);
   if (!ctx.read_event)
@@ -381,10 +395,12 @@ run_reactor_client (config_t *config)
       error ("Could not add event to event base");
       goto cleanup;
     }
+  
+  reactor_context_t *rctr_ctx_ptr = &ctx.rctr_ctx;
 
   int number_of_threads
       = (config->number_of_threads > 2) ? config->number_of_threads - 2 : 1;
-  if (create_threads (&ctx.thread_pool, number_of_threads, handle_io, &rctr_ctx_ptr,
+  if (create_threads (&ctx.thread_pool, 1, handle_io, &rctr_ctx_ptr,
                       sizeof (rctr_ctx_ptr), "i/o handler")
       == 0)
     goto cleanup;

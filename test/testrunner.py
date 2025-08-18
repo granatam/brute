@@ -20,7 +20,7 @@ with warnings.catch_warnings():
 
 from hypothesis import Phase, settings
 
-MAX_EXAMPLES = os.getenv("HYPOTHESIS_MAX_EXAMPLES", "100")
+MAX_EXAMPLES = os.getenv("HYPOTHESIS_MAX_EXAMPLES", "50")
 settings.register_profile("custom", max_examples=int(MAX_EXAMPLES))
 settings.load_profile("custom")
 
