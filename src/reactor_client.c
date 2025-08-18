@@ -11,6 +11,7 @@
 #include <arpa/inet.h>
 #include <assert.h>
 #include <event2/event.h>
+#include <event2/thread.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <string.h>
@@ -373,6 +374,7 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
 bool
 run_reactor_client (config_t *config)
 {
+  evthread_use_pthreads();
   client_context_t ctx;
 
   if (client_context_init (&ctx, config) == S_FAILURE)
