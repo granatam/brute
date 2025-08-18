@@ -42,7 +42,6 @@ typedef struct client_context_t
   struct event_base *ev_base;
   struct event *read_event;
   read_state_t read_state;
-  command_t curr_cmd;
   bool is_writing;
   pthread_mutex_t is_writing_mutex;
   write_state_t write_state;
@@ -55,6 +54,7 @@ typedef struct client_context_t
 static void
 client_finish (client_context_t *ctx)
 {
+  event_base_loopbreak (ctx->ev_base);
   if (event_del (ctx->read_event) == -1)
     error ("Could not delete read event");
   event_free (ctx->read_event);
