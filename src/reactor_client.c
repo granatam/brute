@@ -55,6 +55,12 @@ typedef struct client_context_t
 static void
 client_finish (client_context_t *ctx)
 {
+  if (event_del (ctx->read_event) == -1)
+    error ("Could not delete read event");
+  event_free (ctx->read_event);
+
+  event_base_free (ctx->rctr_ctx.ev_base);
+
   ctx->done = true;
   if (pthread_cond_signal (&ctx->cond_sem) != 0)
     error ("Could not signal on a conditional semaphore");
@@ -133,12 +139,12 @@ client_context_init (client_context_t *ctx, config_t *config)
 
 event_base_cleanup:
   event_base_free (ctx->rctr_ctx.ev_base);
-  
+
 cleanup:
   queue_destroy (&ctx->rctr_ctx.jobs_queue);
   queue_destroy (&ctx->task_queue);
   queue_destroy (&ctx->result_queue);
-  
+
   return (S_FAILURE);
 }
 
@@ -147,19 +153,13 @@ client_context_destroy (client_context_t *ctx)
 {
   trace ("Destroying client context");
   status_t status = S_SUCCESS;
+  
   if (queue_destroy (&ctx->rctr_ctx.jobs_queue) != QS_SUCCESS)
     {
       error ("Could not destroy jobs queue");
       status = S_FAILURE;
       goto cleanup;
     }
-
-  if (event_del (ctx->read_event) == -1)
-    error ("Could not delete read event");
-  event_free (ctx->read_event);
-
-  event_base_free (ctx->rctr_ctx.ev_base);
-  
   if (queue_cancel (&ctx->task_queue) != QS_SUCCESS)
     {
       error ("Could not cancel task queue");
@@ -173,7 +173,7 @@ client_context_destroy (client_context_t *ctx)
       goto cleanup;
     }
 
-  if (thread_pool_cancel (&ctx->thread_pool) == S_FAILURE)
+  if (thread_pool_join (&ctx->thread_pool) == S_FAILURE)
     {
       error ("Could not cancel thread pool");
       status = S_FAILURE;
@@ -185,7 +185,7 @@ client_context_destroy (client_context_t *ctx)
 cleanup:
   queue_destroy (&ctx->task_queue);
   queue_destroy (&ctx->result_queue);
-  
+
   client_base_context_destroy (&ctx->client_base);
 
   return (status);
@@ -220,7 +220,6 @@ send_result_job (void *arg)
 
   trace ("Sent %s result %s to server",
          result.is_correct ? "correct" : "incorrect", result.password);
-
 
   return (S_SUCCESS);
 }
@@ -395,7 +394,7 @@ run_reactor_client (config_t *config)
       error ("Could not add event to event base");
       goto cleanup;
     }
-  
+
   reactor_context_t *rctr_ctx_ptr = &ctx.rctr_ctx;
 
   int number_of_threads
@@ -437,7 +436,7 @@ run_reactor_client (config_t *config)
 
 cleanup:
   if (client_context_destroy (&ctx) == S_FAILURE)
-    error ("Could not destroy asynchronous client context");
+    error ("Could not destroy reactor client context");
 
   return (false);
 }
