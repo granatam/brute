@@ -45,6 +45,7 @@ def test_valgrind_one_client_server(data, client_mode, server_mode, port):
             run_mode=server_mode,
             client_run_modes=[client_mode],
             port=port,
+            brute_mode_pool=[BruteMode.ITERATIVE, BruteMode.RECURSIVE],
         ),
     ).run(CommandMode.VALGRIND)
 
