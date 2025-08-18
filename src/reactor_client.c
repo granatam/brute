@@ -54,10 +54,10 @@ typedef struct client_context_t
 static void
 client_finish (client_context_t *ctx)
 {
-  event_base_loopbreak (ctx->ev_base);
   if (event_del (ctx->read_event) == -1)
     error ("Could not delete read event");
   event_free (ctx->read_event);
+  event_base_loopbreak (ctx->ev_base);
 
   event_base_free (ctx->rctr_ctx.ev_base);
 
@@ -153,7 +153,7 @@ client_context_destroy (client_context_t *ctx)
 {
   trace ("Destroying client context");
   status_t status = S_SUCCESS;
-  
+
   if (queue_destroy (&ctx->rctr_ctx.jobs_queue) != QS_SUCCESS)
     {
       error ("Could not destroy jobs queue");
