@@ -58,9 +58,12 @@ client_finish (client_context_t *ctx)
   if (event_del (ctx->read_event) == -1)
     error ("Could not delete read event");
   event_free (ctx->read_event);
+  trace ("Deleted and freed event");
   event_base_loopbreak (ctx->ev_base);
+  trace ("Called loobreak");
 
   event_base_free (ctx->rctr_ctx.ev_base);
+  trace ("Freed an event base");
 
   ctx->done = true;
   if (pthread_cond_signal (&ctx->cond_sem) != 0)
@@ -309,6 +312,7 @@ tryread (client_context_t *ctx)
 static void
 handle_read (evutil_socket_t socket_fd, short what, void *arg)
 {
+  trace ("Got read");
   assert (what == EV_READ);
   /* We already have socket_fd in client_context_t */
   (void)socket_fd; /* to suppress "unused parameter" warning */
@@ -374,7 +378,7 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
 bool
 run_reactor_client (config_t *config)
 {
-  evthread_use_pthreads();
+  evthread_use_pthreads ();
   client_context_t ctx;
 
   if (client_context_init (&ctx, config) == S_FAILURE)
