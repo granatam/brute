@@ -17,18 +17,20 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-typedef enum read_progress_t
+typedef enum read_stage_t
 {
-  RP_CMD,
-  RP_DATA,
-} read_progress_t;
+  RS_CMD,
+  RS_LEN,
+  RS_DATA,
+} read_stage_t;
 
 typedef struct read_state_t
 {
   struct iovec vec[1];
-  size_t vec_sz;
+  read_stage_t stage;
+  bool is_partial;
   command_t cmd;
-  read_progress_t rp;
+  int alph_len;
 } read_state_t;
 
 typedef struct client_context_t
@@ -47,7 +49,6 @@ typedef struct client_context_t
   write_state_t write_state;
   queue_t task_queue;
   queue_t result_queue;
-  int alph_length;
   task_t read_buffer;
 } client_context_t;
 
@@ -115,7 +116,10 @@ client_context_init (client_context_t *ctx, config_t *config)
       goto cleanup;
     }
 
-  ctx->read_state.rp = RP_CMD;
+  ctx->read_state.stage = RS_CMD;
+  ctx->read_state.is_partial = false;
+  ctx->read_state.alph_len = -1;
+  ctx->read_state.cmd = CMD_HASH;
 
   trace ("Allocated memory for event loop base");
 
@@ -257,8 +261,14 @@ process_task_job (void *arg)
 }
 
 static status_t
-tryread (client_context_t *ctx)
+tryread (client_context_t *ctx, void *base, size_t len)
 {
+  if (!ctx->read_state.is_partial)
+    {
+      ctx->read_state.vec[0].iov_base = base;
+      ctx->read_state.vec[0].iov_len = len;
+    }
+
   size_t bytes_read
       = readv (ctx->client_base.socket_fd, ctx->read_state.vec, 1);
   if ((ssize_t)bytes_read <= 0)
@@ -270,81 +280,94 @@ tryread (client_context_t *ctx)
   ctx->read_state.vec[0].iov_len -= bytes_read;
   ctx->read_state.vec[0].iov_base += bytes_read;
 
-  return (ctx->read_state.vec->iov_len == 0 ? S_SUCCESS : S_FAILURE);
+  ctx->read_state.is_partial = (ctx->read_state.vec->iov_len != 0);
+  return (ctx->read_state.is_partial ? S_FAILURE : S_SUCCESS);
 }
 
 static void
 handle_read (evutil_socket_t socket_fd, short what, void *arg)
 {
-  trace ("Got read");
   assert (what == EV_READ);
   /* We already have socket_fd in client_context_t */
   (void)socket_fd; /* to suppress "unused parameter" warning */
 
   client_context_t *ctx = arg;
 
-  if (ctx->read_state.rp == RP_CMD)
-  {
-    ctx->read_state.vec[0].iov_base = &ctx->read_state.cmd;
-    ctx->read_state.vec[0].iov_len = sizeof (command_t);
-
-    if (tryread (ctx) == S_FAILURE)
-      return;
-  }
-  
-  ctx->read_state.rp = RP_DATA;
-
-  switch (ctx->read_state.cmd)
+  switch (ctx->read_state.stage)
     {
-    case CMD_ALPH:
-      trace ("Got an alphabet");
-      ctx->read_state.vec[0].iov_base = &ctx->alph_length;
-      ctx->read_state.vec[0].iov_len = sizeof (int);
-      if (tryread (ctx) == S_FAILURE)
+    case RS_CMD:
+      if (tryread (ctx, &ctx->read_state.cmd, sizeof (command_t)) == S_FAILURE)
         {
-          error ("Could not read alphabet length from a server");
-          break;
-        }
-      ctx->read_state.vec[0].iov_base = ctx->client_base.alph;
-      ctx->read_state.vec[0].iov_len = ctx->alph_length;
-      if (tryread (ctx) == S_FAILURE)
-        {
-          error ("Could not read alph from a server");
-          break;
-        }
-      ctx->client_base.alph[ctx->alph_length] = 0;
-      trace ("Alphabet is %s", ctx->client_base.alph);
-      break;
-    case CMD_HASH:
-      trace ("Got a hash");
-      ctx->read_state.vec[0].iov_base = ctx->client_base.hash;
-      ctx->read_state.vec[0].iov_len = HASH_LENGTH;
-      if (tryread (ctx) == S_FAILURE)
-        {
-          error ("Could not read hash from a server");
-          break;
-        }
-      trace ("Hash is %s", ctx->client_base.hash);
-      break;
-    case CMD_TASK:
-      ctx->read_state.vec[0].iov_base = &ctx->read_buffer;
-      ctx->read_state.vec[0].iov_len = sizeof (task_t);
-      trace ("Got a task");
-      if (tryread (ctx) == S_FAILURE)
-        {
-          error ("Could not read task from a server");
+          error ("Could not read command");
           return;
         }
-      if (queue_push_back (&ctx->task_queue, &ctx->read_buffer) != QS_SUCCESS)
-        error ("Could not push a task to the task queue");
-      push_job (&ctx->rctr_ctx, ctx, process_task_job);
+      ctx->read_state.stage
+          = ctx->read_state.cmd == CMD_ALPH ? RS_LEN : RS_DATA;
       break;
-    default:
-      error ("Unexpected read");
-      break;
+    case RS_LEN:
+      if (tryread (ctx, &ctx->read_state.alph_len, sizeof (int)) == S_FAILURE)
+        {
+          error ("Could not read alphabet length");
+          return;
+        }
+      ctx->read_state.stage = RS_DATA;
+      return;
+    case RS_DATA:
+      switch (ctx->read_state.cmd)
+        {
+        case CMD_HASH:
+          if (tryread (ctx, ctx->client_base.hash, HASH_LENGTH) == S_FAILURE)
+            {
+              error ("Could not read hash");
+              return;
+            }
+          trace ("Got hash: %s", ctx->client_base.hash);
+          break;
+        case CMD_ALPH:
+          if (ctx->read_state.alph_len < 0)
+            {
+              error ("Alphabet length should be greater than 0");
+              goto fail;
+            }
+          if (tryread (ctx, ctx->client_base.alph, ctx->read_state.alph_len)
+              == S_FAILURE)
+            {
+              error ("Could not read command");
+              return;
+            }
+          ctx->client_base.alph[ctx->read_state.alph_len] = 0;
+          trace ("Got alphabet: %s", ctx->client_base.alph);
+          break;
+        case CMD_TASK:
+          if (tryread (ctx, &ctx->read_buffer, sizeof (task_t)) == S_FAILURE)
+            {
+              error ("Could not read task");
+              return;
+            }
+          if (queue_push_back (&ctx->task_queue, &ctx->read_buffer)
+              != QS_SUCCESS)
+            {
+              error ("Could not push a task to the task queue");
+              goto fail;
+            }
+          if (push_job (&ctx->rctr_ctx, ctx, process_task_job) == S_FAILURE)
+            {
+              error ("Could not push a job to the jobs queue");
+              goto fail;
+            }
+          break;
+        default:
+          error ("Got unexpected command");
+          goto fail;
+        }
+
+      ctx->read_state.stage = RS_CMD;
     }
 
-  ctx->read_state.rp = RP_CMD;
+  return;
+
+fail:
+  client_finish (ctx);
 }
 
 bool
