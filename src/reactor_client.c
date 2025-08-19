@@ -428,8 +428,8 @@ run_reactor_client (config_t *config)
 
   int number_of_threads
       = (config->number_of_threads > 2) ? config->number_of_threads - 2 : 1;
-  if (create_threads (&ctx.thread_pool, number_of_threads, handle_io,
-                      &rctr_ctx_ptr, sizeof (rctr_ctx_ptr), "i/o handler")
+  if (create_threads (&ctx.thread_pool, 1, handle_io, &rctr_ctx_ptr,
+                      sizeof (rctr_ctx_ptr), "i/o handler")
       == 0)
     goto cleanup;
   trace ("Created I/O handler thread");
