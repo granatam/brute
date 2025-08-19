@@ -195,7 +195,6 @@ static status_t
 send_result_job (void *arg)
 {
   client_context_t *ctx = arg;
-  result_t result;
 
   write_state_write (ctx->client_base.socket_fd, &ctx->write_state);
 
@@ -203,7 +202,8 @@ send_result_job (void *arg)
     return (push_job (&ctx->rctr_ctx, ctx, send_result_job));
 
   trace ("Sent %s result %s to server",
-         result.is_correct ? "correct" : "incorrect", result.password);
+         ctx->write_buffer.is_correct ? "correct" : "incorrect",
+         ctx->write_buffer.password);
 
   queue_status_t qs = queue_trypop (&ctx->result_queue, &ctx->write_buffer);
   if (qs == QS_EMPTY)
