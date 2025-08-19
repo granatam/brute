@@ -50,23 +50,8 @@ typedef struct client_context_t
   queue_t task_queue;
   queue_t result_queue;
   task_t read_buffer;
+  result_t write_buffer;
 } client_context_t;
-
-static void
-client_finish (client_context_t *ctx)
-{
-  if (event_del (ctx->read_event) == -1)
-    error ("Could not delete read event");
-  event_free (ctx->read_event);
-
-  event_base_loopbreak (ctx->ev_base);
-
-  ctx->done = true;
-  if (pthread_cond_signal (&ctx->cond_sem) != 0)
-    error ("Could not signal on a conditional semaphore");
-
-  trace ("Sent a signal to main thread about work finishing");
-}
 
 static status_t
 client_context_init (client_context_t *ctx, config_t *config)
@@ -104,6 +89,11 @@ client_context_init (client_context_t *ctx, config_t *config)
   if (pthread_cond_init (&ctx->cond_sem, NULL) != 0)
     {
       error ("Could not initialize conditional semaphore");
+      goto cleanup;
+    }
+  if (pthread_mutex_init (&ctx->is_writing_mutex, NULL) != 0)
+    {
+      error ("Could not initialize mutex for write state");
       goto cleanup;
     }
 
@@ -187,30 +177,25 @@ cleanup:
 
   client_base_context_destroy (&ctx->client_base);
 
+  // TODO: destroy mutexes and conditional variables
+
   return (status);
+}
+
+static void
+result_write_state_setup (client_context_t *ctx)
+{
+  io_state_t *base_state = &ctx->write_state.base_state;
+  base_state->vec[0].iov_base = &ctx->write_buffer;
+  base_state->vec[0].iov_len = sizeof (ctx->write_buffer);
+  base_state->vec_sz = 1;
 }
 
 static status_t
 send_result_job (void *arg)
 {
   client_context_t *ctx = arg;
-
-  queue_status_t qs;
-
   result_t result;
-  qs = queue_trypop (&ctx->result_queue, &result);
-  if (qs == QS_EMPTY)
-    {
-      error ("Result queue is empty");
-      return (S_SUCCESS);
-    }
-
-  trace ("Got result from a result queue");
-
-  io_state_t *write_state_base = &ctx->write_state.base_state;
-  write_state_base->vec[0].iov_base = &result;
-  write_state_base->vec[0].iov_len = sizeof (result);
-  write_state_base->vec_sz = 1;
 
   write_state_write (ctx->client_base.socket_fd, &ctx->write_state);
 
@@ -220,7 +205,24 @@ send_result_job (void *arg)
   trace ("Sent %s result %s to server",
          result.is_correct ? "correct" : "incorrect", result.password);
 
-  return (S_SUCCESS);
+  queue_status_t qs = queue_trypop (&ctx->result_queue, &ctx->write_buffer);
+  if (qs == QS_EMPTY)
+    {
+      pthread_mutex_lock (&ctx->is_writing_mutex);
+      ctx->is_writing = false;
+      pthread_mutex_unlock (&ctx->is_writing_mutex);
+
+      return (S_SUCCESS);
+    }
+  if (qs == QS_FAILURE)
+    {
+      error ("Could not pop from a result queue");
+      return (S_FAILURE);
+    }
+
+  result_write_state_setup (ctx);
+
+  return (push_job (&ctx->rctr_ctx, ctx, send_result_job));
 }
 
 static status_t
@@ -254,10 +256,37 @@ process_task_job (void *arg)
       = brute (&task, ctx->client_base.config, st_password_check, &st_context);
   trace ("Processed task: %s", task.result.password);
 
-  if (queue_push_back (&ctx->result_queue, &task.result) != QS_SUCCESS)
-    return (S_FAILURE);
+  pthread_mutex_lock (&ctx->is_writing_mutex);
+  bool is_writing = ctx->is_writing;
+  ctx->is_writing = true;
+  pthread_mutex_unlock (&ctx->is_writing_mutex);
+
+  // client_finish on != QS_SUCCESS?
+  if (is_writing)
+    return (queue_push_back (&ctx->result_queue, &task.result) == QS_SUCCESS
+                ? S_SUCCESS
+                : S_FAILURE);
+
+  memcpy (&ctx->write_buffer, &task.result, sizeof (task.result));
+  result_write_state_setup (ctx);
 
   return (push_job (&ctx->rctr_ctx, ctx, send_result_job));
+}
+
+static void
+client_finish (client_context_t *ctx)
+{
+  if (event_del (ctx->read_event) == -1)
+    error ("Could not delete read event");
+  event_free (ctx->read_event);
+
+  event_base_loopbreak (ctx->ev_base);
+
+  ctx->done = true;
+  if (pthread_cond_signal (&ctx->cond_sem) != 0)
+    error ("Could not signal on a conditional semaphore");
+
+  trace ("Sent a signal to main thread about work finishing");
 }
 
 static status_t
@@ -311,7 +340,7 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
           return;
         }
       ctx->read_state.stage = RS_DATA;
-      return;
+      break;
     case RS_DATA:
       switch (ctx->read_state.cmd)
         {
@@ -399,8 +428,8 @@ run_reactor_client (config_t *config)
 
   int number_of_threads
       = (config->number_of_threads > 2) ? config->number_of_threads - 2 : 1;
-  if (create_threads (&ctx.thread_pool, 1, handle_io, &rctr_ctx_ptr,
-                      sizeof (rctr_ctx_ptr), "i/o handler")
+  if (create_threads (&ctx.thread_pool, number_of_threads, handle_io,
+                      &rctr_ctx_ptr, sizeof (rctr_ctx_ptr), "i/o handler")
       == 0)
     goto cleanup;
   trace ("Created I/O handler thread");

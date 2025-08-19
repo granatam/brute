@@ -50,7 +50,7 @@ write_state_write_wrapper (int socket_fd, struct iovec *vec, size_t *vec_sz)
 
   if ((ssize_t)actual_write <= 0)
     {
-      error ("Could not send config data to client");
+      error ("Could not send data to client");
       return (S_FAILURE);
     }
 
