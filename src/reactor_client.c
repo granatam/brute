@@ -126,12 +126,6 @@ client_context_init (client_context_t *ctx, config_t *config)
       goto event_base_cleanup;
     }
 
-  if (evutil_make_socket_nonblocking (ctx->client_base.socket_fd) < 0)
-    {
-      error ("Could not change socket to be nonblocking");
-      goto event_base_cleanup;
-    }
-
   return (S_SUCCESS);
 
 event_base_cleanup:
