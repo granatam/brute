@@ -3,7 +3,7 @@
 CFLAGS ?= -O2 -Wall -Wextra -gdwarf-4
 CFLAGS+=-pthread
 CFLAGS+=-I./crypt
-LIBS+=-levent -levent_pthreads
+LIBS+=-levent
 
 CRYPT_LIB=crypt/libcrypt.a
 

@@ -11,7 +11,6 @@
 #include <arpa/inet.h>
 #include <assert.h>
 #include <event2/event.h>
-#include <event2/thread.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <string.h>
@@ -58,9 +57,8 @@ client_finish (client_context_t *ctx)
   if (event_del (ctx->read_event) == -1)
     error ("Could not delete read event");
   event_free (ctx->read_event);
-  trace ("Deleted and freed event");
+
   event_base_loopbreak (ctx->ev_base);
-  trace ("Called loobreak");
 
   ctx->done = true;
   if (pthread_cond_signal (&ctx->cond_sem) != 0)
@@ -68,8 +66,6 @@ client_finish (client_context_t *ctx)
 
   trace ("Sent a signal to main thread about work finishing");
 }
-
-static void handle_read (evutil_socket_t, short, void *);
 
 static status_t
 client_context_init (client_context_t *ctx, config_t *config)
@@ -119,12 +115,6 @@ client_context_init (client_context_t *ctx, config_t *config)
       goto cleanup;
     }
 
-  if (evutil_make_socket_nonblocking (ctx->client_base.socket_fd) < 0)
-    {
-      error ("Could not change socket to be nonblocking");
-      goto event_base_cleanup;
-    }
-
   ctx->read_state.rp = RP_CMD;
 
   trace ("Allocated memory for event loop base");
@@ -133,6 +123,12 @@ client_context_init (client_context_t *ctx, config_t *config)
     {
       error ("Could not initialize client base context");
       client_base_context_destroy (&ctx->client_base);
+      goto event_base_cleanup;
+    }
+
+  if (evutil_make_socket_nonblocking (ctx->client_base.socket_fd) < 0)
+    {
+      error ("Could not change socket to be nonblocking");
       goto event_base_cleanup;
     }
 
@@ -267,33 +263,6 @@ process_task_job (void *arg)
 }
 
 static status_t
-read_command (client_context_t *ctx)
-{
-  ctx->read_state.vec[0].iov_base = &ctx->read_state.cmd;
-  ctx->read_state.vec[0].iov_len = sizeof (command_t);
-
-  size_t bytes_read
-      = readv (ctx->client_base.socket_fd, ctx->read_state.vec, 1);
-  if ((ssize_t)bytes_read <= 0)
-    {
-      error ("Could not read command from a server");
-      client_finish (ctx);
-      return (S_FAILURE);
-    }
-
-  ctx->read_state.vec[0].iov_len -= bytes_read;
-  ctx->read_state.vec[0].iov_base += bytes_read;
-
-  if (ctx->read_state.vec[0].iov_len == 0)
-    {
-      ctx->read_state.rp = RP_DATA;
-      return (S_SUCCESS);
-    }
-
-  return (S_FAILURE);
-}
-
-static status_t
 tryread (client_context_t *ctx)
 {
   size_t bytes_read
@@ -304,8 +273,8 @@ tryread (client_context_t *ctx)
       return (S_FAILURE);
     }
 
-  ctx->read_state.vec->iov_len -= bytes_read;
-  ctx->read_state.vec->iov_base += bytes_read;
+  ctx->read_state.vec[0].iov_len -= bytes_read;
+  ctx->read_state.vec[0].iov_base += bytes_read;
 
   return (ctx->read_state.vec->iov_len == 0 ? S_SUCCESS : S_FAILURE);
 }
@@ -320,8 +289,16 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
 
   client_context_t *ctx = arg;
 
-  if (ctx->read_state.rp == RP_CMD && read_command (ctx) == S_FAILURE)
-    return;
+  if (ctx->read_state.rp == RP_CMD)
+  {
+    ctx->read_state.vec[0].iov_base = &ctx->read_state.cmd;
+    ctx->read_state.vec[0].iov_len = sizeof (command_t);
+
+    if (tryread (ctx) == S_FAILURE)
+      return;
+  }
+  
+  ctx->read_state.rp = RP_DATA;
 
   switch (ctx->read_state.cmd)
     {
@@ -379,7 +356,6 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
 bool
 run_reactor_client (config_t *config)
 {
-  evthread_use_pthreads ();
   client_context_t ctx;
 
   if (client_context_init (&ctx, config) == S_FAILURE)
