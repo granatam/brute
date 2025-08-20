@@ -4,6 +4,90 @@
 
 #include <event2/event.h>
 #include <string.h>
+#include <unistd.h>
+
+status_t
+reactor_conn_init (reactor_conn_t *conn, reactor_context_t *rctr_ctx,
+                   evutil_socket_t fd, event_callback_fn on_read, void *arg)
+{
+  conn->rctr_ctx = rctr_ctx;
+  conn->read_event = event_new (conn->rctr_ctx->ev_base, fd,
+                                EV_READ | EV_PERSIST, on_read, arg);
+  if (!conn->read_event)
+    {
+      error ("Could not create read event");
+      return (S_FAILURE);
+    }
+
+  if (event_add (conn->read_event, NULL) != 0)
+    {
+      error ("Could not add event to event base");
+      goto cleanup;
+    }
+
+  if (pthread_mutex_init (&conn->is_writing_mutex, NULL) != 0)
+    {
+      error ("Could not initialize mutex for write state");
+      goto cleanup;
+    }
+
+  conn->is_writing = false;
+
+  return (S_SUCCESS);
+
+cleanup:
+  event_free (conn->read_event);
+  return (S_FAILURE);
+}
+
+status_t
+reactor_conn_destroy (reactor_conn_t *conn, evutil_socket_t fd)
+{
+  pthread_mutex_destroy (&conn->is_writing_mutex);
+
+  shutdown (fd, SHUT_RDWR);
+  close (fd);
+
+  if (event_del (conn->read_event) == -1)
+    error ("Could not delete read event");
+  event_free (conn->read_event);
+
+  event_base_loopbreak (conn->rctr_ctx->ev_base);
+
+  return (S_SUCCESS);
+}
+
+status_t
+reactor_context_init (reactor_context_t *ctx)
+{
+  if (queue_init (&ctx->jobs_queue, sizeof (job_t)) != QS_SUCCESS)
+    {
+      error ("Could not initialize jobs queue");
+      return (S_FAILURE);
+    }
+  ctx->ev_base = event_base_new ();
+  if (!ctx->ev_base)
+    {
+      error ("Could not initialize event base");
+      queue_destroy (&ctx->jobs_queue);
+      return (S_FAILURE);
+    }
+
+  return (S_SUCCESS);
+}
+
+status_t
+reactor_context_destroy (reactor_context_t *ctx)
+{
+  if (queue_destroy (&ctx->jobs_queue) != QS_SUCCESS)
+    {
+      error ("Could not destroy jobs queue");
+      return (S_FAILURE);
+    }
+  event_base_free (ctx->ev_base);
+
+  return (S_SUCCESS);
+}
 
 void *
 dispatch_event_loop (void *arg)
@@ -87,6 +171,26 @@ push_job (reactor_context_t *rctr_ctx, void *arg,
       error ("Could not push job to a job queue");
       return (S_FAILURE);
     }
+
+  return (S_SUCCESS);
+}
+
+status_t
+create_reactor_threads (thread_pool_t *tp, config_t *config,
+                        reactor_context_t *ptr)
+{
+  int number_of_threads
+      = (config->number_of_threads > 2) ? config->number_of_threads - 2 : 1;
+  if (create_threads (tp, 1, handle_io, &ptr, sizeof (ptr), "i/o handler")
+      == 0)
+    return (S_FAILURE);
+  trace ("Created I/O handler thread");
+
+  if (!thread_create (tp, dispatch_event_loop, ptr, sizeof (*ptr),
+                      "event loop dispatcher"))
+    return (S_FAILURE);
+
+  trace ("Created event loop dispatcher thread");
 
   return (S_SUCCESS);
 }

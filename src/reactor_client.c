@@ -36,25 +36,21 @@ typedef struct read_state_t
 typedef struct client_context_t
 {
   client_base_context_t client_base;
-  reactor_context_t rctr_ctx;
+  reactor_conn_t rctr_conn;
   thread_pool_t thread_pool;
   pthread_mutex_t mutex;
   volatile bool done;
   pthread_cond_t cond_sem;
-  struct event_base *ev_base;
-  struct event *read_event;
   read_state_t read_state;
-  bool is_writing;
-  pthread_mutex_t is_writing_mutex;
   write_state_t write_state;
   queue_t task_queue;
   queue_t result_queue;
   task_t read_buffer;
-  result_t write_buffer;
 } client_context_t;
 
 static status_t
-client_context_init (client_context_t *ctx, config_t *config)
+client_context_init (client_context_t *ctx, reactor_context_t *rctr_ctx,
+                     config_t *config)
 {
   memset (ctx, 0, sizeof (*ctx));
 
@@ -63,23 +59,21 @@ client_context_init (client_context_t *ctx, config_t *config)
       error ("Could not initialize thread pool");
       return (S_FAILURE);
     }
-  if (queue_init (&ctx->rctr_ctx.jobs_queue, sizeof (job_t)) != QS_SUCCESS)
+  if (reactor_context_init (rctr_ctx) != S_SUCCESS)
     {
-      error ("Could not initialize jobs queue");
+      error ("Could not initialize reactor context");
       return (S_FAILURE);
     }
   if (queue_init (&ctx->task_queue, sizeof (task_t)) != QS_SUCCESS)
     {
       error ("Could not initialize task queue");
-      queue_destroy (&ctx->rctr_ctx.jobs_queue);
-      return (S_FAILURE);
+      goto rctr_ctx_cleanup;
     }
   if (queue_init (&ctx->result_queue, sizeof (result_t)) != QS_SUCCESS)
     {
       error ("Could not initialize result queue");
-      queue_destroy (&ctx->rctr_ctx.jobs_queue);
       queue_destroy (&ctx->task_queue);
-      return (S_FAILURE);
+      goto rctr_ctx_cleanup;
     }
   if (pthread_mutex_init (&ctx->mutex, NULL) != 0)
     {
@@ -91,20 +85,8 @@ client_context_init (client_context_t *ctx, config_t *config)
       error ("Could not initialize conditional semaphore");
       goto cleanup;
     }
-  if (pthread_mutex_init (&ctx->is_writing_mutex, NULL) != 0)
-    {
-      error ("Could not initialize mutex for write state");
-      goto cleanup;
-    }
 
   ctx->done = false;
-
-  ctx->rctr_ctx.ev_base = event_base_new ();
-  if (!ctx->rctr_ctx.ev_base)
-    {
-      error ("Could not initialize event base");
-      goto cleanup;
-    }
 
   ctx->read_state.stage = RS_CMD;
   ctx->read_state.is_partial = false;
@@ -117,18 +99,17 @@ client_context_init (client_context_t *ctx, config_t *config)
     {
       error ("Could not initialize client base context");
       client_base_context_destroy (&ctx->client_base);
-      goto event_base_cleanup;
+      goto cleanup;
     }
 
   return (S_SUCCESS);
 
-event_base_cleanup:
-  event_base_free (ctx->rctr_ctx.ev_base);
-
 cleanup:
-  queue_destroy (&ctx->rctr_ctx.jobs_queue);
   queue_destroy (&ctx->task_queue);
   queue_destroy (&ctx->result_queue);
+
+rctr_ctx_cleanup:
+  reactor_context_destroy (rctr_ctx);
 
   return (S_FAILURE);
 }
@@ -139,12 +120,13 @@ client_context_destroy (client_context_t *ctx)
   trace ("Destroying client context");
   status_t status = S_SUCCESS;
 
-  if (queue_cancel (&ctx->rctr_ctx.jobs_queue) != QS_SUCCESS)
+  if (queue_cancel (&ctx->rctr_conn.rctr_ctx->jobs_queue) != QS_SUCCESS)
     {
       error ("Could not destroy jobs queue");
       status = S_FAILURE;
       goto cleanup;
     }
+  reactor_context_destroy (ctx->rctr_conn.rctr_ctx);
   if (queue_cancel (&ctx->task_queue) != QS_SUCCESS)
     {
       error ("Could not cancel task queue");
@@ -167,11 +149,11 @@ client_context_destroy (client_context_t *ctx)
 
   trace ("Waited for all threads to end, closing the connection now");
 
-  event_base_free (ctx->rctr_ctx.ev_base);
+  event_base_free (ctx->rctr_conn.rctr_ctx->ev_base);
   trace ("Freed an event base");
 
 cleanup:
-  queue_destroy (&ctx->rctr_ctx.jobs_queue);
+  queue_destroy (&ctx->rctr_conn.rctr_ctx->jobs_queue);
   queue_destroy (&ctx->task_queue);
   queue_destroy (&ctx->result_queue);
 
@@ -186,8 +168,8 @@ static void
 result_write_state_setup (client_context_t *ctx)
 {
   io_state_t *base_state = &ctx->write_state.base_state;
-  base_state->vec[0].iov_base = &ctx->write_buffer;
-  base_state->vec[0].iov_len = sizeof (ctx->write_buffer);
+  base_state->vec[0].iov_base = &ctx->rctr_conn.result_buffer;
+  base_state->vec[0].iov_len = sizeof (ctx->rctr_conn.result_buffer);
   base_state->vec_sz = 1;
 }
 
@@ -199,18 +181,19 @@ send_result_job (void *arg)
   write_state_write (ctx->client_base.socket_fd, &ctx->write_state);
 
   if (ctx->write_state.base_state.vec_sz != 0)
-    return (push_job (&ctx->rctr_ctx, ctx, send_result_job));
+    return (push_job (ctx->rctr_conn.rctr_ctx, ctx, send_result_job));
 
   trace ("Sent %s result %s to server",
-         ctx->write_buffer.is_correct ? "correct" : "incorrect",
-         ctx->write_buffer.password);
+         ctx->rctr_conn.result_buffer.is_correct ? "correct" : "incorrect",
+         ctx->rctr_conn.result_buffer.password);
 
-  queue_status_t qs = queue_trypop (&ctx->result_queue, &ctx->write_buffer);
+  queue_status_t qs
+      = queue_trypop (&ctx->result_queue, &ctx->rctr_conn.result_buffer);
   if (qs == QS_EMPTY)
     {
-      pthread_mutex_lock (&ctx->is_writing_mutex);
-      ctx->is_writing = false;
-      pthread_mutex_unlock (&ctx->is_writing_mutex);
+      pthread_mutex_lock (&ctx->rctr_conn.is_writing_mutex);
+      ctx->rctr_conn.is_writing = false;
+      pthread_mutex_unlock (&ctx->rctr_conn.is_writing_mutex);
 
       return (S_SUCCESS);
     }
@@ -222,7 +205,7 @@ send_result_job (void *arg)
 
   result_write_state_setup (ctx);
 
-  return (push_job (&ctx->rctr_ctx, ctx, send_result_job));
+  return (push_job (ctx->rctr_conn.rctr_ctx, ctx, send_result_job));
 }
 
 static status_t
@@ -256,10 +239,10 @@ process_task_job (void *arg)
       = brute (&task, ctx->client_base.config, st_password_check, &st_context);
   trace ("Processed task: %s", task.result.password);
 
-  pthread_mutex_lock (&ctx->is_writing_mutex);
-  bool is_writing = ctx->is_writing;
-  ctx->is_writing = true;
-  pthread_mutex_unlock (&ctx->is_writing_mutex);
+  pthread_mutex_lock (&ctx->rctr_conn.is_writing_mutex);
+  bool is_writing = ctx->rctr_conn.is_writing;
+  ctx->rctr_conn.is_writing = true;
+  pthread_mutex_unlock (&ctx->rctr_conn.is_writing_mutex);
 
   // client_finish on != QS_SUCCESS?
   if (is_writing)
@@ -267,20 +250,16 @@ process_task_job (void *arg)
                 ? S_SUCCESS
                 : S_FAILURE);
 
-  memcpy (&ctx->write_buffer, &task.result, sizeof (task.result));
+  memcpy (&ctx->rctr_conn.result_buffer, &task.result, sizeof (task.result));
   result_write_state_setup (ctx);
 
-  return (push_job (&ctx->rctr_ctx, ctx, send_result_job));
+  return (push_job (ctx->rctr_conn.rctr_ctx, ctx, send_result_job));
 }
 
 static void
 client_finish (client_context_t *ctx)
 {
-  if (event_del (ctx->read_event) == -1)
-    error ("Could not delete read event");
-  event_free (ctx->read_event);
-
-  event_base_loopbreak (ctx->ev_base);
+  reactor_conn_destroy (&ctx->rctr_conn, ctx->client_base.socket_fd);
 
   ctx->done = true;
   if (pthread_cond_signal (&ctx->cond_sem) != 0)
@@ -379,7 +358,8 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
               error ("Could not push a task to the task queue");
               goto fail;
             }
-          if (push_job (&ctx->rctr_ctx, ctx, process_task_job) == S_FAILURE)
+          if (push_job (ctx->rctr_conn.rctr_ctx, ctx, process_task_job)
+              == S_FAILURE)
             {
               error ("Could not push a job to the jobs queue");
               goto fail;
@@ -403,41 +383,27 @@ bool
 run_reactor_client (config_t *config)
 {
   client_context_t ctx;
+  reactor_context_t rctr_ctx;
 
-  if (client_context_init (&ctx, config) == S_FAILURE)
+  if (client_context_init (&ctx, &rctr_ctx, config) == S_FAILURE)
     return (false);
 
   if (srv_connect (&ctx.client_base) == S_FAILURE)
     goto cleanup;
 
-  ctx.read_event = event_new (ctx.rctr_ctx.ev_base, ctx.client_base.socket_fd,
-                              EV_READ | EV_PERSIST, handle_read, &ctx);
-  if (!ctx.read_event)
+  if (reactor_conn_init (&ctx.rctr_conn, &rctr_ctx, ctx.client_base.socket_fd,
+                         handle_read, &ctx)
+      == S_FAILURE)
     {
-      error ("Could not create read event");
+      error ("Could not initialize reactor connection");
       goto cleanup;
     }
 
-  if (event_add (ctx.read_event, NULL) != 0)
-    {
-      error ("Could not add event to event base");
-      goto cleanup;
-    }
+  trace ("Initialized reactor connection");
 
-  reactor_context_t *rctr_ctx_ptr = &ctx.rctr_ctx;
-
-  int number_of_threads
-      = (config->number_of_threads > 2) ? config->number_of_threads - 2 : 1;
-  if (create_threads (&ctx.thread_pool, 1, handle_io, &rctr_ctx_ptr,
-                      sizeof (rctr_ctx_ptr), "i/o handler")
-      == 0)
+  if (create_reactor_threads (&ctx.thread_pool, config, ctx.rctr_conn.rctr_ctx)
+      == S_FAILURE)
     goto cleanup;
-  trace ("Created I/O handler thread");
-
-  if (!thread_create (&ctx.thread_pool, dispatch_event_loop, &ctx.rctr_ctx,
-                      sizeof (ctx.rctr_ctx), "event loop dispatcher"))
-    goto cleanup;
-  trace ("Created event loop dispatcher thread");
 
   if (pthread_mutex_lock (&ctx.mutex) != 0)
     {

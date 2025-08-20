@@ -4,6 +4,9 @@
 #include "common.h"
 #include "config.h"
 #include "queue.h"
+#include "thread_pool.h"
+
+#include <event2/event.h>
 
 typedef struct io_state_t
 {
@@ -27,6 +30,15 @@ typedef struct reactor_context_t
   struct event_base *ev_base;
 } reactor_context_t;
 
+typedef struct reactor_conn_t
+{
+  reactor_context_t *rctr_ctx;
+  struct event *read_event;
+  bool is_writing;
+  pthread_mutex_t is_writing_mutex;
+  result_t result_buffer;
+} reactor_conn_t;
+
 typedef struct job_t
 {
   void *arg;
@@ -42,5 +54,16 @@ status_t write_state_write (int socket_fd, write_state_t *write_state);
 
 status_t push_job (reactor_context_t *rctr_ctx, void *arg,
                    status_t (*job_func) (void *));
+
+status_t reactor_conn_init (reactor_conn_t *conn, reactor_context_t *rctr_ctx,
+                            evutil_socket_t fd, event_callback_fn on_read,
+                            void *arg);
+status_t reactor_conn_destroy (reactor_conn_t *conn, evutil_socket_t fd);
+
+status_t reactor_context_init (reactor_context_t *ctx);
+status_t reactor_context_destroy (reactor_context_t *ctx);
+
+status_t create_reactor_threads (thread_pool_t *tp, config_t *config,
+                                 reactor_context_t *ptr);
 
 #endif // REACTOR_COMMON_H
