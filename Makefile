@@ -1,11 +1,7 @@
 .PHONY: all dev debug release check perf clean
 
 CFLAGS ?= -O2 -Wall -Wextra -gdwarf-4
-ifeq ($(shell uname), FreeBSD)
-	LIBS+=-lpthread
-else
-	CFLAGS+=-pthread
-endif
+CFLAGS+=-pthread
 CFLAGS+=-I./crypt
 LIBS+=-levent
 
@@ -17,7 +13,7 @@ SRC_DIR=src
 OBJ=$(addprefix ${OBJ_DIR}/,brute.o iter.o rec.o common.o main.o multi.o \
 	queue.o single.o gen.o semaphore.o async_client.o client_common.o \
 	sync_client.o async_server.o sync_server.o server_common.o \
-	reactor_server.o thread_pool.o log.o)
+	reactor_common.o reactor_client.o reactor_server.o thread_pool.o log.o)
 TARGET=brute
 
 TESTS=test/simple-test.py test/client-server-test.py

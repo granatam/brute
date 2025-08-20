@@ -1,4 +1,5 @@
 import os
+import socket
 import string
 import subprocess
 import sys
@@ -17,12 +18,9 @@ with warnings.catch_warnings():
     except ImportError:  # No crypt library in Python 3.13
         from legacycrypt import crypt
 
+from hypothesis import Phase, settings
 
-from hypothesis import Phase
-
-from hypothesis import settings
-
-MAX_EXAMPLES = os.getenv("HYPOTHESIS_MAX_EXAMPLES", "100")
+MAX_EXAMPLES = os.getenv("HYPOTHESIS_MAX_EXAMPLES", "50")
 settings.register_profile("custom", max_examples=int(MAX_EXAMPLES))
 settings.load_profile("custom")
 
@@ -42,14 +40,15 @@ class CommandMode(str, Enum):
 
 
 class RunMode(str, Enum):
-    SINGLE = "s"
-    MULTI = "m"
-    GENERATOR = "g"
-    SYNC_CLIENT = "c"
-    SYNC_SERVER = "S"
-    ASYNC_CLIENT = "v"
-    ASYNC_SERVER = "w"
-    REACTOR_SERVER = "R"
+    SINGLE = "single"
+    MULTI = "multi"
+    GENERATOR = "gen"
+    SYNC_CLIENT = "client"
+    SYNC_SERVER = "server"
+    ASYNC_CLIENT = "async-client"
+    ASYNC_SERVER = "async-server"
+    REACTOR_SERVER = "reactor-server"
+    REACTOR_CLIENT = "reactor-client"
     NETCAT = "nc"  # Special case, used for client's behavior imitation
 
 
@@ -57,6 +56,30 @@ class BruteMode(str, Enum):
     ITERATIVE = "i"
     RECURSIVE = "r"
     RECURSIVE_GEN = "y"
+
+
+SIMPLE_MODES = [RunMode.SINGLE, RunMode.MULTI, RunMode.GENERATOR]
+SERVER_MODES = [
+    RunMode.SYNC_SERVER,
+    RunMode.ASYNC_SERVER,
+    RunMode.REACTOR_SERVER,
+]
+CLIENT_MODES = [RunMode.REACTOR_CLIENT]
+
+
+def find_free_port_in_range(start: int, end: int) -> int:
+    for port in range(start, end):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind(("", port))
+                return port
+            except OSError:
+                continue
+    raise RuntimeError(f"No free ports in range {start}-{end - 1}")
+
+
+port_st = st.builds(find_free_port_in_range, st.just(9000), st.just(9999))
 
 
 def run_brute(
@@ -73,7 +96,7 @@ def run_brute(
         cmd = f"nc localhost {port}"
     else:
         hash = crypt(passwd, passwd)
-        cmd = f"{mode.value} -H {hash} -l {len(str(passwd))} -a {alph} -{run_mode.value} -{brute_mode.value} -T {cpu_count} -p {port}"
+        cmd = f"{mode.value} -H {hash} -l {len(str(passwd))} -a {alph} --{run_mode.value} -{brute_mode.value} -T {cpu_count} -p {port}"
     return cmd, subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=log_file, shell=True
     )

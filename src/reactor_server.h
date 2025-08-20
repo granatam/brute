@@ -4,6 +4,7 @@
 #include "common.h"
 #include "config.h"
 #include "queue.h"
+#include "reactor_common.h"
 #include "server_common.h"
 
 #include <event.h>
@@ -13,27 +14,10 @@
 typedef struct rsrv_context_t
 {
   srv_base_context_t srv_base;
-  queue_t jobs_queue;
+  reactor_context_t rctr_ctx;
   queue_t starving_clients;
-  struct event_base *ev_base;
   pthread_mutex_t mutex;
 } rsrv_context_t;
-
-typedef struct io_state_t
-{
-  struct iovec vec[2];
-  size_t vec_sz;
-  command_t cmd;
-} io_state_t;
-
-typedef struct write_state_t
-{
-  io_state_t base_state;
-  struct iovec vec_extra[3];
-  command_t cmd_extra;
-  int32_t length;
-  size_t vec_extra_sz;
-} write_state_t;
 
 typedef struct client_context_t
 {
@@ -52,12 +36,6 @@ typedef struct client_context_t
   pthread_mutex_t is_starving_mutex;
   pthread_mutex_t registry_used_mutex;
 } client_context_t;
-
-typedef struct job_t
-{
-  void *arg;
-  status_t (*job_func) (void *);
-} job_t;
 
 bool run_reactor_server (task_t *, config_t *);
 

@@ -45,4 +45,4 @@ jobs:
             export CFLAGS="$CFLAGS -O2 -Wall -Wextra -gdwarf-4 -fsanitize=undefined -fno-omit-frame-pointer"
             ${{ inputs.cc_prefix }} make release
       - name: test with UBSan (release)
-        run: make check
+        run: UBSAN_OPTIONS=print_stacktrace=1 make check
