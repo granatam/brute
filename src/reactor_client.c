@@ -122,7 +122,7 @@ client_context_destroy (client_context_t *ctx)
 
   if (queue_cancel (&ctx->rctr_conn.rctr_ctx->jobs_queue) != QS_SUCCESS)
     {
-      error ("Could not destroy jobs queue");
+      error ("Could not cancel jobs queue");
       status = S_FAILURE;
       goto cleanup;
     }
@@ -153,13 +153,13 @@ client_context_destroy (client_context_t *ctx)
   trace ("Freed an event base");
 
 cleanup:
-  queue_destroy (&ctx->rctr_conn.rctr_ctx->jobs_queue);
   queue_destroy (&ctx->task_queue);
   queue_destroy (&ctx->result_queue);
 
   client_base_context_destroy (&ctx->client_base);
 
-  // TODO: destroy mutexes and conditional variables
+  pthread_mutex_destroy (&ctx->mutex);
+  pthread_cond_destroy (&ctx->cond_sem);
 
   return (status);
 }
