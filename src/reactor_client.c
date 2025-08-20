@@ -126,7 +126,6 @@ client_context_destroy (client_context_t *ctx)
       status = S_FAILURE;
       goto cleanup;
     }
-  reactor_context_destroy (ctx->rctr_conn.rctr_ctx);
   if (queue_cancel (&ctx->task_queue) != QS_SUCCESS)
     {
       error ("Could not cancel task queue");
@@ -149,10 +148,11 @@ client_context_destroy (client_context_t *ctx)
 
   trace ("Waited for all threads to end, closing the connection now");
 
-  event_base_free (ctx->rctr_conn.rctr_ctx->ev_base);
-  trace ("Freed an event base");
 
 cleanup:
+  reactor_context_destroy (ctx->rctr_conn.rctr_ctx);
+  trace ("Destroyed a reactor context");
+
   queue_destroy (&ctx->task_queue);
   queue_destroy (&ctx->result_queue);
 
