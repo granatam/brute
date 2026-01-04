@@ -6,13 +6,15 @@ LIBS+=-levent
 
 CRYPT_LIB=crypt/libcrypt.a
 
-OBJ_DIR=obj
 SRC_DIR=src
+OBJ_DIR=obj
+DEP_DIR=${OBJ_DIR}/.deps
 
-OBJ=$(addprefix ${OBJ_DIR}/,brute.o iter.o rec.o common.o main.o multi.o \
-	queue.o single.o gen.o semaphore.o async_client.o client_common.o \
-	sync_client.o async_server.o sync_server.o server_common.o \
-	reactor_server.o thread_pool.o log.o)
+SRCS = $(wildcard ${SRC_DIR}/*.c)
+SRCS_BASENAMES := $(notdir ${SRCS})
+OBJS := $(addprefix ${OBJ_DIR}/,$(SRCS_BASENAMES:.c=.o))
+DEPS := $(addprefix ${DEP_DIR}/,$(SRCS_BASENAMES:.c=.d))
+
 TARGET=brute
 
 TESTS=test/simple-test.py test/client-server-test.py
@@ -27,25 +29,31 @@ endif
 
 ifeq ($(shell uname -s), Darwin)
 	BREW_EXISTS := $(shell command -v brew >/dev/null 2>&1 && echo 1)
-ifdef BREW_EXISTS
-	BREW_PREFIX := $(shell brew --prefix libevent)
-	CFLAGS += -I$(BREW_PREFIX)/include
-	LIBS += -L$(BREW_PREFIX)/lib
-else
-$(warning Warning: macOS build configuration requires brew and libevent installed from it. Install brew and libevent or set paths manually.)
-endif
+	ifeq (${BREW_EXISTS}, 1)
+		BREW_PREFIX := $(shell brew --prefix libevent)
+		ifneq (${BREW_PREFIX},)
+			CFLAGS += -I${BREW_PREFIX}/include
+			LIBS += -L${BREW_PREFIX}/lib
+		else
+			$(warning Warning: brew found but libevent prefix is unavailable.)
+		endif
+	else
+		$(warning Warning: macOS build configuration requires libevent installed from brew.)
+	endif
 endif
 
 all: ${TARGET}
 
-${OBJ_DIR}:
-	mkdir -p ${OBJ_DIR}
+${OBJ_DIR} ${DEP_DIR}:
+	mkdir -p $@
 
-${TARGET}: ${OBJ} ${CRYPT_LIB}
-	${CC} ${CFLAGS} -o ${TARGET} ${OBJ} ${CRYPT_LIB} ${LIBS}
+${TARGET}: ${OBJS} ${CRYPT_LIB}
+	${CC} ${CFLAGS} -o ${TARGET} ${OBJS} ${CRYPT_LIB} ${LIBS}
 
-${OBJ_DIR}/%.o: ${SRC_DIR}/%.c | ${OBJ_DIR}
-	${CC} ${CFLAGS} -c $< -o $@
+-include ${DEPS}
+
+${OBJ_DIR}/%.o: ${SRC_DIR}/%.c | ${OBJ_DIR} ${DEP_DIR}
+	${CC} ${CFLAGS} -MT $@ -MMD -MP -MF ${DEP_DIR}/$*.d -c $< -o $@
 
 dev: CFLAGS += -DLOG_LEVEL=TRACE
 dev: clean all
