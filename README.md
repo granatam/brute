@@ -1,9 +1,20 @@
 # brute
 
+brute is an educational project written to explore low-level programming,
+multithreading and computer networking.
+
+It implements task computation across different models --- sequential,
+parallel, and distributed --- using password brute-forcing as an example.
+
+## Prerequisites
+
+- GNU Make
+- [libevent](https://libevent.org/)
+- `pytest`, `hypothesis` (optional, for testing)
+
 ## Usage
 
 ```
-Usage:
 ./brute [options] [run mode] [brute mode]
 
 Options:
@@ -32,4 +43,4 @@ Brute modes:
         -y, --rec-gen            recursive generator
 ```
 
-> Note: Recursive generator is not available on MacOS
+> Note: Recursive generator is not available on MacOS.
