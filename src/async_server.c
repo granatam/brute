@@ -274,10 +274,10 @@ handle_clients (void *arg)
           == S_FAILURE)
         goto cleanup;
 
-      pthread_t sender, receiver;
-      if (!(sender
-            = thread_create (&mt_ctx->thread_pool, task_sender, &client_ctx,
-                             sizeof (client_ctx), "async sender")))
+      pthread_t sender
+          = thread_create (&mt_ctx->thread_pool, task_sender, &client_ctx,
+                           sizeof (client_ctx), "async sender");
+      if (!sender)
         {
           error ("Could not create task sender thread");
           continue;
@@ -287,9 +287,10 @@ handle_clients (void *arg)
 
       trace ("Created a sender thread: %08x", sender);
 
-      if (!(receiver = thread_create (&mt_ctx->thread_pool, result_receiver,
-                                      &client_ctx, sizeof (client_ctx),
-                                      "async receiver")))
+      pthread_t receiver
+          = thread_create (&mt_ctx->thread_pool, result_receiver, &client_ctx,
+                           sizeof (client_ctx), "async receiver");
+      if (!receiver)
         {
           error ("Could not create result receiver thread");
           sender_receiver_cleanup (client_ctx);
@@ -300,6 +301,7 @@ handle_clients (void *arg)
       client_ctx = NULL;
       trace ("Created a receiver thread: %08x", receiver);
     }
+
 cleanup:
   pthread_cleanup_pop (!0);
 
