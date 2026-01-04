@@ -261,18 +261,25 @@ handle_clients (void *arg)
   mt_context_t *mt_ctx = &srv_base->mt_ctx;
 
   client_context_t *client_ctx = NULL;
+  int socket_fd = 0;
   pthread_cleanup_push (accepter_cleanup, &client_ctx);
   while (true)
     {
-      if (!client_ctx)
-        client_ctx = client_context_init (srv_base);
+      if (accept_client (srv_base->listen_fd, &socket_fd) == S_FAILURE)
+        {
+          error ("Could not accept client");
+          continue;
+        }
 
       if (!client_ctx)
-        break;
+        {
+          client_ctx = client_context_init (srv_base);
 
-      if (accept_client (srv_base->listen_fd, &client_ctx->socket_fd)
-          == S_FAILURE)
-        goto cleanup;
+          if (!client_ctx)
+            break;
+
+          client_ctx->socket_fd = socket_fd;
+        }
 
       pthread_t sender
           = thread_create (&mt_ctx->thread_pool, task_sender, &client_ctx,
@@ -299,10 +306,10 @@ handle_clients (void *arg)
         }
 
       client_ctx = NULL;
+      socket_fd = 0;
       trace ("Created a receiver thread: %08x", receiver);
     }
 
-cleanup:
   pthread_cleanup_pop (!0);
 
   return (NULL);
