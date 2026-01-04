@@ -50,7 +50,7 @@ ${OBJ_DIR} ${DEP_DIR}:
 	mkdir -p $@
 
 ${TARGET}: ${OBJS} ${CRYPT_LIB}
-	${CC} ${CFLAGS} -o ${TARGET} ${OBJS} ${CRYPT_LIB} ${LIBS}
+	${CC} ${CFLAGS} -o $@ $^ ${LIBS}
 
 -include ${DEPS}
 
