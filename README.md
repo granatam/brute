@@ -3,8 +3,8 @@
 brute is an educational project written to explore low-level programming,
 multithreading and computer networking.
 
-It implements task computation across different models --- sequential,
-parallel, and distributed --- using password brute-forcing as an example.
+It implements task computation across different models — sequential,
+parallel, and distributed — using password brute-forcing as an example.
 
 ## Prerequisites
 
