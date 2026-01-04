@@ -3,6 +3,8 @@
 
 #include "common.h"
 
+#include <stdbool.h>
+
 typedef struct iter_state_t
 {
   base_state_t base_state;

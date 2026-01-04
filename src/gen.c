@@ -8,6 +8,7 @@
 #include "single.h"
 #include "thread_pool.h"
 
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 

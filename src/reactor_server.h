@@ -6,9 +6,12 @@
 #include "queue.h"
 #include "server_common.h"
 
-#include <event.h>
 #include <event2/util.h>
+#include <pthread.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <sys/uio.h>
 
 typedef struct rsrv_context_t
 {

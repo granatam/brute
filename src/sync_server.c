@@ -2,23 +2,11 @@
 
 #include "log.h"
 #include "multi.h"
+#include "queue.h"
 #include "server_common.h"
 #include "thread_pool.h"
 
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
-#ifdef __FreeBSD__
-#include <sys/socket.h>
-#include <sys/types.h>
-#endif
 
 typedef struct client_context_t
 {

@@ -4,14 +4,18 @@
 #include "common.h"
 #include "log.h"
 #include "multi.h"
+#include "queue.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <pthread.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <unistd.h>
 
 status_t

@@ -7,19 +7,15 @@
 #include "server_common.h"
 #include "thread_pool.h"
 
-#include <arpa/inet.h>
 #include <assert.h>
 #include <event2/event.h>
 #include <event2/listener.h>
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <pthread.h>
 #include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
 

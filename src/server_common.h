@@ -5,8 +5,6 @@
 #include "config.h"
 #include "multi.h"
 
-#include <stdbool.h>
-
 typedef struct srv_base_context_t
 {
   mt_context_t mt_ctx;

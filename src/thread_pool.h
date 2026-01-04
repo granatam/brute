@@ -4,6 +4,8 @@
 #include "common.h"
 
 #include <pthread.h>
+#include <stdbool.h>
+#include <stddef.h>
 
 typedef struct node_t
 {

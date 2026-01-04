@@ -2,8 +2,9 @@
 
 #define __USE_GNU
 #include <errno.h>
+#include <pthread.h>
+#include <stddef.h>
 #include <sys/socket.h>
-#include <sys/uio.h>
 #include <unistd.h>
 
 #ifndef TEMP_FAILURE_RETRY

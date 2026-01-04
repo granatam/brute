@@ -5,7 +5,10 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <sys/socket.h>
+#include <time.h>
 #include <unistd.h>
 
 status_t

@@ -4,6 +4,7 @@
 #include "client_common.h"
 #include "common.h"
 #include "config.h"
+#include "single.h"
 
 #include <stdbool.h>
 

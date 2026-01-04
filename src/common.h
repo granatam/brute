@@ -1,9 +1,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#include <pthread.h>
 #include <stdbool.h>
-
 #include <sys/uio.h>
 
 #define MAX_PASSWORD_LENGTH (7)

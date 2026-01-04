@@ -6,17 +6,8 @@
 #include "log.h"
 #include "thread_pool.h"
 
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
-#ifdef __FreeBSD__
-#include <sys/socket.h>
-#include <sys/types.h>
-#endif
+#include <sys/uio.h>
 
 void
 sync_client_find_password (task_t *task, config_t *config, st_context_t *ctx)
