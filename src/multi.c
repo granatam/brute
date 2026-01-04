@@ -7,9 +7,7 @@
 #include "single.h"
 
 #include <pthread.h>
-#include <stdio.h>
 #include <string.h>
-#include <unistd.h>
 
 status_t
 mt_context_init (mt_context_t *context, config_t *config)

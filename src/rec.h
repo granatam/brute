@@ -5,6 +5,7 @@
 
 #ifndef __APPLE__
 #include <signal.h>
+#include <stdbool.h>
 #include <ucontext.h>
 
 #define STACK_SIZE MINSIGSTKSZ

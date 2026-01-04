@@ -8,18 +8,9 @@
 #include "single.h"
 #include "thread_pool.h"
 
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <stdlib.h>
+#include <pthread.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
-#ifdef __FreeBSD__
-#include <sys/socket.h>
-#include <sys/types.h>
-#endif
+#include <sys/uio.h>
 
 typedef struct client_context_t
 {

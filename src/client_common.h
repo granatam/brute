@@ -5,8 +5,6 @@
 #include "config.h"
 #include "single.h"
 
-#include <stdbool.h>
-
 typedef void (*task_callback_t) (task_t *, config_t *, st_context_t *);
 
 typedef struct client_base_context_t

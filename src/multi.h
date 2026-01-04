@@ -1,10 +1,12 @@
 #ifndef MULTI_H
 #define MULTI_H
 
+#include "common.h"
 #include "config.h"
 #include "queue.h"
 #include "thread_pool.h"
 
+#include <pthread.h>
 #include <stdbool.h>
 
 typedef struct mt_context_t

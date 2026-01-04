@@ -5,6 +5,7 @@
 
 #include <pthread.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #define QUEUE_SIZE (8)
 

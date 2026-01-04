@@ -1,8 +1,8 @@
 #include "rec.h"
 
+#ifndef __APPLE__
 #include "log.h"
 
-#ifndef __APPLE__
 static bool
 brute_rec_gen_handler (task_t *task, void *context)
 {

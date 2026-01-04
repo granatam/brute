@@ -4,7 +4,7 @@
 #include "common.h"
 #include "config.h"
 
-#include <pthread.h>
+#include <stdbool.h>
 
 bool run_generator (task_t *task, config_t *config);
 
