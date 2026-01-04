@@ -1,6 +1,8 @@
+.SUFFIXES:.c
 .PHONY: all dev debug release check perf clean
 
-CFLAGS ?= -O2 -Wall -Wextra -gdwarf-4
+OPT_LEVEL ?= -O2
+CFLAGS ?= ${OPT_LEVEL} -Wall -Wextra ${DBG_FLAGS}
 CFLAGS +=-pthread -I./crypt
 LIBS+=-levent
 
@@ -55,12 +57,18 @@ ${TARGET}: ${OBJS} ${CRYPT_LIB}
 ${OBJ_DIR}/%.o: ${SRC_DIR}/%.c | ${OBJ_DIR} ${DEP_DIR}
 	${CC} ${CFLAGS} -MT $@ -MMD -MP -MF ${DEP_DIR}/$*.d -c $< -o $@
 
+dev: OPT_LEVEL := -O0
+dev: DBG_FLAGS := -g3 -gdwarf-4
 dev: CFLAGS += -DLOG_LEVEL=TRACE
 dev: clean all
 
+debug: OPT_LEVEL := -O1
+debug: DBG_FLAGS := -g1 -gdwarf-4
 debug: CFLAGS += -DLOG_LEVEL=DEBUG
 debug: clean all
 
+release: OPT_LEVEL := -O3
+release: DBG_FLAGS := -DNDEBUG -g0
 release: CFLAGS += -DLOG_LEVEL=ERROR
 release: clean all
 
