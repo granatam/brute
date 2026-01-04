@@ -291,7 +291,7 @@ push_job (client_context_t *ctx, status_t (*job_func) (void *))
 static status_t create_task_job (void *);
 
 static status_t
-write_state_write_wrapper (int socket_fd, struct iovec *vec, size_t *vec_sz)
+write_state_write_wrapper (int socket_fd, struct iovec *vec, int *vec_sz)
 {
   size_t actual_write = writev (socket_fd, vec, *vec_sz);
 
@@ -301,7 +301,7 @@ write_state_write_wrapper (int socket_fd, struct iovec *vec, size_t *vec_sz)
       return (S_FAILURE);
     }
 
-  size_t i = 0;
+  int i = 0;
   while (actual_write > 0 && vec[i].iov_len <= actual_write)
     actual_write -= vec[i++].iov_len;
 
@@ -745,7 +745,7 @@ run_reactor_server (task_t *task, config_t *config)
 
   thread_pool_t *thread_pool = &rsrv_ctx.srv_base.mt_ctx.thread_pool;
 
-  int number_of_threads
+  long number_of_threads
       = (config->number_of_threads > 2) ? config->number_of_threads - 2 : 1;
   if (create_threads (thread_pool, number_of_threads, handle_io, &context_ptr,
                       sizeof (context_ptr), "i/o handler")

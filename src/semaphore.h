@@ -14,7 +14,7 @@ typedef struct sem_t
 {
   pthread_cond_t cond_sem;
   pthread_mutex_t mutex;
-  int counter;
+  unsigned int counter;
 } sem_t;
 
 sem_status_t sem_init (sem_t *sem, int pshared, unsigned int value);

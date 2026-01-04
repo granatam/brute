@@ -25,7 +25,7 @@ typedef struct rsrv_context_t
 typedef struct io_state_t
 {
   struct iovec vec[2];
-  size_t vec_sz;
+  int32_t vec_sz;
   command_t cmd;
 } io_state_t;
 
@@ -34,8 +34,8 @@ typedef struct write_state_t
   io_state_t base_state;
   struct iovec vec_extra[3];
   command_t cmd_extra;
-  int32_t length;
-  size_t vec_extra_sz;
+  unsigned long length;
+  int32_t vec_extra_sz;
 } write_state_t;
 
 typedef struct client_context_t

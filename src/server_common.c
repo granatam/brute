@@ -163,7 +163,7 @@ status_t
 send_alph (int socket_fd, mt_context_t *mt_ctx)
 {
   command_t cmd = CMD_ALPH;
-  int32_t length = strlen (mt_ctx->config->alph);
+  uint32_t length = strlen (mt_ctx->config->alph);
 
   struct iovec vec[] = {
     { .iov_base = &cmd, .iov_len = sizeof (cmd) },
