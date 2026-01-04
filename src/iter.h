@@ -9,8 +9,8 @@ typedef struct iter_state_t
 {
   base_state_t base_state;
   char *alph;
-  int alph_size;
-  int idx[MAX_PASSWORD_LENGTH];
+  unsigned long alph_size;
+  unsigned long idx[MAX_PASSWORD_LENGTH];
 } iter_state_t;
 
 void iter_state_init (iter_state_t *state, char *alph, task_t *task);
