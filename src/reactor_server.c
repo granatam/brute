@@ -138,7 +138,7 @@ rsrv_context_destroy (rsrv_context_t *ctx)
   return (S_SUCCESS);
 }
 
-static void handle_read (evutil_socket_t, short, void *);
+static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
 
 static client_context_t *
 client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
@@ -288,7 +288,7 @@ push_job (client_context_t *ctx, status_t (*job_func) (void *))
   return (S_SUCCESS);
 }
 
-static status_t create_task_job (void *);
+static status_t create_task_job (void *arg);
 
 static status_t
 write_state_write_wrapper (int socket_fd, struct iovec *vec, int *vec_sz)

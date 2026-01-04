@@ -11,8 +11,9 @@ typedef struct srv_base_context_t
   int listen_fd;
 } srv_base_context_t;
 
-status_t srv_base_context_init (srv_base_context_t *ctx, config_t *config);
-status_t srv_base_context_destroy (srv_base_context_t *ctx);
+status_t srv_base_context_init (srv_base_context_t *srv_base,
+                                config_t *config);
+status_t srv_base_context_destroy (srv_base_context_t *srv_base);
 
 status_t accept_client (int srv_socket_fd, int *client_socket_fd);
 status_t close_client (int socket_fd);
