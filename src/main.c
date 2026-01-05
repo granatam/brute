@@ -241,23 +241,17 @@ main (int argc, char *argv[])
       break;
     case RM_ASYNC_CLIENT:
       run_async_client (&config);
-      break;
+      return (EXIT_SUCCESS);
     case RM_CLIENT:
       run_client (&config, sync_client_find_password);
-      break;
+      return (EXIT_SUCCESS);
     case RM_LOAD_CLIENT:
       spawn_clients (&config, NULL);
-      break;
+      return (EXIT_SUCCESS);
     case RM_REACTOR_SERVER:
       is_found = run_reactor_server (&task, &config);
       break;
     }
-
-  /* Clients should not output anything, only computations and data exchange
-   * with the server */
-  if (config.run_mode == RM_CLIENT || config.run_mode == RM_LOAD_CLIENT
-      || config.run_mode == RM_ASYNC_CLIENT)
-    return (EXIT_SUCCESS);
 
   if (is_found)
     printf ("Password found: %s\n", task.result.password);
