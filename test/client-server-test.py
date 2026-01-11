@@ -1,200 +1,50 @@
 from datetime import timedelta
 
+import pytest
 from hypothesis import given, settings
 from hypothesis.strategies import data
-from testrunner import Config, RunMode, _TestRunner, phases
+from testrunner import (
+    CLIENT_MODES,
+    SERVER_MODES,
+    Config,
+    _TestRunner,
+    phases,
+    port_st,
+)
 
 
-# Synchronous server, one synchronous client
-@given(data=data())
+@pytest.mark.parametrize("client_mode", CLIENT_MODES)
+@pytest.mark.parametrize("server_mode", SERVER_MODES)
+@given(data=data(), port=port_st)
 @settings(deadline=timedelta(seconds=5), phases=phases)
-def test_sync_client_sync_server(data):
+def test_one_client_server(data, client_mode, server_mode, port):
     _TestRunner(
         data,
         Config(
             (2, 3),
             (2, 3),
-            run_mode=RunMode.SYNC_SERVER,
-            client_run_modes=[RunMode.SYNC_CLIENT],
-            port=9001,
+            run_mode=server_mode,
+            client_run_modes=[client_mode],
+            port=port,
         ),
     ).run()
 
 
-# Synchronous server, two synchronous clients
-@given(data=data())
+@pytest.mark.parametrize("first_client_mode", CLIENT_MODES)
+@pytest.mark.parametrize("second_client_mode", CLIENT_MODES)
+@pytest.mark.parametrize("server_mode", SERVER_MODES)
+@given(data=data(), port=port_st)
 @settings(deadline=timedelta(seconds=5), phases=phases)
-def test_two_sync_clients_sync_server(data):
+def test_two_clients_server(
+    data, first_client_mode, second_client_mode, server_mode, port
+):
     _TestRunner(
         data,
         Config(
             (4, 5),
             (4, 5),
-            run_mode=RunMode.SYNC_SERVER,
-            client_run_modes=[RunMode.SYNC_CLIENT, RunMode.SYNC_CLIENT],
-            port=9002,
+            run_mode=server_mode,
+            client_run_modes=[first_client_mode, second_client_mode],
+            port=port,
         ),
     ).run()
-
-
-# Asynchronous server, one synchronous client
-@given(data=data())
-@settings(deadline=timedelta(seconds=5), phases=phases)
-def test_sync_client_async_server(data):
-    _TestRunner(
-        data,
-        Config(
-            (2, 3),
-            (2, 3),
-            run_mode=RunMode.ASYNC_SERVER,
-            client_run_modes=[RunMode.SYNC_CLIENT],
-            port=9003,
-        ),
-    ).run()
-
-
-# Asynchronous server, two synchronous clients
-@given(data=data())
-@settings(deadline=timedelta(seconds=5), phases=phases)
-def test_two_sync_clients_async_server(data):
-    _TestRunner(
-        data,
-        Config(
-            (4, 5),
-            (4, 5),
-            run_mode=RunMode.ASYNC_SERVER,
-            client_run_modes=[RunMode.SYNC_CLIENT, RunMode.SYNC_CLIENT],
-            port=9004,
-        ),
-    ).run()
-
-
-# Asynchronous server, one asynchronous client
-@given(data=data())
-@settings(deadline=timedelta(seconds=5), phases=phases)
-def test_async_client_async_server(data):
-    _TestRunner(
-        data,
-        Config(
-            (2, 3),
-            (2, 3),
-            run_mode=RunMode.ASYNC_SERVER,
-            client_run_modes=[RunMode.ASYNC_CLIENT],
-            port=9005,
-        ),
-    ).run()
-
-
-# Asynchronous server, two asynchronous clients
-@given(data=data())
-@settings(deadline=timedelta(seconds=5), phases=phases)
-def test_two_async_clients_async_server(data):
-    _TestRunner(
-        data,
-        Config(
-            (4, 5),
-            (4, 5),
-            run_mode=RunMode.ASYNC_SERVER,
-            client_run_modes=[RunMode.ASYNC_CLIENT, RunMode.ASYNC_CLIENT],
-            port=9006,
-        ),
-    ).run()
-
-
-# Synchronous server, one asynchronous client
-@given(data=data())
-@settings(deadline=timedelta(seconds=5), phases=phases)
-def test_async_client_sync_server(data):
-    _TestRunner(
-        data,
-        Config(
-            (2, 3),
-            (2, 3),
-            run_mode=RunMode.SYNC_SERVER,
-            client_run_modes=[RunMode.ASYNC_CLIENT],
-            port=9007,
-        ),
-    ).run()
-
-
-# Synchronous server, two asynchronous clients
-@given(data=data())
-@settings(deadline=timedelta(seconds=5), phases=phases)
-def test_two_async_clients_sync_server(data):
-    _TestRunner(
-        data,
-        Config(
-            (4, 5),
-            (4, 5),
-            run_mode=RunMode.SYNC_SERVER,
-            client_run_modes=[RunMode.ASYNC_CLIENT, RunMode.ASYNC_CLIENT],
-            port=9008,
-        ),
-    ).run()
-
-
-# Reactor server, one synchronous client
-@given(data=data())
-@settings(deadline=timedelta(seconds=5), phases=phases)
-def test_sync_client_reactor_server(data):
-    _TestRunner(
-        data,
-        Config(
-            (2, 3),
-            (2, 3),
-            run_mode=RunMode.REACTOR_SERVER,
-            client_run_modes=[RunMode.SYNC_CLIENT],
-            port=9015,
-        ),
-    ).run()
-
-
-# Reactor server, two synchronous clients
-@given(data=data())
-@settings(deadline=timedelta(seconds=5), phases=phases)
-def test_two_sync_clients_reactor_server(data):
-    _TestRunner(
-        data,
-        Config(
-            (4, 5),
-            (4, 5),
-            run_mode=RunMode.REACTOR_SERVER,
-            client_run_modes=[RunMode.SYNC_CLIENT, RunMode.SYNC_CLIENT],
-            port=9016,
-        ),
-    ).run()
-
-
-# Reactor server, one asynchronous client
-@given(data=data())
-@settings(deadline=timedelta(seconds=5), phases=phases)
-def test_async_client_reactor_server(data):
-    _TestRunner(
-        data,
-        Config(
-            (2, 3),
-            (2, 3),
-            run_mode=RunMode.REACTOR_SERVER,
-            client_run_modes=[RunMode.SYNC_CLIENT],
-            port=9017,
-        ),
-    ).run()
-
-
-# Reactor server, two asynchronous clients
-@given(data=data())
-@settings(deadline=timedelta(seconds=5), phases=phases)
-def test_two_async_clients_reactor_server(data):
-    _TestRunner(
-        data,
-        Config(
-            (4, 5),
-            (4, 5),
-            run_mode=RunMode.REACTOR_SERVER,
-            client_run_modes=[RunMode.ASYNC_CLIENT, RunMode.ASYNC_CLIENT],
-            port=9018,
-        ),
-    ).run()
-
-
-# TODO: Ultimate test - 4 clients, 1 server and long password?
