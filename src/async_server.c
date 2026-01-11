@@ -287,6 +287,7 @@ handle_clients (void *arg)
       if (!sender)
         {
           error ("Could not create task sender thread");
+          client_context_destroy (client_ctx);
           continue;
         }
 
