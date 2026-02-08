@@ -48,6 +48,7 @@ client_base_context_init (client_base_context_t *client_base, config_t *config,
   return (S_SUCCESS);
 }
 
+/* TODO: Implement connection with an exponential retry. */
 status_t
 srv_connect (client_base_context_t *client_base)
 {

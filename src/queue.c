@@ -178,6 +178,7 @@ queue_cancel (queue_t *queue)
 queue_status_t
 queue_destroy (queue_t *queue)
 {
+  /* NOTE: Should we lock the head and tail mutexes here? */
   queue->active = false;
   queue->head = queue->tail = 0;
 

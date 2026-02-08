@@ -4,7 +4,6 @@
 #include "client_common.h"
 #include "common.h"
 #include "log.h"
-#include "thread_pool.h"
 
 #include <string.h>
 #include <sys/uio.h>
@@ -72,41 +71,4 @@ run_client (config_t *config, task_callback_t task_cb)
   client_base_context_destroy (&client_base);
 
   return (false);
-}
-
-static void *
-client_thread_helper (void *arg)
-{
-  client_base_context_t *ctx = *(client_base_context_t **)arg;
-  run_client (ctx->config, ctx->task_cb);
-
-  return (NULL);
-}
-
-void
-spawn_clients (config_t *config, task_callback_t task_cb)
-{
-  thread_pool_t thread_pool;
-  if (thread_pool_init (&thread_pool) == S_FAILURE)
-    {
-      error ("Could not initialize a thread pool");
-      return;
-    }
-
-  client_base_context_t context = {
-    .config = config,
-    .task_cb = task_cb,
-  };
-  client_base_context_t *context_ptr = &context;
-
-  if (create_threads (&thread_pool, config->number_of_threads,
-                      &client_thread_helper, &context_ptr,
-                      sizeof (context_ptr), "sync client")
-      == 0)
-    return;
-
-  if (thread_pool_join (&thread_pool) == S_FAILURE)
-    error ("Could not wait for all threads to end");
-
-  trace ("Waited for all threads to end");
 }
