@@ -24,18 +24,16 @@ typedef struct rsrv_context_t
 
 typedef struct client_context_t
 {
-  struct event *read_event;
+  reactor_conn_t conn;
   rsrv_context_t *rsrv_ctx;
   evutil_socket_t socket_fd;
   bool is_starving;
-  bool is_writing;
   bool registry_used[QUEUE_SIZE];
   task_t registry[QUEUE_SIZE];
   queue_t registry_idx;
   write_state_t write_state;
   io_state_t read_state;
   result_t read_buffer;
-  pthread_mutex_t is_writing_mutex;
   pthread_mutex_t is_starving_mutex;
   pthread_mutex_t registry_used_mutex;
 } client_context_t;

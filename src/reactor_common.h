@@ -36,8 +36,9 @@ typedef struct reactor_conn_t
   struct event *read_event;
   bool is_writing;
   pthread_mutex_t is_writing_mutex;
-  result_t result_buffer;
 } reactor_conn_t;
+
+typedef void (*client_ctx_destroy_fn) (void *);
 
 typedef struct job_t
 {
@@ -65,5 +66,9 @@ status_t reactor_context_destroy (reactor_context_t *ctx);
 
 status_t create_reactor_threads (thread_pool_t *tp, config_t *config,
                                  reactor_context_t *ptr);
+
+void reactor_cleanup_clients (reactor_context_t *ctx,
+                              event_callback_fn client_read_cb,
+                              client_ctx_destroy_fn destroy_ctx);
 
 #endif // REACTOR_COMMON_H

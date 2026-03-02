@@ -1,7 +1,6 @@
+#include "load_client.h"
 #include "priority_queue.h"
-#include "reactor_client.h"
 
-#include "brute.h"
 #include "client_common.h"
 #include "common.h"
 #include "log.h"
@@ -12,11 +11,20 @@
 #include <arpa/inet.h>
 #include <assert.h>
 #include <event2/event.h>
+#include <event2/thread.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
+
+#define MIN_DELAY_USEC 1000
+#define TASK_TIMEOUT_MS_MIN 100
+#define TASK_TIMEOUT_MS_MAX 5000
+#define PENDING_TASKS_QUEUE_CAP 256
 
 typedef struct spawner_context_t
 {
@@ -25,6 +33,9 @@ typedef struct spawner_context_t
   config_t *config;
   priority_queue_t pending_tasks;
   struct event *timer_event;
+  pthread_mutex_t mutex;
+  pthread_cond_t cond_sem;
+  volatile bool done;
 } spawner_context_t;
 
 typedef enum read_stage_t
@@ -46,22 +57,69 @@ typedef struct read_state_t
 typedef struct client_context_t
 {
   client_base_context_t client_base;
+  spawner_context_t *s_ctx;
   reactor_conn_t rctr_conn;
-  thread_pool_t thread_pool;
+  result_t result_buffer;
+  queue_t result_queue;
   pthread_mutex_t mutex;
   volatile bool done;
   pthread_cond_t cond_sem;
   read_state_t read_state;
   write_state_t write_state;
-  queue_t task_queue;
-  queue_t result_queue;
   task_t read_buffer;
+  unsigned int rand_seed;
 } client_context_t;
+
+typedef struct pending_task_t
+{
+  struct timeval deadline;
+  client_context_t *ctx;
+  task_t result;
+} pending_task_t;
+
+static int
+pending_task_cmp (const void *lhs, const void *rhs)
+{
+  const pending_task_t *a = lhs;
+  const pending_task_t *b = rhs;
+  return evutil_timercmp (&a->deadline, &b->deadline, <)   ? -1
+         : evutil_timercmp (&a->deadline, &b->deadline, >) ? 1
+                                                           : 0;
+}
+
+static void timer_callback (evutil_socket_t fd, short what, void *arg);
+static void client_context_destroy (void *ctx);
+static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
+
+static void
+spawner_context_destroy (spawner_context_t *ctx)
+{
+  if (queue_cancel (&ctx->rctx->jobs_queue) != QS_SUCCESS)
+    error ("Could not cancel jobs queue");
+
+  if (thread_pool_join (&ctx->thread_pool) == S_FAILURE)
+    error ("Could not join thread pool");
+
+  reactor_cleanup_clients (ctx->rctx, handle_read, client_context_destroy);
+
+  if (event_del (ctx->timer_event) == -1)
+    error ("Could not delete timer event");
+  event_free (ctx->timer_event);
+
+  priority_queue_destroy (&ctx->pending_tasks);
+
+  if (reactor_context_destroy (ctx->rctx) != S_SUCCESS)
+    error ("Could not destroy reactor context");
+
+  pthread_mutex_destroy (&ctx->mutex);
+  pthread_cond_destroy (&ctx->cond_sem);
+}
 
 static status_t
 spawner_context_init (spawner_context_t *ctx, reactor_context_t *rctx,
                       config_t *config)
 {
+  ctx->config = config;
   if (thread_pool_init (&ctx->thread_pool) == S_FAILURE)
     {
       error ("Could not initialize thread pool");
@@ -74,8 +132,8 @@ spawner_context_init (spawner_context_t *ctx, reactor_context_t *rctx,
     }
   ctx->rctx = rctx;
 
-  if (priority_queue_init (&ctx->pending_tasks, LC_PENDING_QUEUE_CAP,
-                           sizeof (lc_pending_task_t), lc_pending_task_cmp)
+  if (priority_queue_init (&ctx->pending_tasks, PENDING_TASKS_QUEUE_CAP,
+                           sizeof (pending_task_t), pending_task_cmp)
       != S_SUCCESS)
     {
       error ("Could not initialize pending tasks queue");
@@ -83,127 +141,117 @@ spawner_context_init (spawner_context_t *ctx, reactor_context_t *rctx,
     }
 
   ctx->timer_event
-      = event_new (ctx->ev_base, -1, EV_TIMEOUT, timer_callback, &ctx);
+      = event_new (ctx->rctx->ev_base, -1, EV_TIMEOUT, timer_callback, ctx);
   if (!ctx->timer_event)
     {
       error ("Could not create timer event");
       goto cleanup;
     }
 
-  return (S_SUCCESS);
-}
-
-static status_t
-client_context_init (client_context_t *ctx, reactor_context_t *rctr_ctx,
-                     config_t *config)
-{
-  memset (ctx, 0, sizeof (*ctx));
-
-  if (queue_init (&ctx->task_queue, sizeof (task_t)) != QS_SUCCESS)
-    {
-      error ("Could not initialize task queue");
-      goto rctr_ctx_cleanup;
-    }
-  if (queue_init (&ctx->result_queue, sizeof (result_t)) != QS_SUCCESS)
-    {
-      error ("Could not initialize result queue");
-      queue_destroy (&ctx->task_queue);
-      goto rctr_ctx_cleanup;
-    }
   if (pthread_mutex_init (&ctx->mutex, NULL) != 0)
     {
-      error ("Could not initialize mutex");
-      goto cleanup;
+      error ("Could not initialize spawner mutex");
+      goto cleanup_timer;
     }
   if (pthread_cond_init (&ctx->cond_sem, NULL) != 0)
     {
-      error ("Could not initialize conditional semaphore");
-      goto cleanup;
+      error ("Could not initialize spawner conditional semaphore");
+      pthread_mutex_destroy (&ctx->mutex);
+      goto cleanup_timer;
     }
 
   ctx->done = false;
 
-  ctx->read_state.stage = RS_CMD;
-  ctx->read_state.is_partial = false;
-  ctx->read_state.alph_len = -1;
-  ctx->read_state.cmd = CMD_HASH;
-
-  trace ("Allocated memory for event loop base");
-
-  if (client_base_context_init (&ctx->client_base, config, NULL) == S_FAILURE)
-    {
-      error ("Could not initialize client base context");
-      client_base_context_destroy (&ctx->client_base);
-      goto cleanup;
-    }
-
   return (S_SUCCESS);
 
+cleanup_timer:
+  event_free (ctx->timer_event);
+  priority_queue_destroy (&ctx->pending_tasks);
+
 cleanup:
-  queue_destroy (&ctx->task_queue);
-  queue_destroy (&ctx->result_queue);
-
-rctr_ctx_cleanup:
-  reactor_context_destroy (rctr_ctx);
-
+  reactor_context_destroy (rctx);
   return (S_FAILURE);
 }
 
 static status_t
-client_context_destroy (client_context_t *ctx)
+client_context_init (client_context_t *ctx, spawner_context_t *s_ctx)
 {
+  ctx->s_ctx = s_ctx;
+
+  if (pthread_mutex_init (&ctx->mutex, NULL) != 0)
+    {
+      error ("Could not initialize mutex");
+      return (S_FAILURE);
+    }
+  if (pthread_cond_init (&ctx->cond_sem, NULL) != 0)
+    {
+      error ("Could not initialize conditional semaphore");
+      return (S_FAILURE);
+    }
+
+  if (queue_init (&ctx->result_queue, sizeof (result_t)) != QS_SUCCESS)
+    {
+      error ("Could not initialize result queue");
+      return (S_FAILURE);
+    }
+
+  ctx->done = false;
+  ctx->read_state.stage = RS_CMD;
+  ctx->read_state.is_partial = false;
+  ctx->read_state.alph_len = -1;
+  ctx->read_state.cmd = CMD_HASH;
+  ctx->rand_seed = (unsigned)time (NULL) ^ (unsigned)(uintptr_t)ctx;
+
+  if (client_base_context_init (&ctx->client_base, s_ctx->config, NULL)
+      == S_FAILURE)
+    {
+      error ("Could not initialize client base context");
+      client_base_context_destroy (&ctx->client_base);
+      return (S_FAILURE);
+    }
+
+  return (S_SUCCESS);
+}
+
+static void
+client_context_destroy (void *arg)
+{
+  client_context_t *ctx = arg;
+
   trace ("Destroying client context");
-  status_t status = S_SUCCESS;
-
-  if (queue_cancel (&ctx->rctr_conn.rctr_ctx->jobs_queue) != QS_SUCCESS)
+  if (reactor_conn_destroy (&ctx->rctr_conn, ctx->client_base.socket_fd)
+      != S_SUCCESS)
     {
-      error ("Could not cancel jobs queue");
-      status = S_FAILURE;
-      goto cleanup;
-    }
-  if (queue_cancel (&ctx->task_queue) != QS_SUCCESS)
-    {
-      error ("Could not cancel task queue");
-      status = S_FAILURE;
-      goto cleanup;
-    }
-  if (queue_cancel (&ctx->result_queue) != QS_SUCCESS)
-    {
-      error ("Could not cancel result queue");
-      status = S_FAILURE;
-      goto cleanup;
+      error ("Could not destroy reactor connection");
     }
 
-  if (thread_pool_join (&ctx->thread_pool) == S_FAILURE)
+  if (client_base_context_destroy (&ctx->client_base) != S_SUCCESS)
     {
-      error ("Could not cancel thread pool");
-      status = S_FAILURE;
-      goto cleanup;
+      error ("Could not destroy client base context");
     }
 
-  trace ("Waited for all threads to end, closing the connection now");
+  if (pthread_mutex_destroy (&ctx->mutex) != 0)
+    {
+      error ("Could not destroy client mutex");
+    }
+  if (pthread_cond_destroy (&ctx->cond_sem) != 0)
+    {
+      error ("Could not destroy client conditional semaphore");
+    }
+  if (queue_destroy (&ctx->result_queue) != QS_SUCCESS)
+    {
+      error ("Could not destroy result queue");
+    }
 
-cleanup:
-  reactor_context_destroy (ctx->rctr_conn.rctr_ctx);
-  trace ("Destroyed a reactor context");
-
-  queue_destroy (&ctx->task_queue);
-  queue_destroy (&ctx->result_queue);
-
-  client_base_context_destroy (&ctx->client_base);
-
-  pthread_mutex_destroy (&ctx->mutex);
-  pthread_cond_destroy (&ctx->cond_sem);
-
-  return (status);
+  free (ctx);
 }
 
 static void
 result_write_state_setup (client_context_t *ctx)
 {
   io_state_t *base_state = &ctx->write_state.base_state;
-  base_state->vec[0].iov_base = &ctx->rctr_conn.result_buffer;
-  base_state->vec[0].iov_len = sizeof (ctx->rctr_conn.result_buffer);
+  base_state->vec[0].iov_base = &ctx->result_buffer;
+  base_state->vec[0].iov_len = sizeof (ctx->result_buffer);
   base_state->vec_sz = 1;
 }
 
@@ -217,12 +265,9 @@ send_result_job (void *arg)
   if (ctx->write_state.base_state.vec_sz != 0)
     return (push_job (ctx->rctr_conn.rctr_ctx, ctx, send_result_job));
 
-  trace ("Sent %s result %s to server",
-         ctx->rctr_conn.result_buffer.is_correct ? "correct" : "incorrect",
-         ctx->rctr_conn.result_buffer.password);
+  trace ("Sent result %s to server", ctx->result_buffer.password);
 
-  queue_status_t qs
-      = queue_trypop (&ctx->result_queue, &ctx->rctr_conn.result_buffer);
+  queue_status_t qs = queue_trypop (&ctx->result_queue, &ctx->result_buffer);
   if (qs == QS_EMPTY)
     {
       pthread_mutex_lock (&ctx->rctr_conn.is_writing_mutex);
@@ -242,64 +287,98 @@ send_result_job (void *arg)
   return (push_job (ctx->rctr_conn.rctr_ctx, ctx, send_result_job));
 }
 
-static status_t
-process_task_job (void *arg)
-{
-  client_context_t *ctx = arg;
-
-  st_context_t st_context = {
-    .hash = ctx->client_base.hash,
-    .data = { .initialized = 0 },
-  };
-
-  queue_status_t qs;
-
-  task_t task;
-  qs = queue_trypop (&ctx->task_queue, &task);
-  if (qs == QS_EMPTY)
-    {
-      error ("Task queue is empty");
-      return (S_SUCCESS);
-    }
-  if (qs == QS_FAILURE)
-    {
-      error ("Could not pop a task from the task queue");
-      return (S_FAILURE);
-    }
-
-  trace ("Got task from task queue");
-
-  task.result.is_correct
-      = brute (&task, ctx->client_base.config, st_password_check, &st_context);
-  trace ("Processed task: %s", task.result.password);
-
-  pthread_mutex_lock (&ctx->rctr_conn.is_writing_mutex);
-  bool is_writing = ctx->rctr_conn.is_writing;
-  ctx->rctr_conn.is_writing = true;
-  pthread_mutex_unlock (&ctx->rctr_conn.is_writing_mutex);
-
-  // client_finish on != QS_SUCCESS?
-  if (is_writing)
-    return (queue_push_back (&ctx->result_queue, &task.result) == QS_SUCCESS
-                ? S_SUCCESS
-                : S_FAILURE);
-
-  memcpy (&ctx->rctr_conn.result_buffer, &task.result, sizeof (task.result));
-  result_write_state_setup (ctx);
-
-  return (push_job (ctx->rctr_conn.rctr_ctx, ctx, send_result_job));
-}
-
 static void
 client_finish (client_context_t *ctx)
 {
-  reactor_conn_destroy (&ctx->rctr_conn, ctx->client_base.socket_fd);
+  spawner_context_t *s_ctx = ctx->s_ctx;
 
-  ctx->done = true;
-  if (pthread_cond_signal (&ctx->cond_sem) != 0)
-    error ("Could not signal on a conditional semaphore");
+  if (pthread_mutex_lock (&s_ctx->mutex) != 0)
+    {
+      error ("Could not lock spawner mutex");
+      return;
+    }
 
-  trace ("Sent a signal to main thread about work finishing");
+  if (!s_ctx->done)
+    {
+      s_ctx->done = true;
+      if (pthread_cond_signal (&s_ctx->cond_sem) != 0)
+        error ("Could not signal spawner conditional semaphore");
+
+      if (queue_cancel (&s_ctx->rctx->jobs_queue) != QS_SUCCESS)
+        error ("Could not cancel jobs queue");
+
+      event_base_loopbreak (s_ctx->rctx->ev_base);
+    }
+
+  if (pthread_mutex_unlock (&s_ctx->mutex) != 0)
+    error ("Could not unlock spawner mutex");
+}
+
+static void
+schedule_timer_for_head (spawner_context_t *spawner_ctx)
+{
+  pending_task_t top;
+  if (priority_queue_top (&spawner_ctx->pending_tasks, &top) != S_SUCCESS)
+    return;
+
+  struct timeval now;
+  evutil_gettimeofday (&now, NULL);
+  struct timeval delay;
+  evutil_timersub (&top.deadline, &now, &delay);
+  if (delay.tv_sec < 0
+      || (delay.tv_sec == 0 && delay.tv_usec < MIN_DELAY_USEC))
+    delay.tv_sec = 0, delay.tv_usec = MIN_DELAY_USEC;
+
+  event_del (spawner_ctx->timer_event);
+  if (event_add (spawner_ctx->timer_event, &delay) != 0)
+    error ("Could not add timer");
+
+  trace ("Scheduled timer for priority queue head (%ld.%06ld s)",
+         (long)delay.tv_sec, (long)delay.tv_usec);
+}
+
+static void
+timer_callback (evutil_socket_t fd, short what, void *arg)
+{
+  (void)fd;
+  (void)what;
+  spawner_context_t *spawner_ctx = arg;
+
+  event_del (spawner_ctx->timer_event);
+
+  pending_task_t due;
+  if (priority_queue_top (&spawner_ctx->pending_tasks, &due) != S_SUCCESS)
+    return;
+  if (priority_queue_pop (&spawner_ctx->pending_tasks) != S_SUCCESS)
+    return;
+
+  result_t *result = &due.result.result;
+  result->is_correct = false;
+
+  pthread_mutex_lock (&due.ctx->rctr_conn.is_writing_mutex);
+  bool is_writing = due.ctx->rctr_conn.is_writing;
+  due.ctx->rctr_conn.is_writing = true;
+  pthread_mutex_unlock (&due.ctx->rctr_conn.is_writing_mutex);
+
+  if (is_writing)
+    {
+      queue_push_back (&due.ctx->result_queue, result);
+      return;
+    }
+
+  memcpy (&due.ctx->result_buffer, result, sizeof (*result));
+  result_write_state_setup (due.ctx);
+
+  if (push_job (due.ctx->rctr_conn.rctr_ctx, due.ctx, send_result_job)
+      != S_SUCCESS)
+    {
+      error ("Could not push send result job");
+      return;
+    }
+
+  trace ("Timer fired: popped pending task, pushed send job");
+
+  schedule_timer_for_head (spawner_ctx);
 }
 
 static status_t
@@ -321,8 +400,7 @@ tryread (client_context_t *ctx, void *base, size_t len)
 
   ctx->read_state.vec[0].iov_len -= bytes_read;
   ctx->read_state.vec[0].iov_base += bytes_read;
-
-  ctx->read_state.is_partial = (ctx->read_state.vec->iov_len != 0);
+  ctx->read_state.is_partial = (ctx->read_state.vec[0].iov_len != 0);
   return (ctx->read_state.is_partial ? S_FAILURE : S_SUCCESS);
 }
 
@@ -386,18 +464,35 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
               error ("Could not read task");
               return;
             }
-          if (queue_push_back (&ctx->task_queue, &ctx->read_buffer)
-              != QS_SUCCESS)
+          pending_task_t pending = {
+            .ctx = ctx,
+            .result = ctx->read_buffer,
+          };
+          result_t *result = &pending.result.result;
+          result->is_correct = false;
+          memset (result->password, 0, sizeof (result->password));
+
+          evutil_gettimeofday (&pending.deadline, NULL);
+          long timeout_ms
+              = TASK_TIMEOUT_MS_MIN
+                + (long)(rand_r (&ctx->rand_seed)
+                         % (TASK_TIMEOUT_MS_MAX - TASK_TIMEOUT_MS_MIN + 1));
+          pending.deadline.tv_sec += timeout_ms / 1000;
+          pending.deadline.tv_usec += (timeout_ms % 1000) * 1000;
+          if (pending.deadline.tv_usec >= 1000000)
             {
-              error ("Could not push a task to the task queue");
-              goto fail;
+              pending.deadline.tv_sec++;
+              pending.deadline.tv_usec -= 1000000;
             }
-          if (push_job (ctx->rctr_conn.rctr_ctx, ctx, process_task_job)
-              == S_FAILURE)
+
+          if (priority_queue_push (&ctx->s_ctx->pending_tasks, &pending)
+              != S_SUCCESS)
             {
-              error ("Could not push a job to the jobs queue");
-              goto fail;
+              error ("Could not push pending task");
+              /* Destroy */
+              return;
             }
+          schedule_timer_for_head (ctx->s_ctx);
           break;
         default:
           error ("Got unexpected command");
@@ -420,39 +515,36 @@ spawner_thread (void *arg)
 
   for (long i = 0; i < s_ctx->config->number_of_threads; ++i)
     {
-      client_context_t ctx;
+      client_context_t *ctx = calloc (sizeof (client_context_t), 1);
       trace ("Creating load client %ld", i);
-      if (client_context_init (&ctx, s_ctx->rctx, s_ctx->config) == S_FAILURE)
+      if (client_context_init (ctx, s_ctx) == S_FAILURE)
         return (NULL);
 
-      if (srv_connect (&ctx.client_base) == S_FAILURE)
-        goto cleanup;
+      if (srv_connect (&ctx->client_base) == S_FAILURE)
+        return (NULL);
 
-      if (reactor_conn_init (&ctx.rctr_conn, s_ctx->rctx,
-                             ctx.client_base.socket_fd, handle_read, &ctx)
+      if (reactor_conn_init (&ctx->rctr_conn, s_ctx->rctx,
+                             ctx->client_base.socket_fd, handle_read, ctx)
           == S_FAILURE)
         {
           error ("Could not initialize reactor connection");
-          goto cleanup;
+          client_context_destroy (ctx);
+          return (NULL);
         }
-
-      continue;
-
-    cleanup:
-      if (client_context_destroy (&ctx) == S_FAILURE)
-        error ("Could not destroy reactor client context");
-      return (NULL);
     }
+
+  return (NULL);
 }
 
 status_t
 spawn_load_clients (config_t *config)
 {
+  evthread_use_pthreads ();
   spawner_context_t ctx;
   reactor_context_t rctx;
 
   if (spawner_context_init (&ctx, &rctx, config) == S_FAILURE)
-    return (false);
+    return (S_FAILURE);
 
   spawner_context_t *spawner_ptr = &ctx;
 
@@ -466,5 +558,23 @@ spawn_load_clients (config_t *config)
   if (create_reactor_threads (&ctx.thread_pool, config, ctx.rctx) == S_FAILURE)
     goto cleanup;
 
+  if (pthread_mutex_lock (&ctx.mutex) != 0)
+    {
+      error ("Could not lock spawner mutex");
+      goto cleanup;
+    }
+
+  while (!ctx.done)
+    if (pthread_cond_wait (&ctx.cond_sem, &ctx.mutex) != 0)
+      {
+        error ("Could not wait on spawner condition");
+        break;
+      }
+
+  if (pthread_mutex_unlock (&ctx.mutex) != 0)
+    error ("Could not unlock spawner mutex");
+
 cleanup:
+  spawner_context_destroy (&ctx);
+  return (S_FAILURE);
 }

@@ -3,8 +3,21 @@
 #include "log.h"
 
 #include <event2/event.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+typedef struct event_node_t
+{
+  const struct event *ev;
+  struct event_node_t *next;
+  struct event_node_t *prev;
+} event_node_t;
+
+typedef struct event_list_t
+{
+  event_node_t head;
+} event_list_t;
 
 status_t
 reactor_conn_init (reactor_conn_t *conn, reactor_context_t *rctr_ctx,
@@ -92,8 +105,9 @@ reactor_context_destroy (reactor_context_t *ctx)
 void *
 dispatch_event_loop (void *arg)
 {
+  trace ("dispatch_event_loop");
   reactor_context_t *ctx = arg;
-  if (event_base_dispatch (ctx->ev_base) != 0)
+  if (event_base_loop (ctx->ev_base, EVLOOP_NO_EXIT_ON_EMPTY) != 0)
     error ("Could not dispatch the event loop");
 
   return (NULL);
@@ -122,7 +136,6 @@ handle_io (void *arg)
         }
     }
 
-  trace ("After loop");
   event_base_loopbreak (ctx->ev_base);
   return (NULL);
 }
@@ -194,4 +207,62 @@ create_reactor_threads (thread_pool_t *tp, config_t *config,
   trace ("Created event loop dispatcher thread");
 
   return (S_SUCCESS);
+}
+
+static int
+collect_events_cb (const struct event_base *ev_base, const struct event *ev,
+                   void *arg)
+{
+  (void)ev_base;
+
+  event_list_t *list = arg;
+  event_node_t *node = calloc (1, sizeof (*node));
+  if (!node)
+    return 0;
+
+  node->next = &list->head;
+  node->prev = list->head.prev;
+  node->ev = ev;
+
+  list->head.prev->next = node;
+  list->head.prev = node;
+
+  return 0;
+}
+
+void
+reactor_cleanup_clients (reactor_context_t *ctx,
+                         event_callback_fn client_read_cb,
+                         client_ctx_destroy_fn destroy_ctx)
+{
+  if (!ctx || !ctx->ev_base || !destroy_ctx)
+    return;
+
+  event_list_t ev_list;
+  ev_list.head.prev = &ev_list.head;
+  ev_list.head.next = &ev_list.head;
+  ev_list.head.ev = NULL;
+
+  event_base_foreach_event (ctx->ev_base, collect_events_cb, &ev_list);
+
+  event_node_t *curr = ev_list.head.next;
+  while (curr->ev)
+    {
+      event_node_t *dummy = curr;
+
+      if (!client_read_cb || event_get_callback (curr->ev) == client_read_cb)
+        {
+          void *client_ctx = event_get_callback_arg (curr->ev);
+          if (client_ctx)
+            {
+              trace ("Destroying client context from reactor_cleanup_clients");
+              destroy_ctx (client_ctx);
+            }
+        }
+
+      curr->prev->next = curr->next;
+      curr->next->prev = curr->prev;
+      curr = curr->next;
+      free (dummy);
+    }
 }

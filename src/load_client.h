@@ -1,8 +1,8 @@
 #ifndef REACTOR_CLIENT_H
 #define REACTOR_CLIENT_H
 
-#include "config.h"
 #include "common.h"
+#include "config.h"
 
 #include <stdbool.h>
 

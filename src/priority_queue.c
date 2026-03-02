@@ -1,9 +1,9 @@
 #include "priority_queue.h"
 
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
 
 #define LCHILD(idx) (2 * idx + 1)
 #define RCHILD(idx) (2 * idx + 2)

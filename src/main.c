@@ -180,11 +180,11 @@ parse_params (config_t *config, int argc, char *argv[])
         case 'L':
           config->number_of_threads = atoi (optarg);
           if (config->number_of_threads < 1)
-          {
-            error ("Number of load clients to spawn must be a number "
-                "greater than 1");
-            return (S_FAILURE);
-          }
+            {
+              error ("Number of load clients to spawn must be a number "
+                     "greater than 1");
+              return (S_FAILURE);
+            }
           config->run_mode = RM_LOAD_CLIENT;
           break;
         case 'h':
