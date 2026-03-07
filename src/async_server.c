@@ -287,6 +287,7 @@ handle_clients (void *arg)
       if (!sender)
         {
           error ("Could not create task sender thread");
+          client_context_destroy (client_ctx);
           continue;
         }
 
@@ -303,6 +304,7 @@ handle_clients (void *arg)
           sender_receiver_cleanup (client_ctx);
           pthread_cancel (sender);
           pthread_join (sender, NULL);
+          sender_receiver_cleanup (client_ctx);
         }
 
       client_ctx = NULL;
