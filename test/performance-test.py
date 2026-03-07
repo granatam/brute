@@ -3,7 +3,6 @@ import time
 from hypothesis import given, settings
 from hypothesis.strategies import data
 from testrunner import (
-    DEFAULT_PORT,
     CommandMode,
     Config,
     RunMode,
@@ -15,7 +14,7 @@ MAX_RUNS = 1000
 SKIP = 10
 
 
-def run_perf_test(data, run_mode, client_run_modes, port=DEFAULT_PORT):
+def run_perf_test(data, run_mode, client_run_modes):
     # First example is alphabet and password that contains only A's, so
     # we need to skip some generated examples
     for i in range(SKIP):
@@ -26,12 +25,11 @@ def run_perf_test(data, run_mode, client_run_modes, port=DEFAULT_PORT):
                 (10, 10),
                 run_mode=run_mode,
                 client_run_modes=client_run_modes,
-                port=port,
             ),
         )
     start = time.time()
     for i in range(MAX_RUNS):
-        testrunner.run(data, CommandMode.PERF)
+        testrunner.run(CommandMode.PERF)
     end = time.time()
     print(f"{MAX_RUNS} runs in {run_mode}: {end - start:.4f} seconds")
 

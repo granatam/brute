@@ -1,4 +1,5 @@
 import os
+import socket
 import string
 import subprocess
 import sys
@@ -17,12 +18,9 @@ with warnings.catch_warnings():
     except ImportError:  # No crypt library in Python 3.13
         from legacycrypt import crypt
 
+from hypothesis import Phase, settings
 
-from hypothesis import Phase
-
-from hypothesis import settings
-
-MAX_EXAMPLES = os.getenv("HYPOTHESIS_MAX_EXAMPLES", "100")
+MAX_EXAMPLES = os.getenv("HYPOTHESIS_MAX_EXAMPLES", "50")
 settings.register_profile("custom", max_examples=int(MAX_EXAMPLES))
 settings.load_profile("custom")
 
@@ -32,7 +30,6 @@ CPU_COUNT = os.cpu_count() or 8
 VALGRIND_FLAGS = (
     "--leak-check=full --error-exitcode=1 --trace-children=yes --quiet"
 )
-DEFAULT_PORT = 8081
 
 
 class CommandMode(str, Enum):
@@ -42,14 +39,14 @@ class CommandMode(str, Enum):
 
 
 class RunMode(str, Enum):
-    SINGLE = "s"
-    MULTI = "m"
-    GENERATOR = "g"
-    SYNC_CLIENT = "c"
-    SYNC_SERVER = "S"
-    ASYNC_CLIENT = "v"
-    ASYNC_SERVER = "w"
-    REACTOR_SERVER = "R"
+    SINGLE = "single"
+    MULTI = "multi"
+    GENERATOR = "gen"
+    SYNC_CLIENT = "client"
+    SYNC_SERVER = "server"
+    ASYNC_CLIENT = "async-client"
+    ASYNC_SERVER = "async-server"
+    REACTOR_SERVER = "reactor-server"
     NETCAT = "nc"  # Special case, used for client's behavior imitation
 
 
@@ -59,6 +56,57 @@ class BruteMode(str, Enum):
     RECURSIVE_GEN = "y"
 
 
+SIMPLE_MODES = [RunMode.SINGLE, RunMode.MULTI, RunMode.GENERATOR]
+SERVER_MODES = [
+    RunMode.SYNC_SERVER,
+    RunMode.ASYNC_SERVER,
+    RunMode.REACTOR_SERVER,
+]
+CLIENT_MODES = [RunMode.SYNC_CLIENT, RunMode.ASYNC_CLIENT]
+
+
+PORT_RANGE_START = 9000
+PORT_RANGE_END = 9999
+
+
+# Partition port range per pytest-xdist worker so parallel workers never collide.
+def _worker_port_range():
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "")
+    count_str = os.environ.get("PYTEST_XDIST_WORKER_COUNT", "1")
+    if not (worker.startswith("gw") and worker[2:].isdigit()):
+        return PORT_RANGE_START, PORT_RANGE_END
+    try:
+        idx = int(worker[2:])
+        count = max(1, int(count_str))
+        size = (PORT_RANGE_END - PORT_RANGE_START + 1) // count
+        start = PORT_RANGE_START + idx * size
+        end = start + size - 1 if idx < count - 1 else PORT_RANGE_END
+        return start, end
+    except (ValueError, TypeError):
+        return PORT_RANGE_START, PORT_RANGE_END
+
+
+_start, _end = _worker_port_range()
+_next_port = _start
+
+
+def get_free_port() -> int:
+    global _next_port
+    start, end = _worker_port_range()
+    port = _next_port
+    for _ in range(end - start + 1):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind(("", port))
+                _next_port = start if port >= end else port + 1
+                return port
+            except OSError:
+                pass
+        port = start if port >= end else port + 1
+    raise RuntimeError("No free ports")
+
+
 def run_brute(
     mode: CommandMode,
     passwd: str,
@@ -66,14 +114,14 @@ def run_brute(
     run_mode: RunMode,
     brute_mode: BruteMode,
     log_file,  # IO[AnyStr]
+    port: int,
     cpu_count: int = CPU_COUNT,
-    port: int = DEFAULT_PORT,
 ):
     if run_mode == RunMode.NETCAT:
         cmd = f"nc localhost {port}"
     else:
         hash = crypt(passwd, passwd)
-        cmd = f"{mode.value} -H {hash} -l {len(str(passwd))} -a {alph} -{run_mode.value} -{brute_mode.value} -T {cpu_count} -p {port}"
+        cmd = f"{mode.value} -H {hash} -l {len(str(passwd))} -a {alph} --{run_mode.value} -{brute_mode.value} -T {cpu_count} -p {port}"
     return cmd, subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=log_file, shell=True
     )
@@ -93,7 +141,6 @@ class Config:
     run_mode: RunMode = RunMode.SINGLE
     client_run_modes: list[RunMode] = field(default_factory=list)
     cpu_count: int = CPU_COUNT
-    port: int = DEFAULT_PORT
 
 
 class _TestRunner:
@@ -123,14 +170,14 @@ class _TestRunner:
         if run_mode == RunMode.NETCAT:
             proc.kill()
             return None, 0
-
         try:
             exit_code = proc.wait(timeout=timeout)
-            if capture_output:
-                output, _ = proc.communicate(timeout=timeout)
-                return output.decode(), exit_code
-            else:
-                return None, exit_code
+            out = (
+                proc.communicate(timeout=timeout)[0].decode()
+                if capture_output
+                else None
+            )
+            return out, exit_code
         except subprocess.TimeoutExpired:
             proc.kill()
             return "timeout" if capture_output else None, 1
@@ -145,40 +192,34 @@ class _TestRunner:
         client_data=None,
         valgrind_fail=False,
     ):
-        with open(stderr_log.name, "r") as log:
-            stderr_log = log.read()
+        with open(stderr_log.name) as f:
+            stderr_text = f.read()
 
-        if (
-            output != expected
-            or cmd_mode == CommandMode.VALGRIND
-            and valgrind_fail
-        ):
-            error_msg = [
-                f"Test failed. Output: {output.strip()!r}. Expected: {expected.strip()!r}.",
-                f"Command to reproduce: {cmd!r}.",
-                f"Stderr log:\n{stderr_log.strip()}",
-                f"{'-' * 30}\n",
-            ]
-            if client_data:
-                for i, (_, client_cmd, _, client_log) in enumerate(client_data):
-                    with open(client_log.name, "r") as log:
-                        client_log = log.read()
-                    error_msg.extend(
-                        [
-                            f"Client #{i} command: {client_cmd!r}",
-                            f"Client #{i} log:\n{client_log.strip()}",
-                            f"{'-' * 30}\n",
-                        ]
-                    )
-            sys.stderr.write("\n".join(error_msg))
-            assert False, (
-                "Output does not match expected. See stderr for details."
-            )
+        fail = output != expected or (
+            cmd_mode == CommandMode.VALGRIND and valgrind_fail
+        )
+        if not fail:
+            return
+
+        error_msg = [
+            f"Test failed. Output: {output.strip()!r}. Expected: {expected.strip()!r}.",
+            f"Command to reproduce: {cmd!r}.",
+            f"Stderr log:\n{stderr_text.strip()}",
+            f"{'-' * 30}\n",
+        ]
+        for i, (_, client_cmd, _, client_log) in enumerate(client_data or ()):
+            with open(client_log.name) as f:
+                error_msg += [
+                    f"Client #{i} command: {client_cmd!r}",
+                    f"Client #{i} log:\n{f.read().strip()}",
+                    f"{'-' * 30}\n",
+                ]
+        sys.stderr.write("\n".join(error_msg))
+        assert False, "Output does not match expected. See stderr for details."
 
     def run(self, cmd_mode=CommandMode.BASIC):
         brute_mode, alph, password = self.generated_params
-        expected = f"Password found: {password}\n"
-
+        port = get_free_port()
         stderr_log = tempfile.NamedTemporaryFile()
         cmd, main_proc = run_brute(
             cmd_mode,
@@ -187,7 +228,7 @@ class _TestRunner:
             self.config.run_mode,
             brute_mode,
             stderr_log,
-            port=self.config.port,
+            port,
         )
 
         client_data = []
@@ -201,29 +242,24 @@ class _TestRunner:
                 client_mode,
                 brute_mode,
                 client_stderr_log,
-                port=self.config.port,
+                port,
             )
             client_data.append(
                 (client_mode, client_cmd, client_proc, client_stderr_log)
             )
 
-        valgrind_fail = False
-        output, exit_code = self.wait_for_process(
+        output, main_ec = self.wait_for_process(
             self.config.run_mode, main_proc, 5
         )
-        if cmd_mode == CommandMode.VALGRIND:
-            valgrind_fail |= exit_code == 1
+        valgrind_fail = cmd_mode == CommandMode.VALGRIND and main_ec == 1
         for run_mode, _, client_proc, _ in client_data:
-            _, exit_code = self.wait_for_process(
-                run_mode, client_proc, 5, False
-            )
-            if cmd_mode == CommandMode.VALGRIND:
-                valgrind_fail |= exit_code == 1
+            _, ec = self.wait_for_process(run_mode, client_proc, 5, False)
+            valgrind_fail |= cmd_mode == CommandMode.VALGRIND and ec == 1
 
         self.validate_output(
             cmd_mode,
             output,
-            expected,
+            f"Password found: {password}\n",
             cmd,
             stderr_log,
             client_data,

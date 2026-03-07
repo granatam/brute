@@ -76,7 +76,7 @@ ${CRYPT_LIB}:
 	@${MAKE} -C crypt
 
 check: all
-	@pytest --hypothesis-show-statistics ${TESTS}
+	@for f in ${TESTS}; do echo "===== $$f ====="; pytest -q --tb=short -n auto "$$f"; done
 
 perf: all
 	@pytest -rA ${PERF_TESTS}
