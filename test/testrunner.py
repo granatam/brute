@@ -251,12 +251,18 @@ class _TestRunner:
                 (client_mode, client_cmd, client_proc, client_stderr_log)
             )
 
+        # Kill netcat clients after delay so the server is not blocked.
+        for run_mode, _, client_proc, _ in client_data:
+            if run_mode == RunMode.NETCAT:
+                time.sleep(1.0)
+                client_proc.kill()
+
         output, main_ec = self.wait_for_process(
-            self.config.run_mode, main_proc, 20
+            self.config.run_mode, main_proc, 10
         )
         valgrind_fail = cmd_mode == CommandMode.VALGRIND and main_ec == 1
         for run_mode, _, client_proc, _ in client_data:
-            _, ec = self.wait_for_process(run_mode, client_proc, 20, False)
+            _, ec = self.wait_for_process(run_mode, client_proc, 10, False)
             valgrind_fail |= cmd_mode == CommandMode.VALGRIND and ec == 1
 
         self.validate_output(
