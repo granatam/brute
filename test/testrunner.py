@@ -177,9 +177,6 @@ class _TestRunner:
         return brute_mode, alph, password
 
     def wait_for_process(self, run_mode, proc, timeout, capture_output=True):
-        if run_mode == RunMode.NETCAT:
-            proc.kill()
-            return None, 0
         try:
             exit_code = proc.wait(timeout=timeout)
             out = (
