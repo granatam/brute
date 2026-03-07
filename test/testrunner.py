@@ -233,7 +233,7 @@ class _TestRunner:
 
         client_data = []
         if cmd_mode == CommandMode.VALGRIND:
-            time.sleep(2.0)
+            time.sleep(1.0)
 
         for client_mode in self.config.client_run_modes:
             time.sleep(0.05)
