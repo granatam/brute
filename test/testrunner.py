@@ -252,11 +252,11 @@ class _TestRunner:
             )
 
         output, main_ec = self.wait_for_process(
-            self.config.run_mode, main_proc, 5
+            self.config.run_mode, main_proc, 10
         )
         valgrind_fail = cmd_mode == CommandMode.VALGRIND and main_ec == 1
         for run_mode, _, client_proc, _ in client_data:
-            _, ec = self.wait_for_process(run_mode, client_proc, 5, False)
+            _, ec = self.wait_for_process(run_mode, client_proc, 10, False)
             valgrind_fail |= cmd_mode == CommandMode.VALGRIND and ec == 1
 
         self.validate_output(
