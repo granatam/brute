@@ -1,4 +1,5 @@
 import os
+import signal
 import socket
 import string
 import subprocess
@@ -119,12 +120,21 @@ def run_brute(
 ):
     if run_mode == RunMode.NETCAT:
         cmd = f"nc localhost {port}"
+        # New session so we can kill the whole process group (shell + nc) later.
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=log_file,
+            shell=True,
+            start_new_session=True,
+        )
     else:
         hash = crypt(passwd, passwd)
         cmd = f"{mode.value} -H {hash} -l {len(str(passwd))} -a {alph} --{run_mode.value} -{brute_mode.value} -T {cpu_count} -p {port}"
-    return cmd, subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=log_file, shell=True
-    )
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=log_file, shell=True
+        )
+    return cmd, proc
 
 
 @dataclass
@@ -251,11 +261,16 @@ class _TestRunner:
                 (client_mode, client_cmd, client_proc, client_stderr_log)
             )
 
-        # Kill netcat clients after delay so the server is not blocked.
         for run_mode, _, client_proc, _ in client_data:
             if run_mode == RunMode.NETCAT:
-                time.sleep(1.0)
-                client_proc.kill()
+                time.sleep(0.1)
+                try:
+                    os.killpg(client_proc.pid, signal.SIGKILL)
+                except (ProcessLookupError, OSError):
+                    try:
+                        client_proc.kill()
+                    except ProcessLookupError:
+                        pass
 
         output, main_ec = self.wait_for_process(
             self.config.run_mode, main_proc, 10
