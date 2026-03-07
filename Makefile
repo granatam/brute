@@ -76,7 +76,7 @@ ${CRYPT_LIB}:
 	@${MAKE} -C crypt
 
 check: all
-	@for f in ${TESTS}; do echo "===== $$f ====="; pytest -q --tb=short "$$f"; done
+	@for f in ${TESTS}; do echo "===== $$f ====="; pytest -q --tb=short -n auto "$$f"; done
 
 perf: all
 	@pytest -rA ${PERF_TESTS}
