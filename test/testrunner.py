@@ -248,7 +248,7 @@ class _TestRunner:
         if self.config.client_run_modes:
             # Under valgrind server startup is slow.
             timeout = 10.0 if cmd_mode == CommandMode.VALGRIND else 5.0
-            if not wait_for_server(port, timeout=timeout):
+            if not wait_for_valgrind(port, timeout=timeout):
                 main_proc.kill()
                 main_proc.wait(timeout=2)
                 with open(stderr_log.name) as f:
