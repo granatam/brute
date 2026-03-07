@@ -251,7 +251,7 @@ accepter_cleanup (void *arg)
   if (!client_ctx)
     return;
 
-  sender_receiver_cleanup (client_ctx);
+  client_context_destroy (client_ctx);
 }
 
 static void *
@@ -301,10 +301,9 @@ handle_clients (void *arg)
       if (!receiver)
         {
           error ("Could not create result receiver thread");
-          sender_receiver_cleanup (client_ctx);
           pthread_cancel (sender);
           pthread_join (sender, NULL);
-          sender_receiver_cleanup (client_ctx);
+          client_context_destroy (client_ctx);
         }
 
       client_ctx = NULL;
