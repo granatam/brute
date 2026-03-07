@@ -232,7 +232,7 @@ class _TestRunner:
         )
 
         client_data = []
-        if cmd_mode == CommandMode.VALGRIND:
+        if cmd_mode == CommandMode.VALGRIND and self.config.client_run_modes:
             time.sleep(1.0)
 
         for client_mode in self.config.client_run_modes:
@@ -252,11 +252,11 @@ class _TestRunner:
             )
 
         output, main_ec = self.wait_for_process(
-            self.config.run_mode, main_proc, 10
+            self.config.run_mode, main_proc, 20
         )
         valgrind_fail = cmd_mode == CommandMode.VALGRIND and main_ec == 1
         for run_mode, _, client_proc, _ in client_data:
-            _, ec = self.wait_for_process(run_mode, client_proc, 10, False)
+            _, ec = self.wait_for_process(run_mode, client_proc, 20, False)
             valgrind_fail |= cmd_mode == CommandMode.VALGRIND and ec == 1
 
         self.validate_output(

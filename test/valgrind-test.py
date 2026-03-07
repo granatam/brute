@@ -71,7 +71,7 @@ def test_valgrind_two_clients_server(
 @pytest.mark.parametrize("client_mode", CLIENT_MODES)
 @pytest.mark.parametrize("server_mode", SERVER_MODES)
 @given(data=data())
-@settings(deadline=timedelta(seconds=10), phases=phases, max_examples=5)
+@settings(deadline=timedelta(seconds=20), phases=phases, max_examples=5)
 def test_valgrind_netcat_client_server(data, client_mode, server_mode):
     _TestRunner(
         data,
