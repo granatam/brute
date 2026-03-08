@@ -10,7 +10,7 @@ from testrunner import (
     BruteMode,
     CommandMode,
     Config,
-    RunMode,
+    # RunMode,
     _TestRunner,
     phases,
 )
