@@ -333,6 +333,7 @@ handle_clients (void *arg)
         {
           error ("Could not create task sender thread");
           client_context_destroy (client_ctx);
+          client_ctx = NULL;
           continue;
         }
 
@@ -349,6 +350,8 @@ handle_clients (void *arg)
           pthread_cancel (sender);
           pthread_join (sender, NULL);
           client_context_destroy (client_ctx);
+          client_ctx = NULL;
+          continue;
         }
 
       trace ("Created a receiver thread: %08x", receiver);
