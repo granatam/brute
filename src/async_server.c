@@ -71,8 +71,6 @@ cleanup:
 static void
 client_context_destroy (client_context_t *ctx)
 {
-  pthread_cleanup_push (free, ctx);
-
   trace ("Destroying client context");
 
   if (queue_cancel (&ctx->registry_idx) != QS_SUCCESS)
@@ -87,9 +85,8 @@ client_context_destroy (client_context_t *ctx)
 
   if (pthread_mutex_destroy (&ctx->mutex) != 0)
     error ("Could not destroy mutex");
-  close_client (ctx->socket_fd);
 
-  pthread_cleanup_pop (!0);
+  /* Client is already closed so we don't need to close a socket here. */
 
   trace ("Freed client context");
 }
@@ -122,6 +119,15 @@ static void
 sender_receiver_cleanup (void *arg)
 {
   client_context_t *ctx = arg;
+  /* Run entire cleanup uncancellable so we always reach client_context_destroy
+   * when is_last; otherwise cancellation could leak the context. */
+  if (pthread_setcancelstate (PTHREAD_CANCEL_DISABLE, NULL) != 0)
+    error ("Could not disable cancellation");
+
+  /* Unblock the other thread if it's stuck on a read from the registry
+   * indices queue. */
+  if (queue_cancel (&ctx->registry_idx) != QS_SUCCESS)
+    error ("Could not cancel registry indices queue");
 
   bool is_last;
   if (pthread_mutex_lock (&ctx->mutex) != 0)
@@ -133,10 +139,24 @@ sender_receiver_cleanup (void *arg)
   return_tasks (ctx);
   is_last = (--ctx->ref_count == 0);
 
+  /* If sender is the first thread to exit, close socket so the receiver
+   * blocked in recv unblocks and exits. */
+  if (!is_last)
+    {
+      if (ctx->socket_fd >= 0)
+        {
+          close_client (ctx->socket_fd);
+          ctx->socket_fd = -1;
+        }
+    }
+
   pthread_cleanup_pop (!0);
 
   if (is_last)
     client_context_destroy (ctx);
+
+  if (pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL) != 0)
+    error ("Could not enable cancellation");
 }
 
 static void *
@@ -306,9 +326,10 @@ handle_clients (void *arg)
           client_context_destroy (client_ctx);
         }
 
+      trace ("Created a receiver thread: %08x", receiver);
+
       client_ctx = NULL;
       socket_fd = 0;
-      trace ("Created a receiver thread: %08x", receiver);
     }
 
   pthread_cleanup_pop (!0);
