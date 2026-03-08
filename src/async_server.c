@@ -17,6 +17,7 @@ typedef struct client_context_t
   task_t registry[QUEUE_SIZE];
   queue_t registry_idx;
   bool registry_used[QUEUE_SIZE];
+  bool tasks_returned;
   int socket_fd;
   unsigned char ref_count;
   pthread_mutex_t mutex;
@@ -88,6 +89,8 @@ client_context_destroy (client_context_t *ctx)
 
   /* Client is already closed so we don't need to close a socket here. */
 
+  free (ctx);
+
   trace ("Freed client context");
 }
 
@@ -131,12 +134,29 @@ sender_receiver_cleanup (void *arg)
 
   bool is_last;
   if (pthread_mutex_lock (&ctx->mutex) != 0)
-    return;
+    {
+      error ("Could not lock mutex");
+      return;
+    }
+
   pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
 
-  /* TODO: Move return_tasks out of mutex lock (probably should add
-   * sender/receiver tid and cancel them both) */
-  return_tasks (ctx);
+  if (!ctx->tasks_returned)
+    {
+      ctx->tasks_returned = true;
+      if (pthread_mutex_unlock (&ctx->mutex) != 0)
+        {
+          error ("Could not unlock mutex");
+          return;
+        }
+      return_tasks (ctx);
+      if (pthread_mutex_lock (&ctx->mutex) != 0)
+        {
+          error ("Could not lock mutex");
+          return;
+        }
+    }
+
   is_last = (--ctx->ref_count == 0);
 
   /* If sender is the first thread to exit, close socket so the receiver
@@ -176,16 +196,6 @@ result_receiver (void *arg)
           break;
         }
 
-      if (task.is_correct)
-        {
-          if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
-            {
-              error ("Could not cancel a queue");
-              break;
-            }
-          memcpy (mt_ctx->password, task.password, sizeof (task.password));
-        }
-
       trace ("Received %s result %s from client",
              task.is_correct ? "correct" : "incorrect", task.password);
 
@@ -198,6 +208,16 @@ result_receiver (void *arg)
       trace ("Pushed index of received task back to indices queue");
 
       client_ctx->registry_used[task.id] = false;
+
+      if (task.is_correct)
+        {
+          if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
+            {
+              error ("Could not cancel a queue");
+              break;
+            }
+          memcpy (mt_ctx->password, task.password, sizeof (task.password));
+        }
 
       if (srv_trysignal (mt_ctx) == S_FAILURE)
         break;
@@ -226,7 +246,10 @@ task_sender (void *arg)
     {
       int id;
       if (queue_pop (&client_ctx->registry_idx, &id) != QS_SUCCESS)
-        break;
+        {
+          error ("Could not pop id from registry indices queue");
+          break;
+        }
 
       trace ("Got index from registry");
 
@@ -287,6 +310,8 @@ handle_clients (void *arg)
     {
       if (accept_client (srv_base->listen_fd, &socket_fd) == S_FAILURE)
         {
+          if (srv_base->listen_fd < 0)
+            break;
           error ("Could not accept client");
           continue;
         }

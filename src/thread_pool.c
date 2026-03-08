@@ -225,6 +225,7 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
       if (cancel)
         if (pthread_cancel (thread) != 0)
           error ("Could not cancel a thread");
+      trace ("Cancelled thread '%s'\n", thread_pool->threads.next->name);
 
       while (thread_pool->threads.next->thread == thread)
         if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
