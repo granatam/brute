@@ -10,6 +10,7 @@
 #include <assert.h>
 #include <event2/event.h>
 #include <event2/listener.h>
+#include <event2/thread.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -48,6 +49,13 @@ rsrv_ctx_init (rsrv_context_t *ctx)
       return (S_FAILURE);
     }
 
+  if (pthread_mutex_init (&ctx->mutex, NULL) != 0)
+    {
+      error ("Could not initialize server mutex");
+      return (S_FAILURE);
+    }
+  ctx->is_shutting_down = false;
+
   return (S_SUCCESS);
 }
 
@@ -62,6 +70,8 @@ typedef struct event_list_t
 {
   event_node_t head;
 } event_list_t;
+
+static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
 
 static int
 collect_events_cb (const struct event_base *ev_base, const struct event *ev,
@@ -90,9 +100,15 @@ clients_cleanup (event_list_t *list)
   while (curr->ev)
     {
       event_node_t *dummy = curr;
-      client_context_t *ctx = event_get_callback_arg (curr->ev);
-      trace ("Destroying client context");
-      client_context_destroy (ctx);
+      if (event_get_callback (curr->ev) == handle_read)
+        {
+          client_context_t *ctx = event_get_callback_arg (curr->ev);
+          if (ctx)
+            {
+              trace ("Destroying client context");
+              client_context_destroy (ctx);
+            }
+        }
 
       curr->prev->next = curr->next;
       curr->next->prev = curr->prev;
@@ -104,6 +120,22 @@ clients_cleanup (event_list_t *list)
 static status_t
 rsrv_context_destroy (rsrv_context_t *ctx)
 {
+  if (pthread_mutex_lock (&ctx->mutex) == 0)
+    {
+      ctx->is_shutting_down = true;
+      pthread_mutex_unlock (&ctx->mutex);
+    }
+
+  if (queue_cancel (&ctx->jobs_queue) == QS_FAILURE)
+    {
+      error ("Could not cancel a jobs queue");
+      return (S_FAILURE);
+    }
+  if (queue_cancel (&ctx->starving_clients) == QS_FAILURE)
+    {
+      error ("Could not cancel a starving clients queue");
+      return (S_FAILURE);
+    }
   event_base_loopbreak (ctx->ev_base);
   trace ("Stopped event loop");
 
@@ -132,13 +164,14 @@ rsrv_context_destroy (rsrv_context_t *ctx)
   ev_list.head.ev = NULL;
   event_base_foreach_event (ctx->ev_base, collect_events_cb, &ev_list);
   clients_cleanup (&ev_list);
+
   event_base_free (ctx->ev_base);
   trace ("Deallocated clients contexts");
 
+  pthread_mutex_destroy (&ctx->mutex);
+
   return (S_SUCCESS);
 }
-
-static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
 
 static client_context_t *
 client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
@@ -248,7 +281,14 @@ return_tasks (client_context_t *ctx)
 static void
 client_context_destroy (client_context_t *ctx)
 {
-  if (return_tasks (ctx) == S_FAILURE)
+  bool should_return_tasks = true;
+  if (pthread_mutex_lock (&ctx->rsrv_ctx->mutex) == 0)
+    {
+      should_return_tasks = !ctx->rsrv_ctx->is_shutting_down;
+      pthread_mutex_unlock (&ctx->rsrv_ctx->mutex);
+    }
+
+  if (should_return_tasks && return_tasks (ctx) == S_FAILURE)
     error ("Could not return tasks to global queue");
 
   pthread_mutex_destroy (&ctx->is_writing_mutex);
@@ -308,8 +348,11 @@ write_state_write_wrapper (int socket_fd, struct iovec *vec, int *vec_sz)
   *vec_sz -= i;
   memmove (&vec[0], &vec[i], sizeof (struct iovec) * *vec_sz);
 
-  vec[i].iov_base += actual_write;
-  vec[i].iov_len -= actual_write;
+  if (*vec_sz > 0 && actual_write > 0)
+    {
+      vec[0].iov_base += actual_write;
+      vec[0].iov_len -= actual_write;
+    }
 
   return (S_SUCCESS);
 }
@@ -337,7 +380,6 @@ send_task_job (void *arg)
   if (status != S_SUCCESS)
     {
       error ("Could not send task to client");
-      client_context_destroy (ctx);
       return (S_SUCCESS);
     }
 
@@ -502,7 +544,8 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
   if ((ssize_t)bytes_read <= 0)
     {
       error ("Could not read result from a client");
-      client_context_destroy (ctx);
+      if (event_del (ctx->read_event) == -1)
+        error ("Could not delete read event after read failure");
       return;
     }
 
@@ -545,10 +588,11 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
           return;
         }
       memcpy (mt_ctx->password, result->password, sizeof (result->password));
-      if (srv_trysignal (mt_ctx) == S_FAILURE)
-        return;
       event_base_loopbreak (ctx->rsrv_ctx->ev_base);
     }
+
+  if (srv_trysignal (mt_ctx) == S_FAILURE)
+    return;
 
   trace ("Received %s result %s with id %d from client",
          result->is_correct ? "correct" : "incorrect", result->password,
@@ -719,6 +763,7 @@ fail:
 bool
 run_reactor_server (task_t *task, config_t *config)
 {
+  evthread_use_pthreads ();
   signal (SIGPIPE, SIG_IGN);
   rsrv_context_t rsrv_ctx;
   rsrv_context_t *context_ptr = &rsrv_ctx;

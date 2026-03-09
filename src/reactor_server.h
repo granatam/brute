@@ -20,6 +20,7 @@ typedef struct rsrv_context_t
   queue_t starving_clients;
   struct event_base *ev_base;
   pthread_mutex_t mutex;
+  bool is_shutting_down;
 } rsrv_context_t;
 
 typedef struct io_state_t
@@ -34,7 +35,7 @@ typedef struct write_state_t
   io_state_t base_state;
   struct iovec vec_extra[3];
   command_t cmd_extra;
-  unsigned long length;
+  int32_t length;
   int32_t vec_extra_sz;
 } write_state_t;
 
