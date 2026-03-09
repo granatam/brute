@@ -27,7 +27,7 @@
 
 #define MIN_DELAY_USEC (1000)
 #define TASK_TIMEOUT_MS_MIN (100)
-#define TASK_TIMEOUT_MS_MAX (5000)
+#define TASK_TIMEOUT_MS_MAX (1000)
 #define PENDING_TASKS_QUEUE_CAP (256)
 
 typedef struct spawner_context_t
