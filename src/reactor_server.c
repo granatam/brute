@@ -64,6 +64,8 @@ typedef struct event_list_t
   event_node_t head;
 } event_list_t;
 
+static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
+
 static int
 collect_events_cb (const struct event_base *ev_base, const struct event *ev,
                    void *arg)
@@ -91,9 +93,15 @@ clients_cleanup (event_list_t *list)
   while (curr->ev)
     {
       event_node_t *dummy = curr;
-      client_context_t *ctx = event_get_callback_arg (curr->ev);
-      trace ("Destroying client context");
-      client_context_destroy (ctx);
+      if (event_get_callback (curr->ev) == handle_read)
+        {
+          client_context_t *ctx = event_get_callback_arg (curr->ev);
+          if (ctx)
+            {
+              trace ("Destroying client context");
+              client_context_destroy (ctx);
+            }
+        }
 
       curr->prev->next = curr->next;
       curr->next->prev = curr->prev;
@@ -149,8 +157,6 @@ rsrv_context_destroy (rsrv_context_t *ctx)
 
   return (S_SUCCESS);
 }
-
-static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
 
 static client_context_t *
 client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
