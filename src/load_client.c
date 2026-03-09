@@ -482,8 +482,7 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
                 + (long)(rand_r (&ctx->rand_seed)
                          % (TASK_TIMEOUT_MS_MAX - TASK_TIMEOUT_MS_MIN + 1));
           pending.deadline.tv_sec += timeout_ms / MS_IN_SEC;
-          pending.deadline.tv_usec
-              += (timeout_ms % MS_IN_SEC) * USEC_IN_MSEC;
+          pending.deadline.tv_usec += (timeout_ms % MS_IN_SEC) * USEC_IN_MSEC;
           if (pending.deadline.tv_usec >= USEC_IN_SEC)
             {
               pending.deadline.tv_sec++;
