@@ -120,7 +120,7 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
 
   /* Set up vector for alphabet sending */
   write_state->cmd_extra = CMD_ALPH;
-  write_state->length = strlen (mt_ctx->config->alph);
+  write_state->length = (int32_t)strlen (mt_ctx->config->alph);
   write_state->vec_extra[0].iov_base = &write_state->cmd_extra;
   write_state->vec_extra[0].iov_len = sizeof (write_state->cmd_extra);
   write_state->vec_extra[1].iov_base = &write_state->length;
@@ -214,7 +214,7 @@ client_context_destroy (void *arg)
   trace ("Deleted and deallocated event, free'd client context");
 }
 
-static status_t create_task_job (void *);
+static status_t create_task_job (void *arg);
 
 static inline status_t
 write_state_write_extra (int socket_fd, write_state_t *write_state)
@@ -392,16 +392,17 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
   client_context_t *ctx = arg;
   mt_context_t *mt_ctx = &ctx->rsrv_ctx->srv_base.mt_ctx;
 
-  size_t bytes_read
-      = readv (ctx->socket_fd, ctx->read_state.vec, ctx->read_state.vec_sz);
-  if ((ssize_t)bytes_read <= 0)
+  ssize_t bytes_read
+      = readv (ctx->socket_fd, ctx->read_state.vec,
+               (int)ctx->read_state.vec_sz);
+  if (bytes_read <= 0)
     {
       error ("Could not read result from a client");
       client_context_destroy (ctx);
       return;
     }
 
-  ctx->read_state.vec[0].iov_len -= bytes_read;
+  ctx->read_state.vec[0].iov_len -= (size_t)bytes_read;
   ctx->read_state.vec[0].iov_base += bytes_read;
 
   if (ctx->read_state.vec[0].iov_len > 0)

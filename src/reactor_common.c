@@ -141,7 +141,7 @@ handle_io (void *arg)
 }
 
 status_t
-write_state_write_wrapper (int socket_fd, struct iovec *vec, size_t *vec_sz)
+write_state_write_wrapper (int socket_fd, struct iovec *vec, int *vec_sz)
 {
   size_t actual_write = writev (socket_fd, vec, *vec_sz);
 
@@ -151,7 +151,7 @@ write_state_write_wrapper (int socket_fd, struct iovec *vec, size_t *vec_sz)
       return (S_FAILURE);
     }
 
-  size_t i = 0;
+  int i = 0;
   while (actual_write > 0 && vec[i].iov_len <= actual_write)
     actual_write -= vec[i++].iov_len;
 
@@ -192,7 +192,7 @@ status_t
 create_reactor_threads (thread_pool_t *tp, config_t *config,
                         reactor_context_t *ptr)
 {
-  int number_of_threads
+  long number_of_threads
       = (config->number_of_threads > 2) ? config->number_of_threads - 2 : 1;
   if (create_threads (tp, number_of_threads, handle_io, &ptr, sizeof (ptr),
                       "i/o handler")

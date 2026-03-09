@@ -5,10 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define LCHILD(idx) (2 * idx + 1)
-#define RCHILD(idx) (2 * idx + 2)
-#define PARENT(idx) ((idx - 1) / 2)
-#define HEAP_AT(pq, idx) ((char *)(pq)->heap + (idx) * (pq)->unit_size)
+#define LCHILD(idx) ((2 * (idx)) + 1)
+#define RCHILD(idx) ((2 * (idx)) + 2)
+#define PARENT(idx) (((idx) - 1) / 2)
+#define HEAP_AT(pq, idx) ((char *)(pq)->heap + ((idx) * (pq)->unit_size))
 
 status_t
 priority_queue_init (priority_queue_t *pq, size_t cap, size_t unit_size,

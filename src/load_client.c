@@ -21,10 +21,14 @@
 #include <time.h>
 #include <unistd.h>
 
-#define MIN_DELAY_USEC 1000
-#define TASK_TIMEOUT_MS_MIN 100
-#define TASK_TIMEOUT_MS_MAX 5000
-#define PENDING_TASKS_QUEUE_CAP 256
+#define MS_IN_SEC (1000L)
+#define USEC_IN_MSEC (1000L)
+#define USEC_IN_SEC (1000000L)
+
+#define MIN_DELAY_USEC (1000)
+#define TASK_TIMEOUT_MS_MIN (100)
+#define TASK_TIMEOUT_MS_MAX (5000)
+#define PENDING_TASKS_QUEUE_CAP (256)
 
 typedef struct spawner_context_t
 {
@@ -88,7 +92,7 @@ pending_task_cmp (const void *lhs, const void *rhs)
 }
 
 static void timer_callback (evutil_socket_t fd, short what, void *arg);
-static void client_context_destroy (void *ctx);
+static void client_context_destroy (void *arg);
 static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
 
 static void
@@ -477,12 +481,13 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
               = TASK_TIMEOUT_MS_MIN
                 + (long)(rand_r (&ctx->rand_seed)
                          % (TASK_TIMEOUT_MS_MAX - TASK_TIMEOUT_MS_MIN + 1));
-          pending.deadline.tv_sec += timeout_ms / 1000;
-          pending.deadline.tv_usec += (timeout_ms % 1000) * 1000;
-          if (pending.deadline.tv_usec >= 1000000)
+          pending.deadline.tv_sec += timeout_ms / MS_IN_SEC;
+          pending.deadline.tv_usec
+              += (timeout_ms % MS_IN_SEC) * USEC_IN_MSEC;
+          if (pending.deadline.tv_usec >= USEC_IN_SEC)
             {
               pending.deadline.tv_sec++;
-              pending.deadline.tv_usec -= 1000000;
+              pending.deadline.tv_usec -= USEC_IN_SEC;
             }
 
           if (priority_queue_push (&ctx->s_ctx->pending_tasks, &pending)
