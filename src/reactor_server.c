@@ -49,6 +49,13 @@ rsrv_ctx_init (rsrv_context_t *ctx)
       return (S_FAILURE);
     }
 
+  if (pthread_mutex_init (&ctx->mutex, NULL) != 0)
+    {
+      error ("Could not initialize server mutex");
+      return (S_FAILURE);
+    }
+  ctx->is_shutting_down = false;
+
   return (S_SUCCESS);
 }
 
@@ -113,6 +120,12 @@ clients_cleanup (event_list_t *list)
 static status_t
 rsrv_context_destroy (rsrv_context_t *ctx)
 {
+  if (pthread_mutex_lock (&ctx->mutex) == 0)
+    {
+      ctx->is_shutting_down = true;
+      pthread_mutex_unlock (&ctx->mutex);
+    }
+
   if (queue_cancel (&ctx->jobs_queue) == QS_FAILURE)
     {
       error ("Could not cancel a jobs queue");
@@ -125,13 +138,6 @@ rsrv_context_destroy (rsrv_context_t *ctx)
     }
   event_base_loopbreak (ctx->ev_base);
   trace ("Stopped event loop");
-
-  event_list_t ev_list;
-  ev_list.head.prev = &ev_list.head;
-  ev_list.head.next = &ev_list.head;
-  ev_list.head.ev = NULL;
-  event_base_foreach_event (ctx->ev_base, collect_events_cb, &ev_list);
-  clients_cleanup (&ev_list);
 
   if (srv_base_context_destroy (&ctx->srv_base) == S_FAILURE)
     {
@@ -152,8 +158,17 @@ rsrv_context_destroy (rsrv_context_t *ctx)
     }
   trace ("Destroyed global server queues");
 
+  event_list_t ev_list;
+  ev_list.head.prev = &ev_list.head;
+  ev_list.head.next = &ev_list.head;
+  ev_list.head.ev = NULL;
+  event_base_foreach_event (ctx->ev_base, collect_events_cb, &ev_list);
+  clients_cleanup (&ev_list);
+
   event_base_free (ctx->ev_base);
   trace ("Deallocated clients contexts");
+
+  pthread_mutex_destroy (&ctx->mutex);
 
   return (S_SUCCESS);
 }
@@ -266,7 +281,14 @@ return_tasks (client_context_t *ctx)
 static void
 client_context_destroy (client_context_t *ctx)
 {
-  if (return_tasks (ctx) == S_FAILURE)
+  bool should_return_tasks = true;
+  if (pthread_mutex_lock (&ctx->rsrv_ctx->mutex) == 0)
+    {
+      should_return_tasks = !ctx->rsrv_ctx->is_shutting_down;
+      pthread_mutex_unlock (&ctx->rsrv_ctx->mutex);
+    }
+
+  if (should_return_tasks && return_tasks (ctx) == S_FAILURE)
     error ("Could not return tasks to global queue");
 
   pthread_mutex_destroy (&ctx->is_writing_mutex);

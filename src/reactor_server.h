@@ -20,6 +20,7 @@ typedef struct rsrv_context_t
   queue_t starving_clients;
   struct event_base *ev_base;
   pthread_mutex_t mutex;
+  bool is_shutting_down;
 } rsrv_context_t;
 
 typedef struct io_state_t
