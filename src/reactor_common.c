@@ -65,7 +65,7 @@ reactor_conn_destroy (reactor_conn_t *conn, evutil_socket_t fd)
     error ("Could not delete read event");
   event_free (conn->read_event);
 
-  event_base_loopbreak (conn->rctr_ctx->ev_base);
+  // event_base_loopbreak (conn->rctr_ctx->ev_base);
 
   return (S_SUCCESS);
 }
