@@ -203,6 +203,8 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
       if (cancel)
         thread_pool->cancelled = true;
       pthread_t thread = thread_pool->threads.next->thread;
+      const char *name = thread_pool->threads.next->name;
+      (void)name; /* to suppress unused variable warning in non-trace mode */
       bool empty = (thread_pool->threads.next == &thread_pool->threads);
 
       if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
@@ -226,7 +228,7 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
       if (cancel)
         if (pthread_cancel (thread) != 0)
           error ("Could not cancel a thread");
-      trace ("Cancelled thread '%s'\n", thread_pool->threads.next->name);
+      trace ("Cancelled thread '%s'\n", name ? name : "unnamed");
 
       while (thread_pool->threads.next->thread == thread)
         if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
