@@ -380,7 +380,6 @@ send_task_job (void *arg)
   if (status != S_SUCCESS)
     {
       error ("Could not send task to client");
-      client_context_destroy (ctx);
       return (S_SUCCESS);
     }
 
