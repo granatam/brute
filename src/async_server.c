@@ -72,8 +72,6 @@ cleanup:
 static void
 client_context_destroy (client_context_t *ctx)
 {
-  trace ("Destroying client context");
-
   if (queue_cancel (&ctx->registry_idx) != QS_SUCCESS)
     error ("Could not cancel registry indices queue");
 
@@ -122,10 +120,6 @@ static void
 sender_receiver_cleanup (void *arg)
 {
   client_context_t *ctx = arg;
-  /* Run entire cleanup uncancellable so we always reach client_context_destroy
-   * when is_last; otherwise cancellation could leak the context. */
-  if (pthread_setcancelstate (PTHREAD_CANCEL_DISABLE, NULL) != 0)
-    error ("Could not disable cancellation");
 
   /* Unblock the other thread if it's stuck on a read from the registry
    * indices queue. */
@@ -174,9 +168,6 @@ sender_receiver_cleanup (void *arg)
 
   if (is_last)
     client_context_destroy (ctx);
-
-  if (pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL) != 0)
-    error ("Could not enable cancellation");
 }
 
 static void *
@@ -287,14 +278,24 @@ cleanup:
   return (NULL);
 }
 
-static void
-accepter_cleanup (void *arg)
+static status_t
+increment_ref_count (client_context_t *ctx)
 {
-  client_context_t *client_ctx = *(client_context_t **)arg;
-  if (!client_ctx)
-    return;
+  if (pthread_mutex_lock (&ctx->mutex) != 0)
+    {
+      error ("Could not lock client context mutex");
+      return (S_FAILURE);
+    }
 
-  client_context_destroy (client_ctx);
+  ++ctx->ref_count;
+
+  if (pthread_mutex_unlock (&ctx->mutex) != 0)
+    {
+      error ("Could not unlock client context mutex");
+      return (S_FAILURE);
+    }
+
+  return (S_SUCCESS);
 }
 
 static void *
@@ -305,7 +306,6 @@ handle_clients (void *arg)
 
   client_context_t *client_ctx = NULL;
   int socket_fd = 0;
-  pthread_cleanup_push (accepter_cleanup, &client_ctx);
   while (true)
     {
       if (accept_client (srv_base->listen_fd, &socket_fd) == S_FAILURE)
@@ -326,20 +326,22 @@ handle_clients (void *arg)
           client_ctx->socket_fd = socket_fd;
         }
 
+      if (increment_ref_count (client_ctx) == S_FAILURE)
+        goto cleanup;
+
       pthread_t sender
           = thread_create (&mt_ctx->thread_pool, task_sender, &client_ctx,
                            sizeof (client_ctx), "async sender");
       if (!sender)
         {
           error ("Could not create task sender thread");
-          client_context_destroy (client_ctx);
-          client_ctx = NULL;
-          continue;
+          goto cleanup;
         }
 
-      ++client_ctx->ref_count;
-
       trace ("Created a sender thread: %08x", sender);
+
+      if (increment_ref_count (client_ctx) == S_FAILURE)
+        goto cleanup;
 
       pthread_t receiver
           = thread_create (&mt_ctx->thread_pool, result_receiver, &client_ctx,
@@ -347,20 +349,46 @@ handle_clients (void *arg)
       if (!receiver)
         {
           error ("Could not create result receiver thread");
-          pthread_cancel (sender);
-          pthread_join (sender, NULL);
-          client_context_destroy (client_ctx);
-          client_ctx = NULL;
-          continue;
+          goto cancel_sender;
         }
 
       trace ("Created a receiver thread: %08x", receiver);
 
+      if (pthread_mutex_lock (&client_ctx->mutex) != 0)
+        {
+          error ("Could not lock client context mutex");
+          goto cancel_receiver;
+        }
+
+      bool is_last = (--client_ctx->ref_count == 0);
+
+      if (pthread_mutex_unlock (&client_ctx->mutex) != 0)
+        {
+          error ("Could not unlock client context mutex");
+          goto cancel_receiver;
+        }
+
+      if (is_last)
+        client_context_destroy (client_ctx);
+
       client_ctx = NULL;
       socket_fd = 0;
-    }
 
-  pthread_cleanup_pop (!0);
+      continue;
+
+    cancel_receiver:
+      pthread_cancel (receiver);
+      pthread_join (receiver, NULL);
+
+    cancel_sender:
+      pthread_cancel (sender);
+      pthread_join (sender, NULL);
+
+    cleanup:
+      client_context_destroy (client_ctx);
+      client_ctx = NULL;
+      break;
+    }
 
   return (NULL);
 }
@@ -377,6 +405,7 @@ run_async_server (task_t *task, config_t *config)
       error ("Could not initialize server context");
       return (false);
     }
+  base_ptr->mt_ctx.cancel_tp = false;
 
   if (!thread_create (&srv_base.mt_ctx.thread_pool, handle_clients, &base_ptr,
                       sizeof (base_ptr), "async accepter"))

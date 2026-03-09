@@ -18,6 +18,7 @@ typedef struct mt_context_t
   pthread_mutex_t mutex;
   pthread_cond_t cond_sem;
   thread_pool_t thread_pool;
+  bool cancel_tp;
 } mt_context_t;
 
 status_t mt_context_init (mt_context_t *context, config_t *config);

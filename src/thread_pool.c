@@ -200,7 +200,8 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
           return (S_FAILURE);
         }
 
-      thread_pool->cancelled = true;
+      if (cancel)
+        thread_pool->cancelled = true;
       pthread_t thread = thread_pool->threads.next->thread;
       bool empty = (thread_pool->threads.next == &thread_pool->threads);
 

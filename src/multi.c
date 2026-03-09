@@ -39,6 +39,7 @@ mt_context_init (mt_context_t *context, config_t *config)
   context->config = config;
   context->passwords_remaining = 0;
   context->password[0] = 0;
+  context->cancel_tp = true;
 
   return (S_SUCCESS);
 }
@@ -47,12 +48,21 @@ status_t
 mt_context_destroy (mt_context_t *context)
 {
   trace ("Destroying multithreading context");
-  if (thread_pool_cancel (&context->thread_pool) == S_FAILURE)
+  if (context->cancel_tp)
+    {
+      if (thread_pool_cancel (&context->thread_pool) == S_FAILURE)
+        {
+          error ("Could not cancel a thread pool");
+          return (S_FAILURE);
+        }
+    }
+  else if (thread_pool_join (&context->thread_pool) == S_FAILURE)
     {
       error ("Could not cancel a thread pool");
       return (S_FAILURE);
     }
   trace ("Cancelled thread pool, destroying global queue");
+
   if (queue_destroy (&context->queue) == QS_FAILURE)
     {
       error ("Could not destroy a queue");

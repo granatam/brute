@@ -70,9 +70,6 @@ fail:
 status_t
 srv_base_context_destroy (srv_base_context_t *srv_base)
 {
-  if (mt_context_destroy ((mt_context_t *)srv_base) == S_FAILURE)
-    return (S_FAILURE);
-
   if (srv_base->listen_fd >= 0)
     {
       shutdown (srv_base->listen_fd, SHUT_RDWR);
@@ -83,6 +80,9 @@ srv_base_context_destroy (srv_base_context_t *srv_base)
         }
       srv_base->listen_fd = -1;
     }
+
+  if (mt_context_destroy ((mt_context_t *)srv_base) == S_FAILURE)
+    return (S_FAILURE);
 
   return (S_SUCCESS);
 }
@@ -102,7 +102,7 @@ accept_client (int srv_socket_fd, int *client_socket_fd)
       if (*client_socket_fd == -1)
         {
           error ("Could not accept new connection: %s", strerror (errno));
-          if (errno == EINVAL)
+          if (errno == EINVAL || errno == EBADF)
             return (S_FAILURE);
 
           continue;
