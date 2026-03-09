@@ -158,8 +158,11 @@ write_state_write_wrapper (int socket_fd, struct iovec *vec, int *vec_sz)
   *vec_sz -= i;
   memmove (&vec[0], &vec[i], sizeof (struct iovec) * *vec_sz);
 
-  vec[i].iov_base += actual_write;
-  vec[i].iov_len -= actual_write;
+  if (*vec_sz > 0 && actual_write > 0)
+    {
+      vec[0].iov_base += actual_write;
+      vec[0].iov_len -= actual_write;
+    }
 
   return (S_SUCCESS);
 }

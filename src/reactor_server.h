@@ -34,7 +34,7 @@ typedef struct write_state_t
   io_state_t base_state;
   struct iovec vec_extra[3];
   command_t cmd_extra;
-  unsigned long length;
+  int32_t length;
   int32_t vec_extra_sz;
 } write_state_t;
 

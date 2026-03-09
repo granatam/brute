@@ -10,6 +10,7 @@
 #include <assert.h>
 #include <event2/event.h>
 #include <event2/listener.h>
+#include <event2/thread.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -104,6 +105,16 @@ clients_cleanup (event_list_t *list)
 static status_t
 rsrv_context_destroy (rsrv_context_t *ctx)
 {
+  if (queue_cancel (&ctx->jobs_queue) == QS_FAILURE)
+    {
+      error ("Could not cancel a jobs queue");
+      return (S_FAILURE);
+    }
+  if (queue_cancel (&ctx->starving_clients) == QS_FAILURE)
+    {
+      error ("Could not cancel a starving clients queue");
+      return (S_FAILURE);
+    }
   event_base_loopbreak (ctx->ev_base);
   trace ("Stopped event loop");
 
@@ -308,8 +319,11 @@ write_state_write_wrapper (int socket_fd, struct iovec *vec, int *vec_sz)
   *vec_sz -= i;
   memmove (&vec[0], &vec[i], sizeof (struct iovec) * *vec_sz);
 
-  vec[i].iov_base += actual_write;
-  vec[i].iov_len -= actual_write;
+  if (*vec_sz > 0 && actual_write > 0)
+    {
+      vec[0].iov_base += actual_write;
+      vec[0].iov_len -= actual_write;
+    }
 
   return (S_SUCCESS);
 }
@@ -502,7 +516,8 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
   if ((ssize_t)bytes_read <= 0)
     {
       error ("Could not read result from a client");
-      client_context_destroy (ctx);
+      if (event_del (ctx->read_event) == -1)
+        error ("Could not delete read event after read failure");
       return;
     }
 
@@ -545,10 +560,11 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
           return;
         }
       memcpy (mt_ctx->password, result->password, sizeof (result->password));
-      if (srv_trysignal (mt_ctx) == S_FAILURE)
-        return;
       event_base_loopbreak (ctx->rsrv_ctx->ev_base);
     }
+
+  if (srv_trysignal (mt_ctx) == S_FAILURE)
+    return;
 
   trace ("Received %s result %s with id %d from client",
          result->is_correct ? "correct" : "incorrect", result->password,
@@ -719,6 +735,7 @@ fail:
 bool
 run_reactor_server (task_t *task, config_t *config)
 {
+  evthread_use_pthreads ();
   signal (SIGPIPE, SIG_IGN);
   rsrv_context_t rsrv_ctx;
   rsrv_context_t *context_ptr = &rsrv_ctx;
