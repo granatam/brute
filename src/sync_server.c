@@ -93,10 +93,9 @@ handle_clients (void *arg)
 
   while (true)
     {
-      /* TODO: Probably we should not continue here */
       if (accept_client (srv_base->listen_fd, &client_ctx.socket_fd)
           == S_FAILURE)
-        continue;
+        break;
 
       if (!thread_create (&mt_ctx->thread_pool, handle_client, &client_ctx,
                           sizeof (client_ctx), "sync handler"))
