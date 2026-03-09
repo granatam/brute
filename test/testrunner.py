@@ -132,12 +132,12 @@ def run_brute(
         )
     else:
         hash = crypt(passwd, passwd)
-        base_cmd = (
-            f"{mode.value} -H {hash} -l {len(str(passwd))} -a {alph}"
-        )
+        base_cmd = f"{mode.value} -H {hash} -l {len(str(passwd))} -a {alph}"
         if run_mode == RunMode.LOAD_CLIENTS:
             if load_clients is None:
-                raise ValueError("load_clients must be provided for LOAD_CLIENTS mode")
+                raise ValueError(
+                    "load_clients must be provided for LOAD_CLIENTS mode"
+                )
             cmd = (
                 f"{base_cmd} -L {load_clients} -{brute_mode.value} "
                 f"-T {cpu_count} -p {port}"
@@ -247,7 +247,9 @@ class _TestRunner:
         sys.stderr.write("\n".join(error_msg))
         assert False, "Output does not match expected. See stderr for details."
 
-    def run(self, cmd_mode=CommandMode.BASIC, expected_output: str | None = None):
+    def run(
+        self, cmd_mode=CommandMode.BASIC, expected_output: str | None = None
+    ):
         brute_mode, alph, password = self.generated_params
         port = get_free_port()
         stderr_log = tempfile.NamedTemporaryFile()
