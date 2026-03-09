@@ -118,6 +118,13 @@ rsrv_context_destroy (rsrv_context_t *ctx)
   event_base_loopbreak (ctx->ev_base);
   trace ("Stopped event loop");
 
+  event_list_t ev_list;
+  ev_list.head.prev = &ev_list.head;
+  ev_list.head.next = &ev_list.head;
+  ev_list.head.ev = NULL;
+  event_base_foreach_event (ctx->ev_base, collect_events_cb, &ev_list);
+  clients_cleanup (&ev_list);
+
   if (srv_base_context_destroy (&ctx->srv_base) == S_FAILURE)
     {
       error ("Could not destroy server context");
@@ -137,12 +144,6 @@ rsrv_context_destroy (rsrv_context_t *ctx)
     }
   trace ("Destroyed global server queues");
 
-  event_list_t ev_list;
-  ev_list.head.prev = &ev_list.head;
-  ev_list.head.next = &ev_list.head;
-  ev_list.head.ev = NULL;
-  event_base_foreach_event (ctx->ev_base, collect_events_cb, &ev_list);
-  clients_cleanup (&ev_list);
   event_base_free (ctx->ev_base);
   trace ("Deallocated clients contexts");
 
