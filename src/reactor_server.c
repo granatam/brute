@@ -93,14 +93,14 @@ clients_cleanup (event_list_t *list)
     {
       event_node_t *dummy = curr;
       if (event_get_callback (curr->ev) == handle_read)
-      {
-        client_context_t *ctx = event_get_callback_arg (curr->ev);
-        if (ctx)
-          {
-            trace ("Destroying client context");
-            client_context_destroy (ctx);
-          }
-      }
+        {
+          client_context_t *ctx = event_get_callback_arg (curr->ev);
+          if (ctx)
+            {
+              trace ("Destroying client context");
+              client_context_destroy (ctx);
+            }
+        }
 
       curr->prev->next = curr->next;
       curr->next->prev = curr->prev;
