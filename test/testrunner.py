@@ -29,7 +29,7 @@ phases = (Phase.explicit, Phase.reuse, Phase.generate, Phase.target)
 
 CPU_COUNT = os.cpu_count() or 8
 VALGRIND_FLAGS = (
-    "--leak-check=full --error-exitcode=1 --trace-children=yes --quiet"
+    "--show-leak-kinds=all --errors-for-leak-kinds=all --gen-suppressions=all --leak-check=full --error-exitcode=1 --trace-children=yes --quiet"
 )
 
 
