@@ -91,6 +91,7 @@ collect_events_cb (const struct event_base *ev_base, const struct event *ev,
 }
 
 static void client_context_destroy (client_context_t *ctx);
+static status_t client_job_ref (client_context_t *ctx);
 static bool client_job_unref (client_context_t *ctx);
 static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
 
@@ -318,6 +319,21 @@ client_disconnect (client_context_t *ctx)
   pthread_mutex_unlock (&ctx->ref_mutex);
 }
 
+static status_t
+client_job_ref (client_context_t *ctx)
+{
+  pthread_mutex_lock (&ctx->ref_mutex);
+  if (ctx->closing)
+    {
+      pthread_mutex_unlock (&ctx->ref_mutex);
+      return (S_FAILURE);
+    }
+  ++ctx->ref_count;
+  pthread_mutex_unlock (&ctx->ref_mutex);
+
+  return (S_SUCCESS);
+}
+
 static bool
 client_job_unref (client_context_t *ctx)
 {
@@ -486,17 +502,14 @@ create_task_job (void *arg)
   bool is_starving = ctx->is_starving;
   pthread_mutex_unlock (&ctx->is_starving_mutex);
   if (is_starving)
-    return (S_SUCCESS);
+    goto clear_writing_flag;
 
   qs = queue_trypop (&ctx->registry_idx, &id);
   if (qs != QS_SUCCESS)
     {
-      pthread_mutex_lock (&ctx->is_writing_mutex);
-      ctx->is_writing = false;
-      pthread_mutex_unlock (&ctx->is_writing_mutex);
       if (qs != QS_EMPTY)
         client_disconnect (ctx);
-      return (S_SUCCESS);
+      goto clear_writing_flag;
     }
 
   trace ("Got index %d from registry", id);
@@ -516,32 +529,29 @@ create_task_job (void *arg)
         {
           error ("Could not push index to registry indices queue");
           client_disconnect (ctx);
-          return (S_SUCCESS);
+          goto clear_writing_flag;
         }
       trace ("Pushed id %d back to registry indices queue", id);
+      if (client_job_ref (ctx) != S_SUCCESS)
+        goto clear_writing_flag;
       if (queue_push_back (&ctx->rsrv_ctx->starving_clients, &ctx)
           == QS_FAILURE)
         {
           error ("Could not push client to starving clients queue");
+          client_job_unref (ctx);
           client_disconnect (ctx);
-          return (S_SUCCESS);
+          goto clear_writing_flag;
         }
       trace ("Pushed client context to starving clients queue");
-      pthread_mutex_lock (&ctx->is_writing_mutex);
-      ctx->is_writing = false;
-      pthread_mutex_unlock (&ctx->is_writing_mutex);
-      return (S_SUCCESS);
+      goto clear_writing_flag;
     }
 
   if (qs == QS_FAILURE)
     {
       if (queue_push_back (&ctx->registry_idx, &id) != QS_SUCCESS)
         error ("Could not push back id to registry indices queue");
-      pthread_mutex_lock (&ctx->is_writing_mutex);
-      ctx->is_writing = false;
-      pthread_mutex_unlock (&ctx->is_writing_mutex);
       client_disconnect (ctx);
-      return (S_SUCCESS);
+      goto clear_writing_flag;
     }
 
   trace ("Got task from global queue");
@@ -554,6 +564,12 @@ create_task_job (void *arg)
   task_write_state_setup (ctx, id);
 
   return (push_job (ctx, send_task_job) == PS_FAILURE ? S_FAILURE : S_SUCCESS);
+
+clear_writing_flag:
+  pthread_mutex_lock (&ctx->is_writing_mutex);
+  ctx->is_writing = false;
+  pthread_mutex_unlock (&ctx->is_writing_mutex);
+  return (S_SUCCESS);
 }
 
 static status_t
@@ -709,6 +725,7 @@ handle_starving_clients (void *arg)
       if (client->is_writing)
         {
           pthread_mutex_unlock (&client->is_writing_mutex);
+          client_job_unref (client);
           continue;
         }
       client->is_writing = true;
@@ -717,11 +734,11 @@ handle_starving_clients (void *arg)
       int id;
       qs = queue_pop (&client->registry_idx, &id);
       if (qs == QS_INACTIVE)
-        return (NULL);
+        goto fail_starving_take;
       if (qs != QS_SUCCESS)
         {
           error ("Could not pop index from registry indices queue");
-          return (NULL);
+          goto fail_starving_take;
         }
       trace ("Got id for a starving client: %d", id);
 
@@ -729,7 +746,7 @@ handle_starving_clients (void *arg)
       if (queue_pop (&ctx->srv_base.mt_ctx.queue, task) != QS_SUCCESS)
         {
           error ("Could not pop from the global queue");
-          return (NULL);
+          goto fail_starving_take;
         }
       trace ("Got task for a starving client");
 
@@ -745,15 +762,23 @@ handle_starving_clients (void *arg)
       if (ps == PS_DESTROYED)
         continue;
       if (ps == PS_FAILURE)
-        return (NULL);
+        goto fail_starving_take;
       trace ("Pushed send job to jobs queue");
 
       pthread_mutex_lock (&client->is_starving_mutex);
       client->is_starving = false;
       pthread_mutex_unlock (&client->is_starving_mutex);
-    }
 
-  return (NULL);
+      client_job_unref (client);
+      continue;
+
+    fail_starving_take:
+      pthread_mutex_lock (&client->is_writing_mutex);
+      client->is_writing = false;
+      pthread_mutex_unlock (&client->is_writing_mutex);
+      client_job_unref (client);
+      return (NULL);
+    }
 }
 
 static void *
