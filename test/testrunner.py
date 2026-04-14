@@ -9,6 +9,7 @@ import time
 import warnings
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 
 from hypothesis import strategies as st
 
@@ -28,14 +29,29 @@ settings.load_profile("custom")
 phases = (Phase.explicit, Phase.reuse, Phase.generate, Phase.target)
 
 CPU_COUNT = os.cpu_count() or 8
-VALGRIND_FLAGS = (
-    "--show-leak-kinds=all --errors-for-leak-kinds=all --gen-suppressions=all --leak-check=full --error-exitcode=1 --trace-children=yes --quiet"
+
+VALGRIND_SUPPRESSIONS = (
+    Path(__file__).resolve().parent / "valgrind-pthread.supp"
+)
+VALGRIND_CMD = " ".join(
+    (
+        "valgrind",
+        f"--suppressions={VALGRIND_SUPPRESSIONS}",
+        "--show-leak-kinds=all",
+        "--errors-for-leak-kinds=all",
+        "--gen-suppressions=all",
+        "--leak-check=full",
+        "--error-exitcode=1",
+        "--trace-children=yes",
+        "--quiet",
+        "./brute",
+    )
 )
 
 
 class CommandMode(str, Enum):
     BASIC = "./brute"
-    VALGRIND = f"valgrind {VALGRIND_FLAGS} ./brute"
+    VALGRIND = VALGRIND_CMD
     PERF = "time ./brute"
 
 
