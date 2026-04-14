@@ -10,6 +10,7 @@
 #include <assert.h>
 #include <event2/event.h>
 #include <event2/listener.h>
+#include <event2/thread.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -82,6 +83,7 @@ collect_events_cb (const struct event_base *ev_base, const struct event *ev,
 }
 
 static void client_context_destroy (client_context_t *ctx);
+static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
 
 static void
 clients_cleanup (event_list_t *list)
@@ -90,9 +92,15 @@ clients_cleanup (event_list_t *list)
   while (curr->ev)
     {
       event_node_t *dummy = curr;
-      client_context_t *ctx = event_get_callback_arg (curr->ev);
-      trace ("Destroying client context");
-      client_context_destroy (ctx);
+      if (event_get_callback (curr->ev) == handle_read)
+      {
+        client_context_t *ctx = event_get_callback_arg (curr->ev);
+        if (ctx)
+          {
+            trace ("Destroying client context");
+            client_context_destroy (ctx);
+          }
+      }
 
       curr->prev->next = curr->next;
       curr->next->prev = curr->prev;
@@ -148,8 +156,6 @@ rsrv_context_destroy (rsrv_context_t *ctx)
 
   return (S_SUCCESS);
 }
-
-static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
 
 static client_context_t *
 client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
@@ -317,10 +323,13 @@ write_state_write_wrapper (int socket_fd, struct iovec *vec, int *vec_sz)
     actual_write -= vec[i++].iov_len;
 
   *vec_sz -= i;
-  memmove (&vec[0], &vec[i], sizeof (struct iovec) * *vec_sz);
+  memmove (&vec[0], &vec[i], sizeof (struct iovec) * (size_t)*vec_sz);
 
-  vec[i].iov_base += actual_write;
-  vec[i].iov_len -= actual_write;
+  if (*vec_sz > 0 && actual_write > 0)
+    {
+      vec[0].iov_base = (char *)vec[0].iov_base + actual_write;
+      vec[0].iov_len -= actual_write;
+    }
 
   return (S_SUCCESS);
 }
@@ -435,7 +444,7 @@ create_task_job (void *arg)
       if (queue_push_back (&ctx->rsrv_ctx->starving_clients, &ctx)
           == QS_FAILURE)
         {
-          error ("Could not push index to registry indices queue");
+          error ("Could not push client to starving clients queue");
           return (S_FAILURE);
         }
       trace ("Pushed client context to starving clients queue");
@@ -513,7 +522,8 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
   if ((ssize_t)bytes_read <= 0)
     {
       error ("Could not read result from a client");
-      client_context_destroy (ctx);
+      if (event_del (ctx->read_event) == -1)
+        error ("Could not delete read event after read failure");
       return;
     }
 
@@ -556,10 +566,11 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
           return;
         }
       memcpy (mt_ctx->password, result->password, sizeof (result->password));
-      if (srv_trysignal (mt_ctx) == S_FAILURE)
-        return;
       event_base_loopbreak (ctx->rsrv_ctx->ev_base);
     }
+
+  if (srv_trysignal (mt_ctx) == S_FAILURE)
+    return;
 
   trace ("Received %s result %s with id %d from client",
          result->is_correct ? "correct" : "incorrect", result->password,
@@ -571,7 +582,11 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
 
   if (!is_writing)
     {
-      push_job (ctx, create_task_job);
+      if (push_job (ctx, create_task_job) == S_FAILURE)
+        {
+          error ("Could not schedule create task job from read event");
+          return;
+        }
       trace ("Pushed create task job from read event");
     }
 }
@@ -584,7 +599,10 @@ handle_starving_clients (void *arg)
   for (;;)
     {
       client_context_t *client = NULL;
-      if (queue_pop (&ctx->starving_clients, &client) != QS_SUCCESS)
+      queue_status_t qs = queue_pop (&ctx->starving_clients, &client);
+      if (qs == QS_INACTIVE)
+        return (NULL);
+      if (qs != QS_SUCCESS)
         {
           error ("Could not pop from a starving clients queue");
           return (NULL);
@@ -601,7 +619,10 @@ handle_starving_clients (void *arg)
       pthread_mutex_unlock (&client->is_writing_mutex);
 
       int id;
-      if (queue_pop (&client->registry_idx, &id) != QS_SUCCESS)
+      qs = queue_pop (&client->registry_idx, &id);
+      if (qs == QS_INACTIVE)
+        return (NULL);
+      if (qs != QS_SUCCESS)
         {
           error ("Could not pop index from registry indices queue");
           return (NULL);
@@ -643,7 +664,10 @@ handle_io (void *arg)
   for (;;)
     {
       job_t job;
-      if (queue_pop (&ctx->jobs_queue, &job) != QS_SUCCESS)
+      queue_status_t qs = queue_pop (&ctx->jobs_queue, &job);
+      if (qs == QS_INACTIVE)
+        break;
+      if (qs != QS_SUCCESS)
         {
           error ("Could not pop a job from a job queue");
           break;
@@ -730,6 +754,7 @@ fail:
 bool
 run_reactor_server (task_t *task, config_t *config)
 {
+  evthread_use_pthreads ();
   signal (SIGPIPE, SIG_IGN);
   rsrv_context_t rsrv_ctx;
   rsrv_context_t *context_ptr = &rsrv_ctx;
