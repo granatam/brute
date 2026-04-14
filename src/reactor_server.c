@@ -20,6 +20,14 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+typedef enum push_status
+{
+  PS_SUCCESS,
+  PS_SKIPPED,
+  PS_FAILURE,
+  PS_DESTROYED,
+} push_status_t;
+
 static status_t
 rsrv_ctx_init (rsrv_context_t *ctx)
 {
@@ -83,7 +91,7 @@ collect_events_cb (const struct event_base *ev_base, const struct event *ev,
 }
 
 static void client_context_destroy (client_context_t *ctx);
-static void client_job_unref (client_context_t *ctx);
+static bool client_job_unref (client_context_t *ctx);
 static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
 
 static void
@@ -310,7 +318,7 @@ client_disconnect (client_context_t *ctx)
   pthread_mutex_unlock (&ctx->ref_mutex);
 }
 
-static void
+static bool
 client_job_unref (client_context_t *ctx)
 {
   bool destroy = false;
@@ -324,16 +332,17 @@ client_job_unref (client_context_t *ctx)
 
   if (destroy)
     client_context_destroy (ctx);
+  return (destroy);
 }
 
-static status_t
+static push_status_t
 push_job (client_context_t *ctx, status_t (*job_func) (void *))
 {
   pthread_mutex_lock (&ctx->ref_mutex);
   if (ctx->closing)
     {
       pthread_mutex_unlock (&ctx->ref_mutex);
-      return (S_SUCCESS);
+      return (PS_SKIPPED);
     }
   ++ctx->ref_count;
   pthread_mutex_unlock (&ctx->ref_mutex);
@@ -345,11 +354,12 @@ push_job (client_context_t *ctx, status_t (*job_func) (void *))
   if (queue_push_back (&ctx->rsrv_ctx->jobs_queue, &job) != QS_SUCCESS)
     {
       error ("Could not push job to a job queue");
-      client_job_unref (ctx);
-      return (S_FAILURE);
+      if (client_job_unref (ctx))
+        return (PS_DESTROYED);
+      return (PS_FAILURE);
     }
 
-  return (S_SUCCESS);
+  return (PS_SUCCESS);
 }
 
 static status_t create_task_job (void *arg);
@@ -417,7 +427,8 @@ send_task_job (void *arg)
     }
 
   if (ctx->write_state.base_state.vec_sz != 0)
-    return (push_job (ctx, send_task_job));
+    return (push_job (ctx, send_task_job) == PS_FAILURE ? S_FAILURE
+                                                        : S_SUCCESS);
 
   trace ("Sent task to client");
 
@@ -425,7 +436,8 @@ send_task_job (void *arg)
   ctx->is_writing = false;
   pthread_mutex_unlock (&ctx->is_writing_mutex);
 
-  return (push_job (ctx, create_task_job));
+  return (push_job (ctx, create_task_job) == PS_FAILURE ? S_FAILURE
+                                                        : S_SUCCESS);
 }
 
 static void
@@ -541,7 +553,7 @@ create_task_job (void *arg)
 
   task_write_state_setup (ctx, id);
 
-  return (push_job (ctx, send_task_job));
+  return (push_job (ctx, send_task_job) == PS_FAILURE ? S_FAILURE : S_SUCCESS);
 }
 
 static status_t
@@ -569,7 +581,8 @@ send_config_job (void *arg)
         }
 
       if (ctx->write_state.base_state.vec_sz != 0)
-        return (push_job (ctx, send_config_job));
+        return (push_job (ctx, send_config_job) == PS_FAILURE ? S_FAILURE
+                                                              : S_SUCCESS);
     }
 
   status = write_state_write_extra (ctx->socket_fd, &ctx->write_state);
@@ -580,9 +593,11 @@ send_config_job (void *arg)
       return (S_SUCCESS);
     }
 
-  return (push_job (ctx, ctx->write_state.vec_extra_sz != 0
-                             ? send_config_job
-                             : create_task_job));
+  return (push_job (ctx, ctx->write_state.vec_extra_sz != 0 ? send_config_job
+                                                            : create_task_job)
+                  == PS_FAILURE
+              ? S_FAILURE
+              : S_SUCCESS);
 }
 
 static void
@@ -660,11 +675,14 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
 
   if (!is_writing)
     {
-      if (push_job (ctx, create_task_job) == S_FAILURE)
+      push_status_t ps = push_job (ctx, create_task_job);
+      if (ps == PS_FAILURE)
         {
           error ("Could not schedule create task job from read event");
           return;
         }
+      if (ps == PS_DESTROYED)
+        return;
       trace ("Pushed create task job from read event");
     }
 }
@@ -723,7 +741,11 @@ handle_starving_clients (void *arg)
       client->registry_used[id] = true;
       pthread_mutex_unlock (&client->registry_used_mutex);
 
-      push_job (client, send_task_job);
+      push_status_t ps = push_job (client, send_task_job);
+      if (ps == PS_DESTROYED)
+        continue;
+      if (ps == PS_FAILURE)
+        return (NULL);
       trace ("Pushed send job to jobs queue");
 
       pthread_mutex_lock (&client->is_starving_mutex);
@@ -813,11 +835,14 @@ handle_accept (struct evconnlistener *listener, evutil_socket_t fd,
 
   trace ("Added new event");
 
-  if (push_job (client_ctx, send_config_job) == S_FAILURE)
+  push_status_t ps = push_job (client_ctx, send_config_job);
+  if (ps == PS_FAILURE)
     {
       error ("Could not add send_config job");
       goto destroy_ctx;
     }
+  if (ps == PS_DESTROYED)
+    return;
 
   return;
 
