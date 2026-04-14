@@ -257,18 +257,6 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
 
   pthread_cleanup_pop (!0);
 
-  /* Valgrind tests are returning false positive result, since it doesn't
-   * wait until all memory allocated for threads is cleared, so we need to
-   * manually make a timeout */
-  char *var = getenv ("PYTEST_CURRENT_TEST");
-  if (var == NULL)
-    return (S_SUCCESS);
-  struct timespec time, time2;
-  time.tv_sec = 0;
-  time.tv_nsec = TP_CLEANUP_DELAY_MS;
-  if (strstr (var, "valgrind"))
-    nanosleep (&time, &time2);
-
   return (S_SUCCESS);
 }
 
