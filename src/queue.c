@@ -10,7 +10,10 @@ queue_status_t
 queue_init (queue_t *queue, size_t unit_size)
 {
   if (!(queue->queue = calloc (QUEUE_SIZE, unit_size)))
-    goto fail;
+    {
+      queue->active = false;
+      return (QS_FAILURE);
+    }
 
   queue->unit_size = unit_size;
   queue->head = queue->tail = 0;
@@ -22,18 +25,32 @@ queue_init (queue_t *queue, size_t unit_size)
     goto fail;
 
   if (sem_init (&queue->empty, 0, QUEUE_SIZE) != SS_SUCCESS)
-    goto fail;
+    {
+      sem_destroy (&queue->full);
+      goto fail;
+    }
 
   if (pthread_mutex_init (&queue->head_mutex, NULL) != 0)
-    goto fail;
+    {
+      sem_destroy (&queue->empty);
+      sem_destroy (&queue->full);
+      goto fail;
+    }
 
   if (pthread_mutex_init (&queue->tail_mutex, NULL) != 0)
-    goto fail;
+    {
+      pthread_mutex_destroy (&queue->head_mutex);
+      sem_destroy (&queue->empty);
+      sem_destroy (&queue->full);
+      goto fail;
+    }
 
   return (QS_SUCCESS);
 
 fail:
   trace ("Failed to initialize queue");
+  free (queue->queue);
+  queue->queue = NULL;
   queue->active = false;
   return (QS_FAILURE);
 }
