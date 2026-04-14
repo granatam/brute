@@ -1,0 +1,25 @@
+{
+   glibc-pthread-TLS-allocate-dtv-possible
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   fun:calloc
+   fun:allocate_dtv
+   fun:_dl_allocate_tls
+   fun:allocate_stack
+   fun:pthread_create*
+   fun:thread_create
+   ...
+}
+
+{
+   libevent-pthreads-reachable-global-locks
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   obj:*libevent_pthreads*.so*
+   ...
+   fun:evthread_use_pthreads
+   fun:run_reactor_server
+   fun:main
+}
