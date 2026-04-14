@@ -83,6 +83,7 @@ collect_events_cb (const struct event_base *ev_base, const struct event *ev,
 }
 
 static void client_context_destroy (client_context_t *ctx);
+static void client_job_unref (client_context_t *ctx);
 static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
 
 static void
@@ -168,6 +169,15 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
     }
   trace ("Allocated memory for client context");
 
+  if (pthread_mutex_init (&client_ctx->ref_mutex, NULL) != 0)
+    {
+      error ("Could not initialize client ref mutex");
+      free (client_ctx);
+      return (NULL);
+    }
+  client_ctx->ref_count = 0;
+  client_ctx->closing = false;
+
   client_ctx->socket_fd = fd;
   client_ctx->rsrv_ctx = rsrv_ctx;
   client_ctx->read_state.vec[0].iov_base = &client_ctx->read_buffer;
@@ -234,6 +244,7 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
   return (client_ctx);
 
 fail:
+  pthread_mutex_destroy (&client_ctx->ref_mutex);
   free (client_ctx);
   return (NULL);
 }
@@ -285,13 +296,48 @@ client_context_destroy (client_context_t *ctx)
   if (event_del (ctx->read_event) == -1)
     error ("Could not delete read event");
   event_free (ctx->read_event);
+  if (pthread_mutex_destroy (&ctx->ref_mutex) != 0)
+    error ("Could not destroy client ref mutex");
   free (ctx);
   trace ("Deleted and deallocated event, free'd client context");
+}
+
+static void
+client_disconnect (client_context_t *ctx)
+{
+  pthread_mutex_lock (&ctx->ref_mutex);
+  ctx->closing = true;
+  pthread_mutex_unlock (&ctx->ref_mutex);
+}
+
+static void
+client_job_unref (client_context_t *ctx)
+{
+  bool destroy = false;
+
+  pthread_mutex_lock (&ctx->ref_mutex);
+  assert (ctx->ref_count > 0);
+  --ctx->ref_count;
+  if (ctx->ref_count == 0 && ctx->closing)
+    destroy = true;
+  pthread_mutex_unlock (&ctx->ref_mutex);
+
+  if (destroy)
+    client_context_destroy (ctx);
 }
 
 static status_t
 push_job (client_context_t *ctx, status_t (*job_func) (void *))
 {
+  pthread_mutex_lock (&ctx->ref_mutex);
+  if (ctx->closing)
+    {
+      pthread_mutex_unlock (&ctx->ref_mutex);
+      return (S_SUCCESS);
+    }
+  ++ctx->ref_count;
+  pthread_mutex_unlock (&ctx->ref_mutex);
+
   job_t job = {
     .arg = ctx,
     .job_func = job_func,
@@ -299,6 +345,7 @@ push_job (client_context_t *ctx, status_t (*job_func) (void *))
   if (queue_push_back (&ctx->rsrv_ctx->jobs_queue, &job) != QS_SUCCESS)
     {
       error ("Could not push job to a job queue");
+      client_job_unref (ctx);
       return (S_FAILURE);
     }
 
@@ -353,11 +400,19 @@ send_task_job (void *arg)
 {
   client_context_t *ctx = arg;
 
+  pthread_mutex_lock (&ctx->ref_mutex);
+  if (ctx->closing)
+    {
+      pthread_mutex_unlock (&ctx->ref_mutex);
+      return (S_SUCCESS);
+    }
+  pthread_mutex_unlock (&ctx->ref_mutex);
+
   status_t status = write_state_write (ctx->socket_fd, &ctx->write_state);
   if (status != S_SUCCESS)
     {
       error ("Could not send task to client");
-      client_context_destroy (ctx);
+      client_disconnect (ctx);
       return (S_SUCCESS);
     }
 
@@ -395,6 +450,14 @@ create_task_job (void *arg)
 {
   client_context_t *ctx = arg;
 
+  pthread_mutex_lock (&ctx->ref_mutex);
+  if (ctx->closing)
+    {
+      pthread_mutex_unlock (&ctx->ref_mutex);
+      return (S_SUCCESS);
+    }
+  pthread_mutex_unlock (&ctx->ref_mutex);
+
   pthread_mutex_lock (&ctx->is_writing_mutex);
   if (ctx->is_writing)
     {
@@ -419,7 +482,9 @@ create_task_job (void *arg)
       pthread_mutex_lock (&ctx->is_writing_mutex);
       ctx->is_writing = false;
       pthread_mutex_unlock (&ctx->is_writing_mutex);
-      return (qs == QS_EMPTY ? S_SUCCESS : S_FAILURE);
+      if (qs != QS_EMPTY)
+        client_disconnect (ctx);
+      return (S_SUCCESS);
     }
 
   trace ("Got index %d from registry", id);
@@ -438,14 +503,16 @@ create_task_job (void *arg)
       if (queue_push_back (&ctx->registry_idx, &id) == QS_FAILURE)
         {
           error ("Could not push index to registry indices queue");
-          return (S_FAILURE);
+          client_disconnect (ctx);
+          return (S_SUCCESS);
         }
       trace ("Pushed id %d back to registry indices queue", id);
       if (queue_push_back (&ctx->rsrv_ctx->starving_clients, &ctx)
           == QS_FAILURE)
         {
           error ("Could not push client to starving clients queue");
-          return (S_FAILURE);
+          client_disconnect (ctx);
+          return (S_SUCCESS);
         }
       trace ("Pushed client context to starving clients queue");
       pthread_mutex_lock (&ctx->is_writing_mutex);
@@ -461,7 +528,8 @@ create_task_job (void *arg)
       pthread_mutex_lock (&ctx->is_writing_mutex);
       ctx->is_writing = false;
       pthread_mutex_unlock (&ctx->is_writing_mutex);
-      return (S_FAILURE);
+      client_disconnect (ctx);
+      return (S_SUCCESS);
     }
 
   trace ("Got task from global queue");
@@ -481,6 +549,14 @@ send_config_job (void *arg)
 {
   client_context_t *ctx = arg;
 
+  pthread_mutex_lock (&ctx->ref_mutex);
+  if (ctx->closing)
+    {
+      pthread_mutex_unlock (&ctx->ref_mutex);
+      return (S_SUCCESS);
+    }
+  pthread_mutex_unlock (&ctx->ref_mutex);
+
   status_t status;
   if (ctx->write_state.base_state.vec_sz != 0)
     {
@@ -488,7 +564,8 @@ send_config_job (void *arg)
       if (status != S_SUCCESS)
         {
           error ("Could not send hash to client");
-          return (S_FAILURE);
+          client_disconnect (ctx);
+          return (S_SUCCESS);
         }
 
       if (ctx->write_state.base_state.vec_sz != 0)
@@ -499,7 +576,8 @@ send_config_job (void *arg)
   if (status != S_SUCCESS)
     {
       error ("Could not send alphabet to client");
-      return (S_FAILURE);
+      client_disconnect (ctx);
+      return (S_SUCCESS);
     }
 
   return (push_job (ctx, ctx->write_state.vec_extra_sz != 0
@@ -675,7 +753,9 @@ handle_io (void *arg)
 
       trace ("Got job from a job queue");
 
-      if (job.job_func (job.arg) == S_FAILURE)
+      status_t st = job.job_func (job.arg);
+      client_job_unref (job.arg);
+      if (st == S_FAILURE)
         {
           error ("Could not complete a job");
           break;

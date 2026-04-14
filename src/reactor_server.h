@@ -54,6 +54,9 @@ typedef struct client_context_t
   pthread_mutex_t is_writing_mutex;
   pthread_mutex_t is_starving_mutex;
   pthread_mutex_t registry_used_mutex;
+  pthread_mutex_t ref_mutex;
+  int ref_count;
+  bool closing;
 } client_context_t;
 
 typedef struct job_t
