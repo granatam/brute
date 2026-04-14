@@ -538,7 +538,8 @@ create_task_job (void *arg)
           == QS_FAILURE)
         {
           error ("Could not push client to starving clients queue");
-          client_job_unref (ctx);
+          if (client_job_unref (ctx))
+            return (S_SUCCESS);
           client_disconnect (ctx);
           goto clear_writing_flag;
         }
