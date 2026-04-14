@@ -405,7 +405,6 @@ run_async_server (task_t *task, config_t *config)
       error ("Could not initialize server context");
       return (false);
     }
-  base_ptr->mt_ctx.cancel_tp = false;
 
   if (!thread_create (&srv_base.mt_ctx.thread_pool, handle_clients, &base_ptr,
                       sizeof (base_ptr), "async accepter"))

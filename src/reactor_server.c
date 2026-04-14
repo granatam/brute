@@ -107,6 +107,17 @@ rsrv_context_destroy (rsrv_context_t *ctx)
   event_base_loopbreak (ctx->ev_base);
   trace ("Stopped event loop");
 
+  if (queue_cancel (&ctx->jobs_queue) == QS_FAILURE)
+    {
+      error ("Could not cancel jobs queue");
+      return (S_FAILURE);
+    }
+  if (queue_cancel (&ctx->starving_clients) == QS_FAILURE)
+    {
+      error ("Could not cancel starving clients queue");
+      return (S_FAILURE);
+    }
+
   if (srv_base_context_destroy (&ctx->srv_base) == S_FAILURE)
     {
       error ("Could not destroy server context");

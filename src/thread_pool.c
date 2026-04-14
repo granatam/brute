@@ -273,12 +273,6 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
 }
 
 status_t
-thread_pool_cancel (thread_pool_t *thread_pool)
-{
-  return (thread_pool_collect (thread_pool, true));
-}
-
-status_t
 thread_pool_join (thread_pool_t *thread_pool)
 {
   return (thread_pool_collect (thread_pool, false));
