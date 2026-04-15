@@ -91,8 +91,6 @@ collect_events_cb (const struct event_base *ev_base, const struct event *ev,
 }
 
 static void client_context_destroy (client_context_t *ctx);
-static status_t client_job_ref (client_context_t *ctx);
-static bool client_job_unref (client_context_t *ctx);
 static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
 
 static void
