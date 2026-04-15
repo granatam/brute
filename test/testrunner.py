@@ -37,9 +37,6 @@ VALGRIND_CMD = " ".join(
     (
         "valgrind",
         f"--suppressions={VALGRIND_SUPPRESSIONS}",
-        "--show-leak-kinds=all",
-        "--errors-for-leak-kinds=all",
-        "--gen-suppressions=all",
         "--leak-check=full",
         "--error-exitcode=1",
         "--trace-children=yes",
