@@ -390,7 +390,7 @@ write_state_write_wrapper (int socket_fd, struct iovec *vec, int *vec_sz)
     }
 
   int i = 0;
-  while (actual_write > 0 && vec[i].iov_len <= actual_write)
+  while (i < *vec_sz && actual_write > 0 && vec[i].iov_len <= actual_write)
     actual_write -= vec[i++].iov_len;
 
   *vec_sz -= i;
