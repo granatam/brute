@@ -262,19 +262,27 @@ return_tasks (client_context_t *ctx)
   mt_context_t *mt_ctx = &ctx->rsrv_ctx->srv_base.mt_ctx;
   status_t status = S_SUCCESS;
 
-  int i;
-  for (i = 0; i < QUEUE_SIZE; ++i)
+  for (int i = 0; i < QUEUE_SIZE; ++i)
     {
-      if (ctx->registry_used[i])
+      if (!ctx->registry_used[i])
+        continue;
+
+      queue_status_t qs = queue_push_back (&mt_ctx->queue, &ctx->registry[i]);
+      if (qs == QS_SUCCESS)
         {
-          if (queue_push_back (&mt_ctx->queue, &ctx->registry[i])
-              != QS_SUCCESS)
-            {
-              status = S_FAILURE;
-              break;
-            }
           ctx->registry_used[i] = false;
+          continue;
         }
+      if (qs == QS_INACTIVE)
+        {
+          trace ("Global task queue is inactive, dropping returned task id %d",
+                 i);
+          ctx->registry_used[i] = false;
+          continue;
+        }
+
+      status = S_FAILURE;
+      break;
     }
 
   return (status);
