@@ -30,7 +30,6 @@ thread_pool_init (thread_pool_t *thread_pool)
   thread_pool->threads.next = &thread_pool->threads;
   thread_pool->threads.thread = pthread_self ();
   thread_pool->count = 0;
-  thread_pool->cancelled = false;
 
   return (S_SUCCESS);
 }
@@ -63,9 +62,6 @@ thread_run (void *arg)
   char args[local_ctx.arg_size];
   memcpy (args, local_ctx.arg, local_ctx.arg_size);
 
-  if (pthread_setcancelstate (PTHREAD_CANCEL_DISABLE, NULL) != 0)
-    error ("Could not set cancel state");
-
   if (pthread_mutex_unlock (&tp_ctx->mutex) != 0)
     {
       error ("Could not unlock mutex");
@@ -82,14 +78,6 @@ thread_run (void *arg)
       return (NULL);
     }
 
-  if (thread_pool->cancelled)
-    {
-      --thread_pool->count;
-      pthread_cond_signal (&thread_pool->cond);
-      pthread_mutex_unlock (&thread_pool->mutex);
-
-      return (NULL);
-    }
   node.next = &thread_pool->threads;
   node.prev = thread_pool->threads.prev;
 
@@ -102,10 +90,7 @@ thread_run (void *arg)
   if (pthread_mutex_unlock (&thread_pool->mutex) != 0)
     error ("Could not unlock mutex");
 
-  if (pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL) != 0)
-    error ("Could not set cancel state for a thread");
-  else
-    local_ctx.func (args);
+  local_ctx.func (args);
 
   pthread_cleanup_pop (!0);
 
@@ -188,7 +173,7 @@ thread_create (thread_pool_t *thread_pool, void *(*func) (void *), void *arg,
 }
 
 status_t
-thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
+thread_pool_join (thread_pool_t *thread_pool)
 {
   pthread_t self_id = pthread_self ();
 
@@ -200,8 +185,6 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
           return (S_FAILURE);
         }
 
-      if (cancel)
-        thread_pool->cancelled = true;
       pthread_t thread = thread_pool->threads.next->thread;
       const char *name = thread_pool->threads.next->name;
       (void)name; /* to suppress unused variable warning in non-trace mode */
@@ -224,11 +207,6 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
           error ("Could not lock a mutex");
           return (S_FAILURE);
         }
-
-      if (cancel)
-        if (pthread_cancel (thread) != 0)
-          error ("Could not cancel a thread");
-      trace ("Cancelled thread '%s'\n", name ? name : "unnamed");
 
       while (thread_pool->threads.next->thread == thread)
         if (pthread_cond_wait (&thread_pool->cond, &thread_pool->mutex) != 0)
@@ -258,12 +236,6 @@ thread_pool_collect (thread_pool_t *thread_pool, bool cancel)
   pthread_cleanup_pop (!0);
 
   return (S_SUCCESS);
-}
-
-status_t
-thread_pool_join (thread_pool_t *thread_pool)
-{
-  return (thread_pool_collect (thread_pool, false));
 }
 
 int
