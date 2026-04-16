@@ -30,19 +30,19 @@ jobs:
         run: ${{ inputs.cc_prefix }} make dev
       - name: test (dev)
         run: ${{ inputs.valgrind_prefix }} make check
+      - name: build with UBSan and ASan (dev)
+        run: |
+            export CFLAGS="$CFLAGS -O0 -g3 -gdwarf-4 -fsanitize=undefined,address -fno-omit-frame-pointer"
+            ${{ inputs.cc_prefix }} make dev
+      - name: test with UBSan and ASan (dev)
+        run: make check
       - name: build (release)
         run: ${{ inputs.cc_prefix }} make release
       - name: test (release)
         run: ${{ inputs.valgrind_prefix }} make check
-      # - name: build with ASan (release)
-      #   run: |
-      #       export CFLAGS="$CFLAGS -O2 -Wall -Wextra -gdwarf-4 -fsanitize=address -fno-omit-frame-pointer"
-      #       ${{ inputs.cc_prefix }} make release
-      # - name: test with ASan (release)
-      #   run: make check
-      - name: build with UBSan (release)
+      - name: build with UBSan and ASan (release)
         run: |
-            export CFLAGS="$CFLAGS -O2 -Wall -Wextra -gdwarf-4 -fsanitize=undefined -fno-omit-frame-pointer"
+            export CFLAGS="$CFLAGS -O3 -DNDEBUG -g0 -fsanitize=undefined,address -fno-omit-frame-pointer"
             ${{ inputs.cc_prefix }} make release
-      - name: test with UBSan (release)
+      - name: test with UBSan and ASan (release)
         run: make check
