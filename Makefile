@@ -3,7 +3,7 @@
 
 OPT_LEVEL ?= -O2
 CFLAGS ?= ${OPT_LEVEL} -Wall -Wextra ${DBG_FLAGS}
-CFLAGS +=-pthread -I./crypt
+CFLAGS +=-std=c11 -pthread -I./crypt
 LIBS+=-levent -levent_pthreads
 
 CRYPT_LIB=crypt/libcrypt.a
