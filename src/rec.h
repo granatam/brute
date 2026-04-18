@@ -8,7 +8,7 @@
 #include <stdbool.h>
 #include <ucontext.h>
 
-#define STACK_SIZE MINSIGSTKSZ
+#define STACK_SIZE (64 * 1024)
 
 typedef struct rec_state_t
 {
