@@ -70,8 +70,10 @@ status_t
 client_base_context_destroy (client_base_context_t *client_base)
 {
   shutdown (client_base->socket_fd, SHUT_RDWR);
-  close (client_base->socket_fd);
   trace ("Closed connection with server");
+
+  if (close (client_base->socket_fd) != 0)
+    error ("Could not close socket");
 
   return (S_SUCCESS);
 }

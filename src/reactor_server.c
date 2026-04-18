@@ -297,8 +297,10 @@ client_context_destroy (client_context_t *ctx)
   trace ("Destroyed registry indices queue");
 
   shutdown (ctx->socket_fd, SHUT_RDWR);
-  close (ctx->socket_fd);
-  trace ("Closed client socket");
+  if (close (ctx->socket_fd) != 0)
+    error ("Could not close client socket");
+  else
+    trace ("Closed client socket");
 
   if (event_del (ctx->read_event) == -1)
     error ("Could not delete read event");
@@ -876,8 +878,9 @@ destroy_ctx:
   return;
 
 fail:
-  if (close_client (fd) == S_FAILURE)
-    error ("Could not close client");
+  shutdown (fd, SHUT_RDWR);
+  if (close (fd) != 0)
+    error ("Could not close client socket");
 }
 
 bool

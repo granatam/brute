@@ -8,8 +8,12 @@
 
 #include <pthread.h>
 #include <signal.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <sys/socket.h>
+#include <unistd.h>
 
 typedef struct client_context_t
 {
@@ -19,7 +23,7 @@ typedef struct client_context_t
   bool registry_used[QUEUE_SIZE];
   bool tasks_returned;
   int socket_fd;
-  unsigned char ref_count;
+  _Atomic unsigned char ref_count;
   pthread_mutex_t mutex;
 } client_context_t;
 
@@ -85,35 +89,11 @@ client_context_destroy (client_context_t *ctx)
   if (pthread_mutex_destroy (&ctx->mutex) != 0)
     error ("Could not destroy mutex");
 
-  /* Client is already closed so we don't need to close a socket here. */
+  close (ctx->socket_fd);
 
   free (ctx);
 
   trace ("Freed client context");
-}
-
-static status_t
-return_tasks (client_context_t *ctx)
-{
-  mt_context_t *mt_ctx = &ctx->srv_base->mt_ctx;
-  status_t status = S_SUCCESS;
-
-  int i;
-  for (i = 0; i < QUEUE_SIZE; ++i)
-    {
-      if (ctx->registry_used[i])
-        {
-          if (queue_push_back (&mt_ctx->queue, &ctx->registry[i])
-              != QS_SUCCESS)
-            {
-              status = S_FAILURE;
-              break;
-            }
-          ctx->registry_used[i] = false;
-        }
-    }
-
-  return (status);
 }
 
 static void
@@ -126,45 +106,49 @@ sender_receiver_cleanup (void *arg)
   if (queue_cancel (&ctx->registry_idx) != QS_SUCCESS)
     error ("Could not cancel registry indices queue");
 
-  bool is_last;
+  task_t to_return[QUEUE_SIZE];
+  int to_return_count = 0;
+
   if (pthread_mutex_lock (&ctx->mutex) != 0)
     {
       error ("Could not lock mutex");
       return;
     }
-
-  pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
-
   if (!ctx->tasks_returned)
     {
       ctx->tasks_returned = true;
-      if (pthread_mutex_unlock (&ctx->mutex) != 0)
+      for (int i = 0; i < QUEUE_SIZE; ++i)
         {
-          error ("Could not unlock mutex");
-          return;
-        }
-      return_tasks (ctx);
-      if (pthread_mutex_lock (&ctx->mutex) != 0)
-        {
-          error ("Could not lock mutex");
-          return;
+          if (ctx->registry_used[i])
+            {
+              to_return[to_return_count++] = ctx->registry[i];
+              ctx->registry_used[i] = false;
+            }
         }
     }
-
-  is_last = (--ctx->ref_count == 0);
-
-  /* If sender is the first thread to exit, close socket so the receiver
-   * blocked in recv unblocks and exits. */
-  if (!is_last)
+  if (pthread_mutex_unlock (&ctx->mutex) != 0)
     {
-      if (ctx->socket_fd >= 0)
+      error ("Could not unlock mutex");
+      return;
+    }
+
+  for (int i = 0; i < to_return_count; ++i)
+    {
+      mt_context_t *mt_ctx = (mt_context_t *)ctx;
+      if (queue_push_back (&mt_ctx->queue, &to_return[i]) != QS_SUCCESS)
         {
-          close_client (ctx->socket_fd);
-          ctx->socket_fd = -1;
+          error ("Could not push task back to global queue");
         }
     }
 
-  pthread_cleanup_pop (!0);
+  bool is_last
+      = (atomic_fetch_sub_explicit (&ctx->ref_count, 1, memory_order_acq_rel)
+         == 1);
+
+  /* If sender is the first thread to exit, shutdown socket connection so the
+   * receiver blocked in recv unblocks and exits. */
+  if (!is_last && ctx->socket_fd >= 0)
+    shutdown (ctx->socket_fd, SHUT_RDWR);
 
   if (is_last)
     client_context_destroy (ctx);
@@ -278,26 +262,6 @@ cleanup:
   return (NULL);
 }
 
-static status_t
-increment_ref_count (client_context_t *ctx)
-{
-  if (pthread_mutex_lock (&ctx->mutex) != 0)
-    {
-      error ("Could not lock client context mutex");
-      return (S_FAILURE);
-    }
-
-  ++ctx->ref_count;
-
-  if (pthread_mutex_unlock (&ctx->mutex) != 0)
-    {
-      error ("Could not unlock client context mutex");
-      return (S_FAILURE);
-    }
-
-  return (S_SUCCESS);
-}
-
 static void *
 handle_clients (void *arg)
 {
@@ -326,8 +290,8 @@ handle_clients (void *arg)
           client_ctx->socket_fd = socket_fd;
         }
 
-      if (increment_ref_count (client_ctx) == S_FAILURE)
-        goto cleanup;
+      atomic_fetch_add_explicit (&client_ctx->ref_count, 1,
+                                 memory_order_relaxed);
 
       pthread_t sender
           = thread_create (&mt_ctx->thread_pool, task_sender, &client_ctx,
@@ -340,8 +304,8 @@ handle_clients (void *arg)
 
       trace ("Created a sender thread: %08x", sender);
 
-      if (increment_ref_count (client_ctx) == S_FAILURE)
-        goto cleanup;
+      atomic_fetch_add_explicit (&client_ctx->ref_count, 1,
+                                 memory_order_relaxed);
 
       pthread_t receiver
           = thread_create (&mt_ctx->thread_pool, result_receiver, &client_ctx,
@@ -354,31 +318,15 @@ handle_clients (void *arg)
 
       trace ("Created a receiver thread: %08x", receiver);
 
-      if (pthread_mutex_lock (&client_ctx->mutex) != 0)
-        {
-          error ("Could not lock client context mutex");
-          goto cancel_receiver;
-        }
-
-      bool is_last = (--client_ctx->ref_count == 0);
-
-      if (pthread_mutex_unlock (&client_ctx->mutex) != 0)
-        {
-          error ("Could not unlock client context mutex");
-          goto cancel_receiver;
-        }
-
-      if (is_last)
+      if (atomic_fetch_sub_explicit (&client_ctx->ref_count, 1,
+                                     memory_order_acq_rel)
+          == 1)
         client_context_destroy (client_ctx);
 
       client_ctx = NULL;
       socket_fd = 0;
 
       continue;
-
-    cancel_receiver:
-      pthread_cancel (receiver);
-      pthread_join (receiver, NULL);
 
     cancel_sender:
       pthread_cancel (sender);
