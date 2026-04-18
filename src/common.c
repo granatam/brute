@@ -1,6 +1,5 @@
 #include "common.h"
 
-#define __USE_GNU
 #include <errno.h>
 #include <pthread.h>
 #include <stddef.h>
