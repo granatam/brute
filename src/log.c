@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #include "log.h"
 #include "common.h"
 
