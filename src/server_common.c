@@ -125,21 +125,6 @@ accept_client (int srv_socket_fd, int *client_socket_fd)
 }
 
 status_t
-close_client (int socket_fd)
-{
-  shutdown (socket_fd, SHUT_RDWR);
-  if (close (socket_fd) != 0)
-    {
-      error ("Could not close client socket");
-      return (S_FAILURE);
-    }
-
-  trace ("Closed connection with client");
-
-  return (S_SUCCESS);
-}
-
-status_t
 send_hash (int socket_fd, mt_context_t *mt_ctx)
 {
   command_t cmd = CMD_HASH;

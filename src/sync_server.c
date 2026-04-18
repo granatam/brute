@@ -7,6 +7,9 @@
 #include "thread_pool.h"
 
 #include <string.h>
+#include <unistd.h>
+
+#include <sys/socket.h>
 
 typedef struct client_context_t
 {
@@ -102,7 +105,9 @@ handle_clients (void *arg)
         {
           error ("Could not create client thread");
 
-          close_client (client_ctx.socket_fd);
+          shutdown (client_ctx.socket_fd, SHUT_RDWR);
+          if (close (client_ctx.socket_fd) != 0)
+            error ("Could not close client socket");
           continue;
         }
     }

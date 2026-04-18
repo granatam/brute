@@ -16,7 +16,6 @@ status_t srv_base_context_init (srv_base_context_t *srv_base,
 status_t srv_base_context_destroy (srv_base_context_t *srv_base);
 
 status_t accept_client (int srv_socket_fd, int *client_socket_fd);
-status_t close_client (int socket_fd);
 
 status_t send_hash (int socket_fd, mt_context_t *ctx);
 status_t send_alph (int socket_fd, mt_context_t *ctx);
