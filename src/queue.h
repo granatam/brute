@@ -35,12 +35,16 @@ typedef struct queue_t
   ll_node_t list;
 } queue_t;
 
+typedef void (*queue_drain_fn_t) (void *payload, void *arg);
+
 queue_status_t queue_init (queue_t *queue, size_t unit_size);
 queue_status_t queue_push (queue_t *queue, void *payload);
 queue_status_t queue_push_back (queue_t *queue, void *payload);
 queue_status_t queue_pop (queue_t *queue, void *payload);
 queue_status_t queue_trypop (queue_t *queue, void *payload);
 queue_status_t queue_cancel (queue_t *queue);
+queue_status_t queue_drain (queue_t *queue, queue_drain_fn_t drain_fn,
+                            void *arg);
 queue_status_t queue_destroy (queue_t *queue);
 
 #endif // QUEUE_H

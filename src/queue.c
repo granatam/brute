@@ -106,6 +106,26 @@ cleanup_free_handler (void *ptr)
     }
 }
 
+static void
+queue_pop_raw (queue_t *queue, void *payload)
+{
+  if (queue->list.next != &queue->list)
+    {
+      ll_node_t *node = queue->list.next;
+      memcpy (payload, node->payload, queue->unit_size);
+
+      queue->list.next = node->next;
+      node->next->prev = &queue->list;
+      free (node);
+    }
+  else
+    {
+      memcpy (payload, (char *)queue->queue + (queue->head * queue->unit_size),
+              queue->unit_size);
+      queue->head = (queue->head + 1) % QUEUE_SIZE;
+    }
+}
+
 static queue_status_t
 queue_pop_internal (queue_t *queue, void *payload)
 {
@@ -120,20 +140,7 @@ queue_pop_internal (queue_t *queue, void *payload)
   if (pthread_mutex_lock (&queue->head_mutex) != 0)
     goto fail;
 
-  if (queue->list.next != &queue->list)
-    {
-      node_to_pop = queue->list.next;
-      memcpy (payload, node_to_pop->payload, queue->unit_size);
-
-      queue->list.next = node_to_pop->next;
-      node_to_pop->next->prev = &queue->list;
-    }
-  else
-    {
-      memcpy (payload, (char *)queue->queue + (queue->head * queue->unit_size),
-              queue->unit_size);
-      queue->head = (queue->head + 1) % QUEUE_SIZE;
-    }
+  queue_pop_raw (queue, payload);
 
   if (pthread_mutex_unlock (&queue->head_mutex) != 0)
     goto fail;
@@ -189,6 +196,40 @@ queue_cancel (queue_t *queue)
     return (QS_FAILURE);
 
   if (sem_post (&queue->empty) != SS_SUCCESS)
+    return (QS_FAILURE);
+
+  return (QS_SUCCESS);
+}
+
+queue_status_t
+queue_drain (queue_t *queue, queue_drain_fn_t drain_fn, void *arg)
+{
+  unsigned int full_count = queue->full.counter;
+
+  if (!queue->active && full_count > 0)
+    --full_count;
+
+  if (pthread_mutex_lock (&queue->head_mutex) != 0)
+    return (QS_FAILURE);
+
+  void *payload = malloc (queue->unit_size);
+  if (!payload)
+    {
+      pthread_mutex_unlock (&queue->head_mutex);
+      return (QS_FAILURE);
+    }
+
+  for (unsigned int i = 0; i < full_count; ++i)
+    {
+      queue_pop_raw (queue, payload);
+
+      if (drain_fn)
+        drain_fn (payload, arg);
+    }
+
+  free (payload);
+
+  if (pthread_mutex_unlock (&queue->head_mutex) != 0)
     return (QS_FAILURE);
 
   return (QS_SUCCESS);

@@ -44,6 +44,7 @@ typedef struct rsrv_context_t
   queue_t jobs_queue;
   queue_t starving_clients;
   struct event_base *ev_base;
+  bool shutting_down;
 } rsrv_context_t;
 
 typedef struct io_state_t
@@ -86,6 +87,7 @@ typedef struct client_context_t
 static status_t
 rsrv_ctx_init (rsrv_context_t *ctx)
 {
+  ctx->shutting_down = true;
   if (queue_init (&ctx->starving_clients, sizeof (client_context_t *))
       == QS_FAILURE)
     {
@@ -192,29 +194,25 @@ clients_cleanup (event_list_t *list)
 }
 
 static void
-release_starving_clients_refs (queue_t *starving_clients)
+jobs_queue_unref_cb (void *payload, void *arg)
 {
-  client_context_t *client;
-  queue_status_t qs;
+  (void)arg;
+  job_t *job = payload;
+  client_job_unref (job->arg);
+}
 
-  for (;;)
-    {
-      qs = queue_trypop (starving_clients, &client);
-      if (qs == QS_EMPTY)
-        return;
-      if (qs != QS_SUCCESS)
-        {
-          error ("Could not drain starving clients queue");
-          return;
-        }
-
-      client_job_unref (client);
-    }
+static void
+starving_clients_unref_cb (void *payload, void *arg)
+{
+  (void)arg;
+  client_context_t *client = *(client_context_t **)payload;
+  client_job_unref (client);
 }
 
 static status_t
 rsrv_context_destroy (rsrv_context_t *ctx)
 {
+  ctx->shutting_down = true;
   event_base_loopbreak (ctx->ev_base);
   trace ("Stopped event loop");
 
@@ -228,7 +226,6 @@ rsrv_context_destroy (rsrv_context_t *ctx)
       error ("Could not cancel starving clients queue");
       return (S_FAILURE);
     }
-  release_starving_clients_refs (&ctx->starving_clients);
 
   if (srv_base_context_destroy (&ctx->srv_base) == S_FAILURE)
     {
@@ -236,6 +233,13 @@ rsrv_context_destroy (rsrv_context_t *ctx)
       return (S_FAILURE);
     }
   trace ("Destroyed server context");
+
+  if (queue_drain (&ctx->jobs_queue, jobs_queue_unref_cb, NULL) != QS_SUCCESS)
+    error ("Could not drain jobs queue");
+
+  if (queue_drain (&ctx->starving_clients, starving_clients_unref_cb, NULL)
+      != QS_SUCCESS)
+    error ("Could not drain starving clients queue");
 
   if (queue_destroy (&ctx->jobs_queue) == QS_FAILURE)
     {
@@ -387,7 +391,7 @@ client_context_destroy (client_context_t *ctx)
   assert (ctx->read_event == NULL);
   assert (atomic_load_explicit (&ctx->ref_count, memory_order_relaxed) == 0);
 
-  if (return_tasks (ctx) == S_FAILURE)
+  if (!ctx->rsrv_ctx->shutting_down && return_tasks (ctx) == S_FAILURE)
     error ("Could not return tasks to global queue");
 
   pthread_mutex_destroy (&ctx->mutex);
