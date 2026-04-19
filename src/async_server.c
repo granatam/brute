@@ -164,10 +164,12 @@ result_receiver (void *arg)
   while (true)
     {
       result_t task;
-      if (recv_wrapper (client_ctx->socket_fd, &task, sizeof (task), 0)
-          == S_FAILURE)
+      io_status_t recv_status
+          = recv_wrapper (client_ctx->socket_fd, &task, sizeof (task), 0);
+      if (recv_status != IOS_SUCCESS)
         {
-          error ("Could not receive result from client");
+          if (recv_status == IOS_FAILURE)
+            error ("Could not receive result from client");
           break;
         }
 

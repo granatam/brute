@@ -78,50 +78,99 @@ client_base_context_destroy (client_base_context_t *client_base)
   return (S_SUCCESS);
 }
 
-status_t
+io_status_t
+handle_alph (int socket_fd, char *alph)
+{
+  int length;
+  io_status_t recv_status
+      = recv_wrapper (socket_fd, &length, sizeof (length), 0);
+  if (recv_status != IOS_SUCCESS)
+    {
+      if (recv_status == IOS_FAILURE)
+        error ("Could not receive alphabet length from server");
+      return (recv_status);
+    }
+
+  if (length > MAX_ALPH_LENGTH)
+    {
+      error ("Received invalid alphabet length: %zu", length);
+      return (IOS_FAILURE);
+    }
+
+  recv_status = recv_wrapper (socket_fd, alph, length, 0);
+  if (recv_status != IOS_SUCCESS)
+    {
+      if (recv_status == IOS_FAILURE)
+        error ("Could not receive alphabet from server");
+      return (recv_status);
+    }
+  alph[length] = 0;
+
+  return (IOS_SUCCESS);
+}
+
+io_status_t
+handle_hash (int socket_fd, char *hash)
+{
+  io_status_t status = recv_wrapper (socket_fd, hash, HASH_LENGTH, 0);
+  if (status != IOS_SUCCESS)
+    {
+      if (status == IOS_FAILURE)
+        error ("Could not receive hash from server");
+      return (status);
+    }
+  hash[HASH_LENGTH - 1] = 0;
+
+  return (status);
+}
+
+void
 client_base_recv_loop (client_base_context_t *client_base, task_t *task,
                        client_task_handler_t task_hdlr, void *arg)
 {
-  status_t status = S_SUCCESS;
   while (true)
     {
       command_t cmd;
-      if (recv_wrapper (client_base->socket_fd, &cmd, sizeof (cmd), 0)
-          == S_FAILURE)
+      io_status_t recv_status
+          = recv_wrapper (client_base->socket_fd, &cmd, sizeof (cmd), 0);
+      if (recv_status != IOS_SUCCESS)
         {
-          error ("Could not receive command from server");
-          status = S_FAILURE;
-          goto end;
+          if (recv_status == IOS_FAILURE)
+            error ("Could not receive command from server");
+          break;
         }
 
       switch (cmd)
         {
         case CMD_ALPH:
-          if (handle_alph (client_base->socket_fd, client_base->alph)
-              == S_FAILURE)
+          recv_status
+              = handle_alph (client_base->socket_fd, client_base->alph);
+          if (recv_status != IOS_SUCCESS)
             {
-              error ("Could not handle alphabet");
-              status = S_FAILURE;
+              if (recv_status == IOS_FAILURE)
+                error ("Could not handle alphabet");
               goto end;
             }
           trace ("Received alphabet '%s' from server", client_base->alph);
           break;
         case CMD_HASH:
-          if (handle_hash (client_base->socket_fd, client_base->hash)
-              == S_FAILURE)
+          recv_status
+              = handle_hash (client_base->socket_fd, client_base->hash);
+          if (recv_status != IOS_SUCCESS)
             {
-              error ("Could not handle hash");
-              status = S_FAILURE;
+              if (recv_status == IOS_FAILURE)
+                error ("Could not handle hash");
               goto end;
             }
           trace ("Received hash '%s' from server", client_base->hash);
           break;
         case CMD_TASK:
-          if (recv_wrapper (client_base->socket_fd, task, sizeof (task_t), 0)
-              == S_FAILURE)
+          recv_status = recv_wrapper (client_base->socket_fd, task,
+                                      sizeof (task_t), 0);
+          if (recv_status != IOS_SUCCESS)
             {
-              error ("Could not receive task from server");
-              status = S_FAILURE;
+              if (recv_status == IOS_FAILURE)
+                error ("Could not receive task from server");
               goto end;
             }
           trace ("Received task from server");
@@ -132,40 +181,6 @@ client_base_recv_loop (client_base_context_t *client_base, task_t *task,
 
 end:
   trace ("Receiving information from server is finished");
-  return (status);
-}
-
-status_t
-handle_alph (int socket_fd, char *alph)
-{
-  int32_t length;
-  if (recv_wrapper (socket_fd, &length, sizeof (length), 0) == S_FAILURE)
-    {
-      error ("Could not receive alphabet length from server");
-      return (S_FAILURE);
-    }
-
-  if (recv_wrapper (socket_fd, alph, length, 0) == S_FAILURE)
-    {
-      error ("Could not receive alphabet from server");
-      return (S_FAILURE);
-    }
-  alph[length] = 0;
-
-  return (S_SUCCESS);
-}
-
-status_t
-handle_hash (int socket_fd, char *hash)
-{
-  if (recv_wrapper (socket_fd, hash, HASH_LENGTH, 0) == S_FAILURE)
-    {
-      error ("Could not receive hash from server");
-      return (S_FAILURE);
-    }
-  hash[HASH_LENGTH - 1] = 0;
-
-  return (S_SUCCESS);
 }
 
 int

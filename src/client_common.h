@@ -22,14 +22,16 @@ typedef status_t (*client_task_handler_t) (client_base_context_t *, task_t *,
 
 status_t client_base_context_init (client_base_context_t *client_base,
                                    config_t *config, task_callback_t task_cb);
-status_t srv_connect (client_base_context_t *client_base);
 status_t client_base_context_destroy (client_base_context_t *client_base);
-status_t client_base_recv_loop (client_base_context_t *client_base,
-                                task_t *task, client_task_handler_t task_hdlr,
-                                void *task_hdlr_arg);
 
-status_t handle_alph (int socket_fd, char *alph);
-status_t handle_hash (int socket_fd, char *hash);
+status_t srv_connect (client_base_context_t *client_base);
+
+io_status_t handle_alph (int socket_fd, char *alph);
+io_status_t handle_hash (int socket_fd, char *hash);
+void client_base_recv_loop (client_base_context_t *client_base, task_t *task,
+                            client_task_handler_t task_hdlr,
+                            void *task_hdlr_arg);
+
 int ms_sleep (long milliseconds);
 
 #endif // CLIENT_COMMON_H

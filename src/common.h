@@ -46,7 +46,14 @@ typedef enum command_t
 
 void cleanup_mutex_unlock (void *mutex);
 
-status_t recv_wrapper (int socket_fd, void *buf, int len, int flags);
-status_t send_wrapper (int socket_fd, struct iovec *vec, int iovcnt);
+typedef enum
+{
+  IOS_SUCCESS,
+  IOS_CONN_CLOSED,
+  IOS_FAILURE,
+} io_status_t;
+
+io_status_t recv_wrapper (int socket_fd, void *buf, size_t len, int flags);
+io_status_t send_wrapper (int socket_fd, struct iovec *vec, int iovcnt);
 
 #endif // COMMON_H
