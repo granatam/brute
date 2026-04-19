@@ -146,22 +146,14 @@ client_base_recv_loop (client_base_context_t *client_base, task_t *task,
           recv_status
               = handle_alph (client_base->socket_fd, client_base->alph);
           if (recv_status != IOS_SUCCESS)
-            {
-              if (recv_status == IOS_FAILURE)
-                error ("Could not handle alphabet");
-              goto end;
-            }
+            goto end;
           trace ("Received alphabet '%s' from server", client_base->alph);
           break;
         case CMD_HASH:
           recv_status
               = handle_hash (client_base->socket_fd, client_base->hash);
           if (recv_status != IOS_SUCCESS)
-            {
-              if (recv_status == IOS_FAILURE)
-                error ("Could not handle hash");
-              goto end;
-            }
+            goto end;
           trace ("Received hash '%s' from server", client_base->hash);
           break;
         case CMD_TASK:
