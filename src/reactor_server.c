@@ -22,6 +22,13 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+typedef enum push_status
+{
+  PS_SUCCESS,
+  PS_FAILURE,
+  PS_DESTROYED,
+} push_status_t;
+
 typedef enum
 {
   CS_ACTIVE,
@@ -478,11 +485,11 @@ client_context_destroy (client_context_t *ctx)
   trace ("Destroyed client context");
 }
 
-static status_t
-push_job (client_context_t *ctx, status_t (*job_func) (void *))
+static push_status_t
+push_job_checked (client_context_t *ctx, status_t (*job_func) (void *))
 {
   if (!client_try_ref (ctx))
-    return (S_SUCCESS);
+    return (PS_SUCCESS);
 
   job_t job = {
     .arg = ctx,
@@ -491,11 +498,17 @@ push_job (client_context_t *ctx, status_t (*job_func) (void *))
   if (queue_push_back (&ctx->rsrv_ctx->jobs_queue, &job) != QS_SUCCESS)
     {
       error ("Could not push job to a job queue");
-      client_unref (ctx);
-      return (S_FAILURE);
+      return (client_unref (ctx) ? PS_DESTROYED : PS_FAILURE);
     }
 
-  return (S_SUCCESS);
+  return (PS_SUCCESS);
+}
+
+static status_t
+schedule_job (client_context_t *ctx, status_t (*job_func) (void *))
+{
+  return (push_job_checked (ctx, job_func) == PS_SUCCESS ? S_SUCCESS
+                                                         : S_FAILURE);
 }
 
 static status_t
@@ -586,7 +599,7 @@ send_config_job (void *arg)
         }
 
       if (ctx->write_state.base_state.vec_sz != 0)
-        return (push_job (ctx, send_config_job));
+        return (schedule_job (ctx, send_config_job));
     }
 
   status = write_state_write_extra (ctx->socket_fd, &ctx->write_state);
@@ -597,9 +610,9 @@ send_config_job (void *arg)
       return (S_SUCCESS);
     }
 
-  return (push_job (ctx, ctx->write_state.vec_extra_sz != 0
-                             ? send_config_job
-                             : create_task_job));
+  return (schedule_job (ctx, ctx->write_state.vec_extra_sz != 0
+                                 ? send_config_job
+                                 : create_task_job));
 }
 
 static status_t send_task_job (void *arg);
@@ -679,7 +692,7 @@ create_task_job (void *arg)
 
   task_write_state_setup (ctx, id);
 
-  return (push_job (ctx, send_task_job));
+  return (schedule_job (ctx, send_task_job));
 
 clear_writing_flag:
   pthread_mutex_lock (&ctx->mutex);
@@ -706,7 +719,7 @@ send_task_job (void *arg)
     }
 
   if (ctx->write_state.base_state.vec_sz != 0)
-    return (push_job (ctx, send_task_job));
+    return (schedule_job (ctx, send_task_job));
 
   trace ("Sent task to client");
 
@@ -714,7 +727,7 @@ send_task_job (void *arg)
   ctx->state = CS_ACTIVE;
   pthread_mutex_unlock (&ctx->mutex);
 
-  return (push_job (ctx, create_task_job));
+  return (schedule_job (ctx, create_task_job));
 }
 
 static void
@@ -754,7 +767,7 @@ handle_accept (struct evconnlistener *listener, evutil_socket_t fd,
 
   trace ("Registered client read event");
 
-  if (push_job (client_ctx, send_config_job) == S_FAILURE)
+  if (schedule_job (client_ctx, send_config_job) == S_FAILURE)
     {
       error ("Could not add send_config job");
       goto release_event_ref;
@@ -861,10 +874,17 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
   bool is_writing = ctx->state == CS_WRITING;
   pthread_mutex_unlock (&ctx->mutex);
 
-  if (!is_writing && push_job (ctx, create_task_job) == S_FAILURE)
+  if (!is_writing)
     {
-      error ("Could not schedule create task job from read event");
-      return;
+      push_status_t ps = push_job_checked (ctx, create_task_job);
+      if (ps == PS_FAILURE)
+        {
+          error ("Could not schedule create task job from read event");
+          return;
+        }
+      if (ps == PS_DESTROYED)
+        return;
+      trace ("Pushed create task job from read event");
     }
 }
 
@@ -919,7 +939,10 @@ handle_starving_clients (void *arg)
       client->task_slots[id].in_use = true;
       pthread_mutex_unlock (&client->mutex);
 
-      if (push_job (client, send_task_job) == S_FAILURE)
+      push_status_t ps = push_job_checked (client, send_task_job);
+      if (ps == PS_DESTROYED)
+        continue;
+      if (ps == PS_FAILURE)
         goto fail_starving_take;
 
       pthread_mutex_lock (&client->mutex);
