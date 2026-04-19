@@ -191,6 +191,27 @@ clients_cleanup (event_list_t *list)
     }
 }
 
+static void
+release_starving_clients_refs (queue_t *starving_clients)
+{
+  client_context_t *client;
+  queue_status_t qs;
+
+  for (;;)
+    {
+      qs = queue_trypop (starving_clients, &client);
+      if (qs == QS_EMPTY)
+        return;
+      if (qs != QS_SUCCESS)
+        {
+          error ("Could not drain starving clients queue");
+          return;
+        }
+
+      client_job_unref (client);
+    }
+}
+
 static status_t
 rsrv_context_destroy (rsrv_context_t *ctx)
 {
@@ -207,6 +228,7 @@ rsrv_context_destroy (rsrv_context_t *ctx)
       error ("Could not cancel starving clients queue");
       return (S_FAILURE);
     }
+  release_starving_clients_refs (&ctx->starving_clients);
 
   if (srv_base_context_destroy (&ctx->srv_base) == S_FAILURE)
     {
