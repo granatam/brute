@@ -22,14 +22,6 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
-typedef enum push_status
-{
-  PS_SUCCESS,
-  PS_SKIPPED,
-  PS_FAILURE,
-  PS_DESTROYED,
-} push_status_t;
-
 typedef enum
 {
   CS_ACTIVE,
@@ -75,47 +67,14 @@ typedef struct client_context_t
   rsrv_context_t *rsrv_ctx;
   evutil_socket_t socket_fd;
   client_state_t state;
-  task_slot_t registry[QUEUE_SIZE];
-  queue_t registry_idx;
+  task_slot_t task_slots[QUEUE_SIZE];
+  queue_t free_slot_idx;
   write_state_t write_state;
   io_state_t read_state;
   result_t read_buffer;
   pthread_mutex_t mutex;
   _Atomic int ref_count;
 } client_context_t;
-
-static status_t
-rsrv_ctx_init (rsrv_context_t *ctx)
-{
-  ctx->shutting_down = true;
-  if (queue_init (&ctx->starving_clients, sizeof (client_context_t *))
-      == QS_FAILURE)
-    {
-      error ("Could not initialize a starving clients queue");
-      return (S_FAILURE);
-    }
-  if (queue_init (&ctx->jobs_queue, sizeof (job_t)) == QS_FAILURE)
-    {
-      error ("Could not initialize a jobs queue");
-      return (S_FAILURE);
-    }
-
-  ctx->ev_base = event_base_new ();
-  if (!ctx->ev_base)
-    {
-      error ("Could not initialize event base");
-      return (S_FAILURE);
-    }
-  trace ("Allocated memory for event loop base");
-
-  if (evutil_make_socket_nonblocking (ctx->srv_base.listen_fd) < 0)
-    {
-      error ("Could not change socket to be nonblocking");
-      return (S_FAILURE);
-    }
-
-  return (S_SUCCESS);
-}
 
 typedef struct event_node_t
 {
@@ -129,27 +88,46 @@ typedef struct event_list_t
   event_node_t head;
 } event_list_t;
 
-static int
-collect_events_cb (const struct event_base *ev_base, const struct event *ev,
-                   void *arg)
+static void
+client_disconnect (client_context_t *ctx)
 {
-  (void)ev_base; /* to suppress the "unused parameter" warning */
+  pthread_mutex_lock (&ctx->mutex);
+  ctx->state = CS_CLOSING;
+  pthread_mutex_unlock (&ctx->mutex);
+}
 
-  event_list_t *list = arg;
-  event_node_t *node = calloc (1, sizeof (*node));
-  node->next = &list->head;
-  node->prev = list->head.prev;
-  node->ev = ev;
+static bool
+client_try_ref (client_context_t *ctx)
+{
+  pthread_mutex_lock (&ctx->mutex);
+  if (ctx->state == CS_CLOSING)
+    {
+      pthread_mutex_unlock (&ctx->mutex);
+      return (false);
+    }
 
-  list->head.prev->next = node;
-  list->head.prev = node;
-
-  return 0;
+  atomic_fetch_add_explicit (&ctx->ref_count, 1, memory_order_relaxed);
+  pthread_mutex_unlock (&ctx->mutex);
+  return (true);
 }
 
 static void client_context_destroy (client_context_t *ctx);
-static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
-static bool client_job_unref (client_context_t *ctx);
+
+static bool
+client_unref (client_context_t *ctx)
+{
+  int old
+      = atomic_fetch_sub_explicit (&ctx->ref_count, 1, memory_order_acq_rel);
+  assert (old > 0);
+
+  if (old == 1)
+    {
+      client_context_destroy (ctx);
+      return true;
+    }
+
+  return false;
+}
 
 static void
 client_release_event_ref (client_context_t *ctx)
@@ -166,8 +144,56 @@ client_release_event_ref (client_context_t *ctx)
     error ("Could not delete read event");
   event_free (ev);
 
-  client_job_unref (ctx);
+  client_unref (ctx);
 }
+
+static bool
+client_is_closing (client_context_t *ctx)
+{
+  pthread_mutex_lock (&ctx->mutex);
+  bool is_closing = ctx->state == CS_CLOSING;
+  pthread_mutex_unlock (&ctx->mutex);
+
+  return (is_closing);
+}
+
+static void
+jobs_queue_unref_cb (void *payload, void *arg)
+{
+  (void)arg;
+  job_t *job = payload;
+  client_unref (job->arg);
+}
+
+static void
+starving_clients_unref_cb (void *payload, void *arg)
+{
+  (void)arg;
+  client_context_t *client = *(client_context_t **)payload;
+  client_unref (client);
+}
+
+static int
+collect_events_cb (const struct event_base *ev_base, const struct event *ev,
+                   void *arg)
+{
+  (void)ev_base; /* to suppress the "unused parameter" warning */
+
+  event_list_t *list = arg;
+  event_node_t *node = calloc (1, sizeof (*node));
+  if (!node)
+    return -1;
+  node->next = &list->head;
+  node->prev = list->head.prev;
+  node->ev = ev;
+
+  list->head.prev->next = node;
+  list->head.prev = node;
+
+  return 0;
+}
+
+static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
 
 static void
 clients_cleanup (event_list_t *list)
@@ -193,20 +219,153 @@ clients_cleanup (event_list_t *list)
     }
 }
 
-static void
-jobs_queue_unref_cb (void *payload, void *arg)
+static client_context_t *
+client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
 {
-  (void)arg;
-  job_t *job = payload;
-  client_job_unref (job->arg);
+  client_context_t *client_ctx = calloc (1, sizeof (*client_ctx));
+  if (!client_ctx)
+    {
+      error ("Could not allocate client context");
+      return (NULL);
+    }
+
+  if (pthread_mutex_init (&client_ctx->mutex, NULL) != 0)
+    {
+      error ("Could not initialize client mutex");
+      free (client_ctx);
+      return (NULL);
+    }
+  client_ctx->state = CS_ACTIVE;
+
+  client_ctx->socket_fd = fd;
+  client_ctx->rsrv_ctx = rsrv_ctx;
+  client_ctx->read_state.vec[0].iov_base = &client_ctx->read_buffer;
+  client_ctx->read_state.vec[0].iov_len = sizeof (client_ctx->read_buffer);
+  client_ctx->read_state.vec_sz = 1;
+
+  mt_context_t *mt_ctx = &client_ctx->rsrv_ctx->srv_base.mt_ctx;
+
+  write_state_t *write_state = &client_ctx->write_state;
+  io_state_t *write_state_base = &write_state->base_state;
+
+  /* Set up vector for hash sending */
+  write_state_base->cmd = CMD_HASH;
+  write_state_base->vec[0].iov_base = &write_state_base->cmd;
+  write_state_base->vec[0].iov_len = sizeof (write_state_base->cmd);
+  write_state_base->vec[1].iov_base = mt_ctx->config->hash;
+  write_state_base->vec[1].iov_len = HASH_LENGTH;
+  write_state_base->vec_sz = 2;
+
+  /* Set up vector for alphabet sending */
+  write_state->cmd_extra = CMD_ALPH;
+  write_state->length = strlen (mt_ctx->config->alph);
+  write_state->vec_extra[0].iov_base = &write_state->cmd_extra;
+  write_state->vec_extra[0].iov_len = sizeof (write_state->cmd_extra);
+  write_state->vec_extra[1].iov_base = &write_state->length;
+  write_state->vec_extra[1].iov_len = sizeof (write_state->length);
+  write_state->vec_extra[2].iov_base = mt_ctx->config->alph;
+  write_state->vec_extra[2].iov_len = write_state->length;
+  write_state->vec_extra_sz = 3;
+
+  bool free_slot_idx_initialized = false;
+  if (queue_init (&client_ctx->free_slot_idx, sizeof (int)) != QS_SUCCESS)
+    {
+      error ("Could not initialize free slot queue");
+      goto fail;
+    }
+  free_slot_idx_initialized = true;
+  for (int i = 0; i < QUEUE_SIZE; ++i)
+    if (queue_push (&client_ctx->free_slot_idx, &i) != QS_SUCCESS)
+      {
+        error ("Could not push index to free slot queue");
+        goto fail;
+      }
+
+  if (evutil_make_socket_nonblocking (client_ctx->socket_fd) != 0)
+    {
+      error ("Could not change socket to be nonblocking");
+      goto fail;
+    }
+
+  client_ctx->read_event
+      = event_new (rsrv_ctx->ev_base, client_ctx->socket_fd,
+                   EV_READ | EV_PERSIST, handle_read, client_ctx);
+  if (!client_ctx->read_event)
+    {
+      error ("Could not create read event");
+      goto fail;
+    }
+  client_ctx->ref_count = 1;
+
+  return (client_ctx);
+
+fail:
+  if (client_ctx->read_event)
+    event_free (client_ctx->read_event);
+
+  if (free_slot_idx_initialized
+      && queue_destroy (&client_ctx->free_slot_idx) != QS_SUCCESS)
+    error ("Could not destroy free slot queue");
+
+  pthread_mutex_destroy (&client_ctx->mutex);
+  free (client_ctx);
+  return (NULL);
 }
 
-static void
-starving_clients_unref_cb (void *payload, void *arg)
+static status_t
+rsrv_context_init (rsrv_context_t *ctx)
 {
-  (void)arg;
-  client_context_t *client = *(client_context_t **)payload;
-  client_job_unref (client);
+  bool starving_clients_initialized = false;
+  bool jobs_queue_initialized = false;
+
+  ctx->shutting_down = false;
+  ctx->ev_base = NULL;
+
+  if (queue_init (&ctx->starving_clients, sizeof (client_context_t *))
+      == QS_FAILURE)
+    {
+      error ("Could not initialize starving clients queue");
+      goto fail;
+    }
+  starving_clients_initialized = true;
+
+  if (queue_init (&ctx->jobs_queue, sizeof (job_t)) == QS_FAILURE)
+    {
+      error ("Could not initialize jobs queue");
+      goto fail;
+    }
+  jobs_queue_initialized = true;
+
+  ctx->ev_base = event_base_new ();
+  if (!ctx->ev_base)
+    {
+      error ("Could not initialize event base");
+      goto fail;
+    }
+
+  if (evutil_make_socket_nonblocking (ctx->srv_base.listen_fd) < 0)
+    {
+      error ("Could not change socket to be nonblocking");
+      goto fail;
+    }
+
+  return (S_SUCCESS);
+
+fail:
+  if (ctx->ev_base)
+    {
+      event_base_free (ctx->ev_base);
+      ctx->ev_base = NULL;
+    }
+
+  if (jobs_queue_initialized && queue_destroy (&ctx->jobs_queue) == QS_FAILURE)
+    error ("Could not destroy jobs queue during init cleanup");
+
+  if (starving_clients_initialized
+      && queue_destroy (&ctx->starving_clients) == QS_FAILURE)
+    error ("Could not destroy starving clients queue during init cleanup");
+
+  return (S_FAILURE);
 }
 
 static status_t
@@ -243,15 +402,15 @@ rsrv_context_destroy (rsrv_context_t *ctx)
 
   if (queue_destroy (&ctx->jobs_queue) == QS_FAILURE)
     {
-      error ("Could not destroy a jobs queue");
+      error ("Could not destroy jobs queue");
       return (S_FAILURE);
     }
   if (queue_destroy (&ctx->starving_clients) == QS_FAILURE)
     {
-      error ("Could not destroy a starving clients queue");
+      error ("Could not destroy starving clients queue");
       return (S_FAILURE);
     }
-  trace ("Destroyed global server queues");
+  trace ("Destroyed reactor server queues");
 
   event_list_t ev_list;
   ev_list.head.prev = &ev_list.head;
@@ -260,103 +419,10 @@ rsrv_context_destroy (rsrv_context_t *ctx)
   event_base_foreach_event (ctx->ev_base, collect_events_cb, &ev_list);
   clients_cleanup (&ev_list);
   event_base_free (ctx->ev_base);
-  trace ("Deallocated clients contexts");
+
+  trace ("Destroyed client contexts");
 
   return (S_SUCCESS);
-}
-
-static client_context_t *
-client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
-{
-  client_context_t *client_ctx = calloc (1, sizeof (*client_ctx));
-  if (!client_ctx)
-    {
-      error ("Could not allocate client context");
-      return (NULL);
-    }
-  trace ("Allocated memory for client context");
-
-  if (pthread_mutex_init (&client_ctx->mutex, NULL) != 0)
-    {
-      error ("Could not initialize client ref mutex");
-      free (client_ctx);
-      return (NULL);
-    }
-  client_ctx->state = CS_ACTIVE;
-
-  client_ctx->socket_fd = fd;
-  client_ctx->rsrv_ctx = rsrv_ctx;
-  client_ctx->read_state.vec[0].iov_base = &client_ctx->read_buffer;
-  client_ctx->read_state.vec[0].iov_len = sizeof (client_ctx->read_buffer);
-  client_ctx->read_state.vec_sz = 1;
-
-  mt_context_t *mt_ctx = &client_ctx->rsrv_ctx->srv_base.mt_ctx;
-
-  write_state_t *write_state = &client_ctx->write_state;
-  io_state_t *write_state_base = &write_state->base_state;
-
-  /* Set up vector for hash sending */
-  write_state_base->cmd = CMD_HASH;
-  write_state_base->vec[0].iov_base = &write_state_base->cmd;
-  write_state_base->vec[0].iov_len = sizeof (write_state_base->cmd);
-  write_state_base->vec[1].iov_base = mt_ctx->config->hash;
-  write_state_base->vec[1].iov_len = HASH_LENGTH;
-  write_state_base->vec_sz = 2;
-
-  /* Set up vector for alphabet sending */
-  write_state->cmd_extra = CMD_ALPH;
-  write_state->length = strlen (mt_ctx->config->alph);
-  write_state->vec_extra[0].iov_base = &write_state->cmd_extra;
-  write_state->vec_extra[0].iov_len = sizeof (write_state->cmd_extra);
-  write_state->vec_extra[1].iov_base = &write_state->length;
-  write_state->vec_extra[1].iov_len = sizeof (write_state->length);
-  write_state->vec_extra[2].iov_base = mt_ctx->config->alph;
-  write_state->vec_extra[2].iov_len = write_state->length;
-  write_state->vec_extra_sz = 3;
-
-  bool registry_idx_initialized = false;
-  if (queue_init (&client_ctx->registry_idx, sizeof (int)) != QS_SUCCESS)
-    {
-      error ("Could not initialize registry indices queue");
-      goto fail;
-    }
-  registry_idx_initialized = true;
-  for (int i = 0; i < QUEUE_SIZE; ++i)
-    if (queue_push (&client_ctx->registry_idx, &i) != QS_SUCCESS)
-      {
-        error ("Could not push index to registry indices queue");
-        goto fail;
-      }
-
-  if (evutil_make_socket_nonblocking (client_ctx->socket_fd) != 0)
-    {
-      error ("Could not change socket to be nonblocking");
-      goto fail;
-    }
-
-  client_ctx->read_event
-      = event_new (rsrv_ctx->ev_base, client_ctx->socket_fd,
-                   EV_READ | EV_PERSIST, handle_read, client_ctx);
-  if (!client_ctx->read_event)
-    {
-      error ("Could not create read event");
-      goto fail;
-    }
-  client_ctx->ref_count = 1;
-
-  return (client_ctx);
-
-fail:
-  if (client_ctx->read_event)
-    event_free (client_ctx->read_event);
-
-  if (registry_idx_initialized
-      && queue_destroy (&client_ctx->registry_idx) != QS_SUCCESS)
-    error ("Could not destroy registry indices queue");
-
-  pthread_mutex_destroy (&client_ctx->mutex);
-  free (client_ctx);
-  return (NULL);
 }
 
 static status_t
@@ -368,15 +434,15 @@ return_tasks (client_context_t *ctx)
   pthread_mutex_lock (&ctx->mutex);
   for (int i = 0; i < QUEUE_SIZE; ++i)
     {
-      if (ctx->registry[i].in_use)
+      if (ctx->task_slots[i].in_use)
         {
-          if (queue_push_back (&mt_ctx->queue, &ctx->registry[i].task)
+          if (queue_push_back (&mt_ctx->queue, &ctx->task_slots[i].task)
               != QS_SUCCESS)
             {
               status = S_FAILURE;
               break;
             }
-          ctx->registry[i].in_use = false;
+          ctx->task_slots[i].in_use = false;
         }
     }
   pthread_mutex_unlock (&ctx->mutex);
@@ -395,12 +461,12 @@ client_context_destroy (client_context_t *ctx)
     error ("Could not return tasks to global queue");
 
   pthread_mutex_destroy (&ctx->mutex);
-  trace ("Destroyed client's mutexes");
+  trace ("Destroyed client mutex");
 
-  if (queue_destroy (&ctx->registry_idx) != QS_SUCCESS)
-    error ("Could not destroy registry indices queue");
+  if (queue_destroy (&ctx->free_slot_idx) != QS_SUCCESS)
+    error ("Could not destroy free slot queue");
 
-  trace ("Destroyed registry indices queue");
+  trace ("Destroyed free slot queue");
 
   shutdown (ctx->socket_fd, SHUT_RDWR);
   if (close (ctx->socket_fd) != 0)
@@ -409,53 +475,14 @@ client_context_destroy (client_context_t *ctx)
     trace ("Closed client socket");
 
   free (ctx);
-  trace ("Deleted and deallocated event, free'd client context");
+  trace ("Destroyed client context");
 }
 
-static void
-client_disconnect (client_context_t *ctx)
-{
-  pthread_mutex_lock (&ctx->mutex);
-  ctx->state = CS_CLOSING;
-  pthread_mutex_unlock (&ctx->mutex);
-}
-
-static bool
-client_try_ref (client_context_t *ctx)
-{
-  pthread_mutex_lock (&ctx->mutex);
-  if (ctx->state == CS_CLOSING)
-    {
-      pthread_mutex_unlock (&ctx->mutex);
-      return (false);
-    }
-
-  atomic_fetch_add_explicit (&ctx->ref_count, 1, memory_order_relaxed);
-  pthread_mutex_unlock (&ctx->mutex);
-  return (true);
-}
-
-static bool
-client_job_unref (client_context_t *ctx)
-{
-  int old
-      = atomic_fetch_sub_explicit (&ctx->ref_count, 1, memory_order_acq_rel);
-  assert (old > 0);
-
-  if (old == 1)
-    {
-      client_context_destroy (ctx);
-      return true;
-    }
-
-  return false;
-}
-
-static push_status_t
+static status_t
 push_job (client_context_t *ctx, status_t (*job_func) (void *))
 {
   if (!client_try_ref (ctx))
-    return (PS_SKIPPED);
+    return (S_SUCCESS);
 
   job_t job = {
     .arg = ctx,
@@ -464,15 +491,12 @@ push_job (client_context_t *ctx, status_t (*job_func) (void *))
   if (queue_push_back (&ctx->rsrv_ctx->jobs_queue, &job) != QS_SUCCESS)
     {
       error ("Could not push job to a job queue");
-      if (client_job_unref (ctx))
-        return (PS_DESTROYED);
-      return (PS_FAILURE);
+      client_unref (ctx);
+      return (S_FAILURE);
     }
 
-  return (PS_SUCCESS);
+  return (S_SUCCESS);
 }
-
-static status_t create_task_job (void *arg);
 
 static status_t
 write_state_write_wrapper (int socket_fd, struct iovec *vec, int *vec_sz)
@@ -523,45 +547,10 @@ write_state_write_extra (int socket_fd, write_state_t *write_state)
                                      &write_state->vec_extra_sz));
 }
 
-static status_t
-send_task_job (void *arg)
-{
-  client_context_t *ctx = arg;
-
-  pthread_mutex_lock (&ctx->mutex);
-  if (ctx->state == CS_CLOSING)
-    {
-      pthread_mutex_unlock (&ctx->mutex);
-      return (S_SUCCESS);
-    }
-  pthread_mutex_unlock (&ctx->mutex);
-
-  status_t status = write_state_write (ctx->socket_fd, &ctx->write_state);
-  if (status != S_SUCCESS)
-    {
-      error ("Could not send task to client");
-      client_disconnect (ctx);
-      return (S_SUCCESS);
-    }
-
-  if (ctx->write_state.base_state.vec_sz != 0)
-    return (push_job (ctx, send_task_job) == PS_FAILURE ? S_FAILURE
-                                                        : S_SUCCESS);
-
-  trace ("Sent task to client");
-
-  pthread_mutex_lock (&ctx->mutex);
-  ctx->state = CS_ACTIVE;
-  pthread_mutex_unlock (&ctx->mutex);
-
-  return (push_job (ctx, create_task_job) == PS_FAILURE ? S_FAILURE
-                                                        : S_SUCCESS);
-}
-
 static void
 task_write_state_setup (client_context_t *ctx, int id)
 {
-  task_t *task = &ctx->registry[id].task;
+  task_t *task = &ctx->task_slots[id].task;
   task->result.id = id;
   task->to = task->from;
   task->from = 0;
@@ -574,6 +563,46 @@ task_write_state_setup (client_context_t *ctx, int id)
   write_state_base->vec[1].iov_len = sizeof (*task);
   write_state_base->vec_sz = 2;
 }
+
+static status_t create_task_job (void *arg);
+
+static status_t
+send_config_job (void *arg)
+{
+  client_context_t *ctx = arg;
+
+  if (client_is_closing (ctx))
+    return (S_SUCCESS);
+
+  status_t status;
+  if (ctx->write_state.base_state.vec_sz != 0)
+    {
+      status = write_state_write (ctx->socket_fd, &ctx->write_state);
+      if (status != S_SUCCESS)
+        {
+          error ("Could not send hash to client");
+          client_disconnect (ctx);
+          return (S_SUCCESS);
+        }
+
+      if (ctx->write_state.base_state.vec_sz != 0)
+        return (push_job (ctx, send_config_job));
+    }
+
+  status = write_state_write_extra (ctx->socket_fd, &ctx->write_state);
+  if (status != S_SUCCESS)
+    {
+      error ("Could not send alphabet to client");
+      client_disconnect (ctx);
+      return (S_SUCCESS);
+    }
+
+  return (push_job (ctx, ctx->write_state.vec_extra_sz != 0
+                             ? send_config_job
+                             : create_task_job));
+}
+
+static status_t send_task_job (void *arg);
 
 static status_t
 create_task_job (void *arg)
@@ -593,7 +622,7 @@ create_task_job (void *arg)
   int id;
   queue_status_t qs;
 
-  qs = queue_trypop (&ctx->registry_idx, &id);
+  qs = queue_trypop (&ctx->free_slot_idx, &id);
   if (qs != QS_SUCCESS)
     {
       if (qs != QS_EMPTY)
@@ -601,9 +630,7 @@ create_task_job (void *arg)
       goto clear_writing_flag;
     }
 
-  trace ("Got index %d from registry", id);
-
-  task_t *task = &ctx->registry[id].task;
+  task_t *task = &ctx->task_slots[id].task;
   mt_context_t *mt_ctx = &ctx->rsrv_ctx->srv_base.mt_ctx;
 
   qs = queue_trypop (&mt_ctx->queue, task);
@@ -614,45 +641,45 @@ create_task_job (void *arg)
       ctx->state = CS_STARVING;
       pthread_mutex_unlock (&ctx->mutex);
 
-      if (queue_push_back (&ctx->registry_idx, &id) == QS_FAILURE)
+      if (queue_push_back (&ctx->free_slot_idx, &id) == QS_FAILURE)
         {
-          error ("Could not push index to registry indices queue");
+          error ("Could not push index to free slot queue");
           client_disconnect (ctx);
           return (S_SUCCESS);
         }
-      trace ("Pushed id %d back to registry indices queue", id);
+
+      trace ("Returned slot index %d to free slot queue", id);
+
       if (!client_try_ref (ctx))
         return (S_SUCCESS);
       if (queue_push_back (&ctx->rsrv_ctx->starving_clients, &ctx)
           == QS_FAILURE)
         {
           error ("Could not push client to starving clients queue");
-          if (client_job_unref (ctx))
+          if (client_unref (ctx))
             return (S_SUCCESS);
           client_disconnect (ctx);
         }
-      trace ("Pushed client context to starving clients queue");
+
+      trace ("Queued client in starving clients queue");
       return (S_SUCCESS);
     }
 
   if (qs == QS_FAILURE)
     {
-      if (queue_push_back (&ctx->registry_idx, &id) != QS_SUCCESS)
-        error ("Could not push back id to registry indices queue");
+      if (queue_push_back (&ctx->free_slot_idx, &id) != QS_SUCCESS)
+        error ("Could not push back id to free slot queue");
       client_disconnect (ctx);
       goto clear_writing_flag;
     }
 
-  trace ("Got task from global queue");
-
   pthread_mutex_lock (&ctx->mutex);
-  ctx->registry[id].in_use = true;
+  ctx->task_slots[id].in_use = true;
   pthread_mutex_unlock (&ctx->mutex);
-  trace ("Set id %d in registry_used as true", id);
 
   task_write_state_setup (ctx, id);
 
-  return (push_job (ctx, send_task_job) == PS_FAILURE ? S_FAILURE : S_SUCCESS);
+  return (push_job (ctx, send_task_job));
 
 clear_writing_flag:
   pthread_mutex_lock (&ctx->mutex);
@@ -663,268 +690,31 @@ clear_writing_flag:
 }
 
 static status_t
-send_config_job (void *arg)
+send_task_job (void *arg)
 {
   client_context_t *ctx = arg;
 
-  pthread_mutex_lock (&ctx->mutex);
-  if (ctx->state == CS_CLOSING)
-    {
-      pthread_mutex_unlock (&ctx->mutex);
-      return (S_SUCCESS);
-    }
-  pthread_mutex_unlock (&ctx->mutex);
+  if (client_is_closing (ctx))
+    return (S_SUCCESS);
 
-  status_t status;
-  if (ctx->write_state.base_state.vec_sz != 0)
-    {
-      status = write_state_write (ctx->socket_fd, &ctx->write_state);
-      if (status != S_SUCCESS)
-        {
-          error ("Could not send hash to client");
-          client_disconnect (ctx);
-          return (S_SUCCESS);
-        }
-
-      if (ctx->write_state.base_state.vec_sz != 0)
-        return (push_job (ctx, send_config_job) == PS_FAILURE ? S_FAILURE
-                                                              : S_SUCCESS);
-    }
-
-  status = write_state_write_extra (ctx->socket_fd, &ctx->write_state);
+  status_t status = write_state_write (ctx->socket_fd, &ctx->write_state);
   if (status != S_SUCCESS)
     {
-      error ("Could not send alphabet to client");
+      error ("Could not send task to client");
       client_disconnect (ctx);
       return (S_SUCCESS);
     }
 
-  return (push_job (ctx, ctx->write_state.vec_extra_sz != 0 ? send_config_job
-                                                            : create_task_job)
-                  == PS_FAILURE
-              ? S_FAILURE
-              : S_SUCCESS);
-}
+  if (ctx->write_state.base_state.vec_sz != 0)
+    return (push_job (ctx, send_task_job));
 
-static void
-handle_read (evutil_socket_t socket_fd, short what, void *arg)
-{
-  assert (what == EV_READ);
-  /* We already have socket_fd in client_context_t */
-  (void)socket_fd; /* to suppress "unused parameter" warning */
-
-  client_context_t *ctx = arg;
-  mt_context_t *mt_ctx = &ctx->rsrv_ctx->srv_base.mt_ctx;
-
-  ssize_t read
-      = readv (ctx->socket_fd, ctx->read_state.vec, ctx->read_state.vec_sz);
-  if (read < 0)
-    {
-      if (errno == EAGAIN || errno == EWOULDBLOCK)
-        return;
-
-      error ("Could not read result from a client");
-      client_disconnect (ctx);
-      return;
-    }
-  if (read == 0)
-    {
-      error ("Client closed connection");
-      client_disconnect (ctx);
-      return;
-    }
-
-  size_t bytes_read = read;
-
-  ctx->read_state.vec[0].iov_len -= bytes_read;
-  ctx->read_state.vec[0].iov_base += bytes_read;
-
-  if (ctx->read_state.vec[0].iov_len > 0)
-    return;
-
-  ctx->read_state.vec[0].iov_len = sizeof (ctx->read_buffer);
-  ctx->read_state.vec[0].iov_base = &ctx->read_buffer;
-  ctx->read_state.vec_sz = 1;
-
-  result_t *result = &ctx->read_buffer;
-  if (result->id < 0 || result->id >= QUEUE_SIZE)
-    {
-      warn ("Unexpected result id: %d", result->id);
-      client_disconnect (ctx);
-      return;
-    }
+  trace ("Sent task to client");
 
   pthread_mutex_lock (&ctx->mutex);
-  bool is_used = ctx->registry[result->id].in_use;
-  ctx->registry[result->id].in_use = false;
+  ctx->state = CS_ACTIVE;
   pthread_mutex_unlock (&ctx->mutex);
 
-  if (!is_used)
-    {
-      warn ("Unexpected result id: %d", result->id);
-      return;
-    }
-
-  if (queue_push_back (&ctx->registry_idx, &result->id) != QS_SUCCESS)
-    {
-      error ("Could not return id to a queue");
-      return;
-    }
-
-  trace ("Pushed index %d back to indices queue", result->id);
-
-  if (result->is_correct)
-    {
-      if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
-        {
-          error ("Could not cancel a queue");
-          return;
-        }
-      memcpy (mt_ctx->password, result->password, sizeof (result->password));
-      event_base_loopbreak (ctx->rsrv_ctx->ev_base);
-    }
-
-  if (srv_trysignal (mt_ctx) == S_FAILURE)
-    return;
-
-  trace ("Received %s result %s with id %d from client",
-         result->is_correct ? "correct" : "incorrect", result->password,
-         result->id);
-
-  pthread_mutex_lock (&ctx->mutex);
-  bool is_writing = ctx->state == CS_WRITING;
-  pthread_mutex_unlock (&ctx->mutex);
-
-  if (!is_writing)
-    {
-      push_status_t ps = push_job (ctx, create_task_job);
-      if (ps == PS_FAILURE)
-        {
-          error ("Could not schedule create task job from read event");
-          return;
-        }
-      if (ps == PS_DESTROYED)
-        return;
-      trace ("Pushed create task job from read event");
-    }
-}
-
-static void *
-handle_starving_clients (void *arg)
-{
-  rsrv_context_t *ctx = *(rsrv_context_t **)arg;
-
-  for (;;)
-    {
-      client_context_t *client = NULL;
-      queue_status_t qs = queue_pop (&ctx->starving_clients, &client);
-      if (qs == QS_INACTIVE)
-        return (NULL);
-      if (qs != QS_SUCCESS)
-        {
-          error ("Could not pop from a starving clients queue");
-          return (NULL);
-        }
-      trace ("Got starving client from queue");
-
-      pthread_mutex_lock (&client->mutex);
-      if (client->state == CS_CLOSING || client->state == CS_WRITING)
-        {
-          pthread_mutex_unlock (&client->mutex);
-          client_job_unref (client);
-          continue;
-        }
-      client->state = CS_WRITING;
-      pthread_mutex_unlock (&client->mutex);
-
-      int id;
-      qs = queue_pop (&client->registry_idx, &id);
-      if (qs == QS_INACTIVE)
-        goto fail_starving_take;
-      if (qs != QS_SUCCESS)
-        {
-          error ("Could not pop index from registry indices queue");
-          goto fail_starving_take;
-        }
-      trace ("Got id for a starving client: %d", id);
-
-      task_t *task = &client->registry[id].task;
-      if (queue_pop (&ctx->srv_base.mt_ctx.queue, task) != QS_SUCCESS)
-        {
-          error ("Could not pop from the global queue");
-          goto fail_starving_take;
-        }
-      trace ("Got task for a starving client");
-
-      task_write_state_setup (client, id);
-
-      trace ("Set up starving client write state");
-
-      pthread_mutex_lock (&client->mutex);
-      client->registry[id].in_use = true;
-      pthread_mutex_unlock (&client->mutex);
-
-      push_status_t ps = push_job (client, send_task_job);
-      if (ps == PS_DESTROYED)
-        continue;
-      if (ps == PS_FAILURE)
-        goto fail_starving_take;
-      trace ("Pushed send job to jobs queue");
-
-      pthread_mutex_lock (&client->mutex);
-      client->state = CS_ACTIVE;
-      pthread_mutex_unlock (&client->mutex);
-
-      client_job_unref (client);
-      continue;
-
-    fail_starving_take:
-      client_disconnect (client);
-      client_job_unref (client);
-      return (NULL);
-    }
-}
-
-static void *
-handle_io (void *arg)
-{
-  rsrv_context_t *ctx = *(rsrv_context_t **)arg;
-
-  for (;;)
-    {
-      job_t job;
-      queue_status_t qs = queue_pop (&ctx->jobs_queue, &job);
-      if (qs == QS_INACTIVE)
-        break;
-      if (qs != QS_SUCCESS)
-        {
-          error ("Could not pop a job from a job queue");
-          break;
-        }
-
-      trace ("Got job from a job queue");
-
-      status_t st = job.job_func (job.arg);
-      client_job_unref (job.arg);
-      if (st == S_FAILURE)
-        {
-          error ("Could not complete a job");
-          break;
-        }
-    }
-
-  event_base_loopbreak (ctx->ev_base);
-  return (NULL);
-}
-
-static void *
-dispatch_event_loop (void *arg)
-{
-  rsrv_context_t *ctx = *(rsrv_context_t **)arg;
-  if (event_base_dispatch (ctx->ev_base) != 0)
-    error ("Could not dispatch the event loop");
-
-  return (NULL);
+  return (push_job (ctx, create_task_job));
 }
 
 static void
@@ -954,7 +744,7 @@ handle_accept (struct evconnlistener *listener, evutil_socket_t fd,
   if (!client_ctx)
     goto fail;
 
-  trace ("Got new connection and created new event");
+  trace ("Accepted client connection");
 
   if (event_add (client_ctx->read_event, NULL) != 0)
     {
@@ -962,28 +752,228 @@ handle_accept (struct evconnlistener *listener, evutil_socket_t fd,
       goto release_event_ref;
     }
 
-  trace ("Added new event");
+  trace ("Registered client read event");
 
-  push_status_t ps = push_job (client_ctx, send_config_job);
-  if (ps == PS_FAILURE)
+  if (push_job (client_ctx, send_config_job) == S_FAILURE)
     {
       error ("Could not add send_config job");
       goto release_event_ref;
     }
-  if (ps == PS_DESTROYED)
-    return;
 
   return;
 
 release_event_ref:
   client_release_event_ref (client_ctx);
-  client_ctx = NULL;
   return;
 
 fail:
   shutdown (fd, SHUT_RDWR);
   if (close (fd) != 0)
     error ("Could not close client socket");
+}
+
+static void
+handle_read (evutil_socket_t socket_fd, short what, void *arg)
+{
+  assert (what == EV_READ);
+  /* We already have socket_fd in client_context_t */
+  (void)socket_fd; /* to suppress "unused parameter" warning */
+
+  client_context_t *ctx = arg;
+  mt_context_t *mt_ctx = &ctx->rsrv_ctx->srv_base.mt_ctx;
+
+  ssize_t nread
+      = readv (ctx->socket_fd, ctx->read_state.vec, ctx->read_state.vec_sz);
+  if (nread < 0)
+    {
+      if (errno == EAGAIN || errno == EWOULDBLOCK)
+        return;
+
+      error ("Could not read result from a client");
+      client_disconnect (ctx);
+      return;
+    }
+  if (nread == 0)
+    {
+      error ("Client closed connection");
+      client_disconnect (ctx);
+      return;
+    }
+
+  size_t bytes_read = nread;
+
+  ctx->read_state.vec[0].iov_len -= bytes_read;
+  ctx->read_state.vec[0].iov_base += bytes_read;
+
+  if (ctx->read_state.vec[0].iov_len > 0)
+    return;
+
+  ctx->read_state.vec[0].iov_len = sizeof (ctx->read_buffer);
+  ctx->read_state.vec[0].iov_base = &ctx->read_buffer;
+  ctx->read_state.vec_sz = 1;
+
+  result_t *result = &ctx->read_buffer;
+  if (result->id < 0 || result->id >= QUEUE_SIZE)
+    {
+      warn ("Unexpected result id: %d", result->id);
+      client_disconnect (ctx);
+      return;
+    }
+
+  pthread_mutex_lock (&ctx->mutex);
+  bool is_used = ctx->task_slots[result->id].in_use;
+  ctx->task_slots[result->id].in_use = false;
+  pthread_mutex_unlock (&ctx->mutex);
+
+  if (!is_used)
+    {
+      warn ("Unexpected result id: %d", result->id);
+      return;
+    }
+
+  if (queue_push_back (&ctx->free_slot_idx, &result->id) != QS_SUCCESS)
+    {
+      error ("Could not return id to a queue");
+      return;
+    }
+
+  trace ("Returned slot index %d to free slot queue", result->id);
+
+  if (result->is_correct)
+    {
+      if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
+        {
+          error ("Could not cancel a queue");
+          return;
+        }
+      memcpy (mt_ctx->password, result->password, sizeof (result->password));
+      event_base_loopbreak (ctx->rsrv_ctx->ev_base);
+    }
+
+  if (srv_trysignal (mt_ctx) == S_FAILURE)
+    return;
+
+  trace ("Received %s result %s with id %d from client",
+         result->is_correct ? "correct" : "incorrect", result->password,
+         result->id);
+
+  pthread_mutex_lock (&ctx->mutex);
+  bool is_writing = ctx->state == CS_WRITING;
+  pthread_mutex_unlock (&ctx->mutex);
+
+  if (!is_writing && push_job (ctx, create_task_job) == S_FAILURE)
+    {
+      error ("Could not schedule create task job from read event");
+      return;
+    }
+}
+
+static void *
+handle_starving_clients (void *arg)
+{
+  rsrv_context_t *ctx = *(rsrv_context_t **)arg;
+
+  for (;;)
+    {
+      client_context_t *client = NULL;
+      queue_status_t qs = queue_pop (&ctx->starving_clients, &client);
+      if (qs == QS_INACTIVE)
+        return (NULL);
+      if (qs != QS_SUCCESS)
+        {
+          error ("Could not pop from a starving clients queue");
+          return (NULL);
+        }
+
+      pthread_mutex_lock (&client->mutex);
+      if (client->state == CS_CLOSING || client->state == CS_WRITING)
+        {
+          pthread_mutex_unlock (&client->mutex);
+          client_unref (client);
+          continue;
+        }
+      client->state = CS_WRITING;
+      pthread_mutex_unlock (&client->mutex);
+
+      int id;
+      qs = queue_pop (&client->free_slot_idx, &id);
+      if (qs == QS_INACTIVE)
+        goto fail_starving_take;
+      if (qs != QS_SUCCESS)
+        {
+          error ("Could not pop index from free slot queue");
+          goto fail_starving_take;
+        }
+
+      task_t *task = &client->task_slots[id].task;
+      if (queue_pop (&ctx->srv_base.mt_ctx.queue, task) != QS_SUCCESS)
+        {
+          error ("Could not pop from the global queue");
+          goto fail_starving_take;
+        }
+      trace ("Got task for a starving client");
+
+      task_write_state_setup (client, id);
+
+      pthread_mutex_lock (&client->mutex);
+      client->task_slots[id].in_use = true;
+      pthread_mutex_unlock (&client->mutex);
+
+      if (push_job (client, send_task_job) == S_FAILURE)
+        goto fail_starving_take;
+
+      pthread_mutex_lock (&client->mutex);
+      client->state = CS_ACTIVE;
+      pthread_mutex_unlock (&client->mutex);
+
+      client_unref (client);
+      continue;
+
+    fail_starving_take:
+      client_disconnect (client);
+      client_unref (client);
+      return (NULL);
+    }
+}
+
+static void *
+handle_io (void *arg)
+{
+  rsrv_context_t *ctx = *(rsrv_context_t **)arg;
+
+  for (;;)
+    {
+      job_t job;
+      queue_status_t qs = queue_pop (&ctx->jobs_queue, &job);
+      if (qs == QS_INACTIVE)
+        break;
+      if (qs != QS_SUCCESS)
+        {
+          error ("Could not pop a job from a job queue");
+          break;
+        }
+
+      status_t st = job.job_func (job.arg);
+      client_unref (job.arg);
+      if (st == S_FAILURE)
+        {
+          error ("Could not complete a job");
+          break;
+        }
+    }
+
+  event_base_loopbreak (ctx->ev_base);
+  return (NULL);
+}
+
+static void *
+dispatch_event_loop (void *arg)
+{
+  rsrv_context_t *ctx = *(rsrv_context_t **)arg;
+  if (event_base_dispatch (ctx->ev_base) != 0)
+    error ("Could not dispatch the event loop");
+
+  return (NULL);
 }
 
 bool
@@ -1001,7 +991,7 @@ run_reactor_server (task_t *task, config_t *config)
       return (false);
     }
 
-  if (rsrv_ctx_init (context_ptr) == S_FAILURE)
+  if (rsrv_context_init (context_ptr) == S_FAILURE)
     goto fail;
 
   struct evconnlistener *listener = evconnlistener_new (

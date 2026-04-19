@@ -3,6 +3,7 @@
 #include "common.h"
 #include "log.h"
 
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -201,13 +202,19 @@ queue_cancel (queue_t *queue)
   return (QS_SUCCESS);
 }
 
+/*
+ * `queue_drain` must be called if and only if:
+ * - queue has been cancelled,
+ * - no threads are still using this queue
+ * */
 queue_status_t
 queue_drain (queue_t *queue, queue_drain_fn_t drain_fn, void *arg)
 {
-  unsigned int full_count = queue->full.counter;
+  assert (queue != NULL);
+  assert (!queue->active);
+  assert (drain_fn != NULL);
 
-  if (!queue->active && full_count > 0)
-    --full_count;
+  --queue->full.counter;
 
   if (pthread_mutex_lock (&queue->head_mutex) != 0)
     return (QS_FAILURE);
@@ -219,7 +226,7 @@ queue_drain (queue_t *queue, queue_drain_fn_t drain_fn, void *arg)
       return (QS_FAILURE);
     }
 
-  for (unsigned int i = 0; i < full_count; ++i)
+  for (unsigned int i = 0; i < queue->full.counter; ++i)
     {
       queue_pop_raw (queue, payload);
 
