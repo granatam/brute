@@ -24,10 +24,13 @@ delegate_task (int socket_fd, task_t *task, mt_context_t *ctx)
     return (S_FAILURE);
 
   result_t task_result;
-  if (recv_wrapper (socket_fd, &task_result, sizeof (task_result), 0)
-      == S_FAILURE)
+
+  io_status_t recv_status
+      = recv_wrapper (socket_fd, &task_result, sizeof (task_result), 0);
+  if (recv_status != IOS_SUCCESS)
     {
-      error ("Could not receive result from client");
+      if (recv_status == IOS_FAILURE)
+        error ("Could not receive result from client");
       return (S_FAILURE);
     }
 

@@ -23,33 +23,38 @@ cleanup_mutex_unlock (void *mutex)
   pthread_mutex_unlock ((pthread_mutex_t *)mutex);
 }
 
-status_t
-recv_wrapper (int socket_fd, void *buf, int len, int flags)
+io_status_t
+recv_wrapper (int socket_fd, void *buf, size_t len, int flags)
 {
   char *bytes = buf;
   while (len > 0)
     {
-      int bytes_read
-          = TEMP_FAILURE_RETRY (recv (socket_fd, bytes, len, flags));
-      if (bytes_read <= 0)
-        return (S_FAILURE);
+      ssize_t read = TEMP_FAILURE_RETRY (recv (socket_fd, bytes, len, flags));
+      if (read < 0)
+        return (IOS_FAILURE);
+      if (read == 0)
+        return (IOS_CONN_CLOSED);
+
+      size_t bytes_read = read;
       len -= bytes_read;
       bytes += bytes_read;
     }
 
-  return (S_SUCCESS);
+  return (IOS_SUCCESS);
 }
 
-status_t
+io_status_t
 send_wrapper (int socket_fd, struct iovec *vec, int iovcnt)
 {
   while (iovcnt > 0)
     {
-      size_t bytes_written
-          = TEMP_FAILURE_RETRY (writev (socket_fd, vec, iovcnt));
-      if ((int)bytes_written <= 0)
-        return (S_FAILURE);
+      ssize_t written = TEMP_FAILURE_RETRY (writev (socket_fd, vec, iovcnt));
+      if (written < 0)
+        return (IOS_FAILURE);
+      if (written == 0)
+        return (IOS_CONN_CLOSED);
 
+      size_t bytes_written = written;
       while (bytes_written > 0)
         {
           if (bytes_written >= vec[0].iov_len)
@@ -68,5 +73,5 @@ send_wrapper (int socket_fd, struct iovec *vec, int iovcnt)
         }
     }
 
-  return (S_SUCCESS);
+  return (IOS_SUCCESS);
 }
