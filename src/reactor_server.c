@@ -25,6 +25,7 @@
 typedef enum push_status
 {
   PS_SUCCESS,
+  PS_SKIPPED,
   PS_FAILURE,
   PS_DESTROYED,
 } push_status_t;
@@ -489,7 +490,7 @@ static push_status_t
 push_job_checked (client_context_t *ctx, status_t (*job_func) (void *))
 {
   if (!client_try_ref (ctx))
-    return (PS_SUCCESS);
+    return (PS_SKIPPED);
 
   job_t job = {
     .arg = ctx,
@@ -507,8 +508,8 @@ push_job_checked (client_context_t *ctx, status_t (*job_func) (void *))
 static status_t
 schedule_job (client_context_t *ctx, status_t (*job_func) (void *))
 {
-  return (push_job_checked (ctx, job_func) == PS_SUCCESS ? S_SUCCESS
-                                                         : S_FAILURE);
+  return (push_job_checked (ctx, job_func) == PS_FAILURE ? S_FAILURE
+                                                         : S_SUCCESS);
 }
 
 static status_t
@@ -882,7 +883,7 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
           error ("Could not schedule create task job from read event");
           return;
         }
-      if (ps == PS_DESTROYED)
+      if (ps == PS_DESTROYED || ps == PS_SKIPPED)
         return;
       trace ("Pushed create task job from read event");
     }
@@ -940,10 +941,13 @@ handle_starving_clients (void *arg)
       pthread_mutex_unlock (&client->mutex);
 
       push_status_t ps = push_job_checked (client, send_task_job);
-      if (ps == PS_DESTROYED)
-        continue;
       if (ps == PS_FAILURE)
         goto fail_starving_take;
+      if (ps == PS_SKIPPED || ps == PS_DESTROYED)
+        {
+          client_unref (client);
+          continue;
+        }
 
       pthread_mutex_lock (&client->mutex);
       client->state = CS_ACTIVE;
