@@ -941,12 +941,17 @@ handle_starving_clients (void *arg)
       pthread_mutex_unlock (&client->mutex);
 
       push_status_t ps = push_job_checked (client, send_task_job);
-      if (ps == PS_FAILURE)
-        goto fail_starving_take;
-      if (ps == PS_SKIPPED || ps == PS_DESTROYED)
+      switch (ps)
         {
+        case PS_FAILURE:
+          goto fail_starving_take;
+        case PS_DESTROYED:
+          continue;
+        case PS_SKIPPED:
           client_unref (client);
           continue;
+        case PS_SUCCESS:
+          break;
         }
 
       pthread_mutex_lock (&client->mutex);
