@@ -4,6 +4,7 @@
 #include "log.h"
 #include "multi.h"
 #include "queue.h"
+#include "reactor_common.h"
 #include "server_common.h"
 #include "thread_pool.h"
 
@@ -41,10 +42,8 @@ typedef enum
 typedef struct rsrv_context_t
 {
   srv_base_context_t srv_base;
-  queue_t jobs_queue;
+  reactor_context_t rctr_ctx;
   queue_t starving_clients;
-  struct event_base *ev_base;
-  bool shutting_down;
 } rsrv_context_t;
 
 typedef struct io_state_t
@@ -138,6 +137,13 @@ client_unref (client_context_t *ctx)
 }
 
 static void
+client_job_unref_cb (void *arg)
+{
+  client_context_t *ctx = arg;
+  client_unref (ctx);
+}
+
+static void
 client_release_event_ref (client_context_t *ctx)
 {
   pthread_mutex_lock (&ctx->mutex);
@@ -169,7 +175,7 @@ static void
 jobs_queue_unref_cb (void *payload, void *arg)
 {
   (void)arg;
-  job_t *job = payload;
+  reactor_job_t *job = payload;
   client_unref (job->arg);
 }
 
@@ -296,7 +302,7 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
     }
 
   client_ctx->read_event
-      = event_new (rsrv_ctx->ev_base, client_ctx->socket_fd,
+      = event_new (rsrv_ctx->rctr_ctx.ev_base, client_ctx->socket_fd,
                    EV_READ | EV_PERSIST, handle_read, client_ctx);
   if (!client_ctx->read_event)
     {
@@ -324,10 +330,9 @@ static status_t
 rsrv_context_init (rsrv_context_t *ctx)
 {
   bool starving_clients_initialized = false;
-  bool jobs_queue_initialized = false;
 
-  ctx->shutting_down = false;
-  ctx->ev_base = NULL;
+  if (reactor_context_init (&ctx->rctr_ctx) == S_FAILURE)
+    return (S_FAILURE);
 
   if (queue_init (&ctx->starving_clients, sizeof (client_context_t *))
       == QS_FAILURE)
@@ -336,20 +341,6 @@ rsrv_context_init (rsrv_context_t *ctx)
       goto fail;
     }
   starving_clients_initialized = true;
-
-  if (queue_init (&ctx->jobs_queue, sizeof (job_t)) == QS_FAILURE)
-    {
-      error ("Could not initialize jobs queue");
-      goto fail;
-    }
-  jobs_queue_initialized = true;
-
-  ctx->ev_base = event_base_new ();
-  if (!ctx->ev_base)
-    {
-      error ("Could not initialize event base");
-      goto fail;
-    }
 
   if (evutil_make_socket_nonblocking (ctx->srv_base.listen_fd) < 0)
     {
@@ -360,18 +351,12 @@ rsrv_context_init (rsrv_context_t *ctx)
   return (S_SUCCESS);
 
 fail:
-  if (ctx->ev_base)
-    {
-      event_base_free (ctx->ev_base);
-      ctx->ev_base = NULL;
-    }
-
-  if (jobs_queue_initialized && queue_destroy (&ctx->jobs_queue) == QS_FAILURE)
-    error ("Could not destroy jobs queue during init cleanup");
-
   if (starving_clients_initialized
       && queue_destroy (&ctx->starving_clients) == QS_FAILURE)
     error ("Could not destroy starving clients queue during init cleanup");
+
+  if (reactor_context_destroy (&ctx->rctr_ctx) == S_FAILURE)
+    error ("Could not destroy reactor context during init cleanup");
 
   return (S_FAILURE);
 }
@@ -379,15 +364,9 @@ fail:
 static status_t
 rsrv_context_destroy (rsrv_context_t *ctx)
 {
-  ctx->shutting_down = true;
-  event_base_loopbreak (ctx->ev_base);
-  trace ("Stopped event loop");
+  if (reactor_context_stop (&ctx->rctr_ctx) == S_FAILURE)
+    return (S_FAILURE);
 
-  if (queue_cancel (&ctx->jobs_queue) == QS_FAILURE)
-    {
-      error ("Could not cancel jobs queue");
-      return (S_FAILURE);
-    }
   if (queue_cancel (&ctx->starving_clients) == QS_FAILURE)
     {
       error ("Could not cancel starving clients queue");
@@ -401,21 +380,23 @@ rsrv_context_destroy (rsrv_context_t *ctx)
     }
   trace ("Destroyed server context");
 
-  if (queue_drain (&ctx->jobs_queue, jobs_queue_unref_cb, NULL) != QS_SUCCESS)
-    error ("Could not drain jobs queue");
-
   if (queue_drain (&ctx->starving_clients, starving_clients_unref_cb, NULL)
       != QS_SUCCESS)
     error ("Could not drain starving clients queue");
-
-  if (queue_destroy (&ctx->jobs_queue) == QS_FAILURE)
-    {
-      error ("Could not destroy jobs queue");
-      return (S_FAILURE);
-    }
   if (queue_destroy (&ctx->starving_clients) == QS_FAILURE)
     {
       error ("Could not destroy starving clients queue");
+      return (S_FAILURE);
+    }
+
+  /* TODO: Use reactor_context_destroy. */
+  if (queue_drain (&ctx->rctr_ctx.jobs_queue, jobs_queue_unref_cb, NULL)
+      != QS_SUCCESS)
+    error ("Could not drain jobs queue");
+
+  if (queue_destroy (&ctx->rctr_ctx.jobs_queue) == QS_FAILURE)
+    {
+      error ("Could not destroy jobs queue");
       return (S_FAILURE);
     }
   trace ("Destroyed reactor server queues");
@@ -424,9 +405,10 @@ rsrv_context_destroy (rsrv_context_t *ctx)
   ev_list.head.prev = &ev_list.head;
   ev_list.head.next = &ev_list.head;
   ev_list.head.ev = NULL;
-  event_base_foreach_event (ctx->ev_base, collect_events_cb, &ev_list);
+  event_base_foreach_event (ctx->rctr_ctx.ev_base, collect_events_cb,
+                            &ev_list);
   clients_cleanup (&ev_list);
-  event_base_free (ctx->ev_base);
+  event_base_free (ctx->rctr_ctx.ev_base);
 
   trace ("Destroyed client contexts");
 
@@ -465,7 +447,8 @@ client_context_destroy (client_context_t *ctx)
   assert (ctx->read_event == NULL);
   assert (atomic_load_explicit (&ctx->ref_count, memory_order_relaxed) == 0);
 
-  if (!ctx->rsrv_ctx->shutting_down && return_tasks (ctx) == S_FAILURE)
+  if (!ctx->rsrv_ctx->rctr_ctx.shutting_down
+      && return_tasks (ctx) == S_FAILURE)
     error ("Could not return tasks to global queue");
 
   pthread_mutex_destroy (&ctx->mutex);
@@ -492,11 +475,12 @@ push_job_checked (client_context_t *ctx, status_t (*job_func) (void *))
   if (!client_try_ref (ctx))
     return (PS_SKIPPED);
 
-  job_t job = {
+  reactor_job_t job = {
     .arg = ctx,
     .job_func = job_func,
+    .cleanup = client_job_unref_cb,
   };
-  if (queue_push_back (&ctx->rsrv_ctx->jobs_queue, &job) != QS_SUCCESS)
+  if (reactor_push_job (&ctx->rsrv_ctx->rctr_ctx, &job) != QS_SUCCESS)
     {
       error ("Could not push job to a job queue");
       return (client_unref (ctx) ? PS_DESTROYED : PS_FAILURE);
@@ -738,7 +722,7 @@ handle_accept_error (struct evconnlistener *listener, void *arg)
 
   warn ("Got error on connection accept: %m");
   rsrv_context_t *ctx = arg;
-  event_base_loopbreak (ctx->ev_base);
+  event_base_loopbreak (ctx->rctr_ctx.ev_base);
 }
 
 static void
@@ -861,7 +845,7 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
           return;
         }
       memcpy (mt_ctx->password, result->password, sizeof (result->password));
-      event_base_loopbreak (ctx->rsrv_ctx->ev_base);
+      event_base_loopbreak (ctx->rsrv_ctx->rctr_ctx.ev_base);
     }
 
   if (srv_trysignal (mt_ctx) == S_FAILURE)
@@ -968,46 +952,6 @@ handle_starving_clients (void *arg)
     }
 }
 
-static void *
-handle_io (void *arg)
-{
-  rsrv_context_t *ctx = *(rsrv_context_t **)arg;
-
-  for (;;)
-    {
-      job_t job;
-      queue_status_t qs = queue_pop (&ctx->jobs_queue, &job);
-      if (qs == QS_INACTIVE)
-        break;
-      if (qs != QS_SUCCESS)
-        {
-          error ("Could not pop a job from a job queue");
-          break;
-        }
-
-      status_t st = job.job_func (job.arg);
-      client_unref (job.arg);
-      if (st == S_FAILURE)
-        {
-          error ("Could not complete a job");
-          break;
-        }
-    }
-
-  event_base_loopbreak (ctx->ev_base);
-  return (NULL);
-}
-
-static void *
-dispatch_event_loop (void *arg)
-{
-  rsrv_context_t *ctx = *(rsrv_context_t **)arg;
-  if (event_base_dispatch (ctx->ev_base) != 0)
-    error ("Could not dispatch the event loop");
-
-  return (NULL);
-}
-
 bool
 run_reactor_server (task_t *task, config_t *config)
 {
@@ -1027,8 +971,8 @@ run_reactor_server (task_t *task, config_t *config)
     goto fail;
 
   struct evconnlistener *listener = evconnlistener_new (
-      rsrv_ctx.ev_base, handle_accept, &rsrv_ctx, LEV_OPT_REUSEABLE, -1,
-      rsrv_ctx.srv_base.listen_fd);
+      rsrv_ctx.rctr_ctx.ev_base, handle_accept, &rsrv_ctx, LEV_OPT_REUSEABLE,
+      -1, rsrv_ctx.srv_base.listen_fd);
   if (!listener)
     {
       error ("Could not create a listener");
@@ -1038,23 +982,16 @@ run_reactor_server (task_t *task, config_t *config)
 
   thread_pool_t *thread_pool = &rsrv_ctx.srv_base.mt_ctx.thread_pool;
 
-  long number_of_threads
-      = (config->number_of_threads > 2) ? config->number_of_threads - 2 : 1;
-  if (create_threads (thread_pool, number_of_threads, handle_io, &context_ptr,
-                      sizeof (context_ptr), "i/o handler")
-      == 0)
-    goto free_listener;
-  trace ("Created I/O handler thread");
-
   if (!thread_create (thread_pool, handle_starving_clients, &context_ptr,
                       sizeof (context_ptr), "starving clients handler"))
     goto free_listener;
   trace ("Created starving clients handler thread");
 
-  if (!thread_create (thread_pool, dispatch_event_loop, &context_ptr,
-                      sizeof (context_ptr), "event loop dispatcher"))
+  long nthreads
+      = (config->number_of_threads > 2) ? config->number_of_threads - 2 : 1;
+  if (create_reactor_threads (thread_pool, nthreads, &rsrv_ctx.rctr_ctx)
+      == S_FAILURE)
     goto free_listener;
-  trace ("Created event loop dispatcher thread");
 
   mt_context_t *mt_ctx = &rsrv_ctx.srv_base.mt_ctx;
   if (process_tasks (task, config, mt_ctx) == S_FAILURE)
