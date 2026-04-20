@@ -15,7 +15,6 @@
 #include <event2/thread.h>
 #include <pthread.h>
 #include <signal.h>
-#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -70,17 +69,14 @@ typedef struct task_slot_t
 
 typedef struct client_context_t
 {
-  struct event *read_event;
   rsrv_context_t *rsrv_ctx;
-  evutil_socket_t socket_fd;
+  reactor_conn_t conn;
   client_state_t state;
   task_slot_t task_slots[QUEUE_SIZE];
   queue_t free_slot_idx;
   write_state_t write_state;
   io_state_t read_state;
   result_t read_buffer;
-  pthread_mutex_t mutex;
-  _Atomic int ref_count;
 } client_context_t;
 
 typedef struct event_node_t
@@ -95,39 +91,12 @@ typedef struct event_list_t
   event_node_t head;
 } event_list_t;
 
-static void
-client_disconnect (client_context_t *ctx)
-{
-  pthread_mutex_lock (&ctx->mutex);
-  ctx->state = CS_CLOSING;
-  pthread_mutex_unlock (&ctx->mutex);
-}
-
-static bool
-client_try_ref (client_context_t *ctx)
-{
-  pthread_mutex_lock (&ctx->mutex);
-  if (ctx->state == CS_CLOSING)
-    {
-      pthread_mutex_unlock (&ctx->mutex);
-      return (false);
-    }
-
-  atomic_fetch_add_explicit (&ctx->ref_count, 1, memory_order_relaxed);
-  pthread_mutex_unlock (&ctx->mutex);
-  return (true);
-}
-
 static void client_context_destroy (client_context_t *ctx);
 
 static bool
 client_unref (client_context_t *ctx)
 {
-  int old
-      = atomic_fetch_sub_explicit (&ctx->ref_count, 1, memory_order_acq_rel);
-  assert (old > 0);
-
-  if (old == 1)
+  if (reactor_conn_unref (&ctx->conn))
     {
       client_context_destroy (ctx);
       return true;
@@ -146,29 +115,8 @@ client_job_unref_cb (void *arg)
 static void
 client_release_event_ref (client_context_t *ctx)
 {
-  pthread_mutex_lock (&ctx->mutex);
-  struct event *ev = ctx->read_event;
-  ctx->read_event = NULL;
-  pthread_mutex_unlock (&ctx->mutex);
-
-  if (!ev)
-    return;
-
-  if (event_del (ev) == -1)
-    error ("Could not delete read event");
-  event_free (ev);
-
-  client_unref (ctx);
-}
-
-static bool
-client_is_closing (client_context_t *ctx)
-{
-  pthread_mutex_lock (&ctx->mutex);
-  bool is_closing = ctx->state == CS_CLOSING;
-  pthread_mutex_unlock (&ctx->mutex);
-
-  return (is_closing);
+  if (reactor_conn_release_event_ref (&ctx->conn))
+    client_context_destroy (ctx);
 }
 
 static void
@@ -176,7 +124,8 @@ jobs_queue_unref_cb (void *payload, void *arg)
 {
   (void)arg;
   reactor_job_t *job = payload;
-  client_unref (job->arg);
+  if (job->cleanup)
+    job->cleanup (job->arg);
 }
 
 static void
@@ -243,15 +192,13 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
       return (NULL);
     }
 
-  if (pthread_mutex_init (&client_ctx->mutex, NULL) != 0)
-    {
-      error ("Could not initialize client mutex");
-      free (client_ctx);
-      return (NULL);
-    }
+  if (reactor_conn_init (&client_ctx->conn, &rsrv_ctx->rctr_ctx, fd,
+                         handle_read, client_ctx)
+      == S_FAILURE)
+    return (NULL);
+
   client_ctx->state = CS_ACTIVE;
 
-  client_ctx->socket_fd = fd;
   client_ctx->rsrv_ctx = rsrv_ctx;
   client_ctx->read_state.vec[0].iov_base = &client_ctx->read_buffer;
   client_ctx->read_state.vec[0].iov_len = sizeof (client_ctx->read_buffer);
@@ -295,33 +242,15 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
         goto fail;
       }
 
-  if (evutil_make_socket_nonblocking (client_ctx->socket_fd) != 0)
-    {
-      error ("Could not change socket to be nonblocking");
-      goto fail;
-    }
-
-  client_ctx->read_event
-      = event_new (rsrv_ctx->rctr_ctx.ev_base, client_ctx->socket_fd,
-                   EV_READ | EV_PERSIST, handle_read, client_ctx);
-  if (!client_ctx->read_event)
-    {
-      error ("Could not create read event");
-      goto fail;
-    }
-  client_ctx->ref_count = 1;
-
   return (client_ctx);
 
 fail:
-  if (client_ctx->read_event)
-    event_free (client_ctx->read_event);
+  reactor_conn_destroy (&client_ctx->conn);
 
   if (free_slot_idx_initialized
       && queue_destroy (&client_ctx->free_slot_idx) != QS_SUCCESS)
     error ("Could not destroy free slot queue");
 
-  pthread_mutex_destroy (&client_ctx->mutex);
   free (client_ctx);
   return (NULL);
 }
@@ -421,7 +350,7 @@ return_tasks (client_context_t *ctx)
   mt_context_t *mt_ctx = &ctx->rsrv_ctx->srv_base.mt_ctx;
   status_t status = S_SUCCESS;
 
-  pthread_mutex_lock (&ctx->mutex);
+  pthread_mutex_lock (&ctx->conn.mutex);
   for (int i = 0; i < QUEUE_SIZE; ++i)
     {
       if (ctx->task_slots[i].in_use)
@@ -435,7 +364,7 @@ return_tasks (client_context_t *ctx)
           ctx->task_slots[i].in_use = false;
         }
     }
-  pthread_mutex_unlock (&ctx->mutex);
+  pthread_mutex_unlock (&ctx->conn.mutex);
 
   return (status);
 }
@@ -443,27 +372,17 @@ return_tasks (client_context_t *ctx)
 static void
 client_context_destroy (client_context_t *ctx)
 {
-  /* Freed in client_release_event_ref. */
-  assert (ctx->read_event == NULL);
-  assert (atomic_load_explicit (&ctx->ref_count, memory_order_relaxed) == 0);
-
   if (!ctx->rsrv_ctx->rctr_ctx.shutting_down
       && return_tasks (ctx) == S_FAILURE)
     error ("Could not return tasks to global queue");
 
-  pthread_mutex_destroy (&ctx->mutex);
-  trace ("Destroyed client mutex");
-
   if (queue_destroy (&ctx->free_slot_idx) != QS_SUCCESS)
     error ("Could not destroy free slot queue");
 
-  trace ("Destroyed free slot queue");
+  if (reactor_conn_destroy (&ctx->conn) == S_FAILURE)
+    return;
 
-  shutdown (ctx->socket_fd, SHUT_RDWR);
-  if (close (ctx->socket_fd) != 0)
-    error ("Could not close client socket");
-  else
-    trace ("Closed client socket");
+  trace ("Destroyed free slot queue");
 
   free (ctx);
   trace ("Destroyed client context");
@@ -472,7 +391,7 @@ client_context_destroy (client_context_t *ctx)
 static push_status_t
 push_job_checked (client_context_t *ctx, status_t (*job_func) (void *))
 {
-  if (!client_try_ref (ctx))
+  if (!reactor_conn_try_ref (&ctx->conn))
     return (PS_SKIPPED);
 
   reactor_job_t job = {
@@ -569,17 +488,17 @@ send_config_job (void *arg)
 {
   client_context_t *ctx = arg;
 
-  if (client_is_closing (ctx))
+  if (reactor_conn_is_closing (&ctx->conn))
     return (S_SUCCESS);
 
   status_t status;
   if (ctx->write_state.base_state.vec_sz != 0)
     {
-      status = write_state_write (ctx->socket_fd, &ctx->write_state);
+      status = write_state_write (ctx->conn.socket_fd, &ctx->write_state);
       if (status != S_SUCCESS)
         {
           error ("Could not send hash to client");
-          client_disconnect (ctx);
+          reactor_conn_close (&ctx->conn);
           return (S_SUCCESS);
         }
 
@@ -587,11 +506,11 @@ send_config_job (void *arg)
         return (schedule_job (ctx, send_config_job));
     }
 
-  status = write_state_write_extra (ctx->socket_fd, &ctx->write_state);
+  status = write_state_write_extra (ctx->conn.socket_fd, &ctx->write_state);
   if (status != S_SUCCESS)
     {
       error ("Could not send alphabet to client");
-      client_disconnect (ctx);
+      reactor_conn_close (&ctx->conn);
       return (S_SUCCESS);
     }
 
@@ -607,15 +526,15 @@ create_task_job (void *arg)
 {
   client_context_t *ctx = arg;
 
-  pthread_mutex_lock (&ctx->mutex);
+  pthread_mutex_lock (&ctx->conn.mutex);
   if (ctx->state == CS_CLOSING || ctx->state == CS_WRITING
       || ctx->state == CS_STARVING)
     {
-      pthread_mutex_unlock (&ctx->mutex);
+      pthread_mutex_unlock (&ctx->conn.mutex);
       return (S_SUCCESS);
     }
   ctx->state = CS_WRITING;
-  pthread_mutex_unlock (&ctx->mutex);
+  pthread_mutex_unlock (&ctx->conn.mutex);
 
   int id;
   queue_status_t qs;
@@ -624,7 +543,7 @@ create_task_job (void *arg)
   if (qs != QS_SUCCESS)
     {
       if (qs != QS_EMPTY)
-        client_disconnect (ctx);
+        reactor_conn_close (&ctx->conn);
       goto clear_writing_flag;
     }
 
@@ -635,20 +554,20 @@ create_task_job (void *arg)
   if (qs == QS_EMPTY)
     {
       trace ("No tasks in global queue, add to starving clients");
-      pthread_mutex_lock (&ctx->mutex);
+      pthread_mutex_lock (&ctx->conn.mutex);
       ctx->state = CS_STARVING;
-      pthread_mutex_unlock (&ctx->mutex);
+      pthread_mutex_unlock (&ctx->conn.mutex);
 
       if (queue_push_back (&ctx->free_slot_idx, &id) == QS_FAILURE)
         {
           error ("Could not push index to free slot queue");
-          client_disconnect (ctx);
+          reactor_conn_close (&ctx->conn);
           return (S_SUCCESS);
         }
 
       trace ("Returned slot index %d to free slot queue", id);
 
-      if (!client_try_ref (ctx))
+      if (!reactor_conn_try_ref (&ctx->conn))
         return (S_SUCCESS);
       if (queue_push_back (&ctx->rsrv_ctx->starving_clients, &ctx)
           == QS_FAILURE)
@@ -656,7 +575,7 @@ create_task_job (void *arg)
           error ("Could not push client to starving clients queue");
           if (client_unref (ctx))
             return (S_SUCCESS);
-          client_disconnect (ctx);
+          reactor_conn_close (&ctx->conn);
         }
 
       trace ("Queued client in starving clients queue");
@@ -667,23 +586,23 @@ create_task_job (void *arg)
     {
       if (queue_push_back (&ctx->free_slot_idx, &id) != QS_SUCCESS)
         error ("Could not push back id to free slot queue");
-      client_disconnect (ctx);
+      reactor_conn_close (&ctx->conn);
       goto clear_writing_flag;
     }
 
-  pthread_mutex_lock (&ctx->mutex);
+  pthread_mutex_lock (&ctx->conn.mutex);
   ctx->task_slots[id].in_use = true;
-  pthread_mutex_unlock (&ctx->mutex);
+  pthread_mutex_unlock (&ctx->conn.mutex);
 
   task_write_state_setup (ctx, id);
 
   return (schedule_job (ctx, send_task_job));
 
 clear_writing_flag:
-  pthread_mutex_lock (&ctx->mutex);
+  pthread_mutex_lock (&ctx->conn.mutex);
   if (ctx->state == CS_WRITING)
     ctx->state = CS_ACTIVE;
-  pthread_mutex_unlock (&ctx->mutex);
+  pthread_mutex_unlock (&ctx->conn.mutex);
   return (S_SUCCESS);
 }
 
@@ -692,14 +611,14 @@ send_task_job (void *arg)
 {
   client_context_t *ctx = arg;
 
-  if (client_is_closing (ctx))
+  if (reactor_conn_is_closing (&ctx->conn))
     return (S_SUCCESS);
 
-  status_t status = write_state_write (ctx->socket_fd, &ctx->write_state);
+  status_t status = write_state_write (ctx->conn.socket_fd, &ctx->write_state);
   if (status != S_SUCCESS)
     {
       error ("Could not send task to client");
-      client_disconnect (ctx);
+      reactor_conn_close (&ctx->conn);
       return (S_SUCCESS);
     }
 
@@ -708,9 +627,9 @@ send_task_job (void *arg)
 
   trace ("Sent task to client");
 
-  pthread_mutex_lock (&ctx->mutex);
+  pthread_mutex_lock (&ctx->conn.mutex);
   ctx->state = CS_ACTIVE;
-  pthread_mutex_unlock (&ctx->mutex);
+  pthread_mutex_unlock (&ctx->conn.mutex);
 
   return (schedule_job (ctx, create_task_job));
 }
@@ -744,7 +663,7 @@ handle_accept (struct evconnlistener *listener, evutil_socket_t fd,
 
   trace ("Accepted client connection");
 
-  if (event_add (client_ctx->read_event, NULL) != 0)
+  if (event_add (client_ctx->conn.read_event, NULL) != 0)
     {
       error ("Could not add event to event base");
       goto release_event_ref;
@@ -780,21 +699,21 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
   client_context_t *ctx = arg;
   mt_context_t *mt_ctx = &ctx->rsrv_ctx->srv_base.mt_ctx;
 
-  ssize_t nread
-      = readv (ctx->socket_fd, ctx->read_state.vec, ctx->read_state.vec_sz);
+  ssize_t nread = readv (ctx->conn.socket_fd, ctx->read_state.vec,
+                         ctx->read_state.vec_sz);
   if (nread < 0)
     {
       if (errno == EAGAIN || errno == EWOULDBLOCK)
         return;
 
       error ("Could not read result from a client");
-      client_disconnect (ctx);
+      reactor_conn_close (&ctx->conn);
       return;
     }
   if (nread == 0)
     {
       error ("Client closed connection");
-      client_disconnect (ctx);
+      reactor_conn_close (&ctx->conn);
       return;
     }
 
@@ -814,14 +733,14 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
   if (result->id < 0 || result->id >= QUEUE_SIZE)
     {
       warn ("Unexpected result id: %d", result->id);
-      client_disconnect (ctx);
+      reactor_conn_close (&ctx->conn);
       return;
     }
 
-  pthread_mutex_lock (&ctx->mutex);
+  pthread_mutex_lock (&ctx->conn.mutex);
   bool is_used = ctx->task_slots[result->id].in_use;
   ctx->task_slots[result->id].in_use = false;
-  pthread_mutex_unlock (&ctx->mutex);
+  pthread_mutex_unlock (&ctx->conn.mutex);
 
   if (!is_used)
     {
@@ -855,9 +774,9 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
          result->is_correct ? "correct" : "incorrect", result->password,
          result->id);
 
-  pthread_mutex_lock (&ctx->mutex);
+  pthread_mutex_lock (&ctx->conn.mutex);
   bool is_writing = ctx->state == CS_WRITING;
-  pthread_mutex_unlock (&ctx->mutex);
+  pthread_mutex_unlock (&ctx->conn.mutex);
 
   if (!is_writing)
     {
@@ -890,15 +809,15 @@ handle_starving_clients (void *arg)
           return (NULL);
         }
 
-      pthread_mutex_lock (&client->mutex);
+      pthread_mutex_lock (&client->conn.mutex);
       if (client->state == CS_CLOSING || client->state == CS_WRITING)
         {
-          pthread_mutex_unlock (&client->mutex);
+          pthread_mutex_unlock (&client->conn.mutex);
           client_unref (client);
           continue;
         }
       client->state = CS_WRITING;
-      pthread_mutex_unlock (&client->mutex);
+      pthread_mutex_unlock (&client->conn.mutex);
 
       int id;
       qs = queue_pop (&client->free_slot_idx, &id);
@@ -920,9 +839,9 @@ handle_starving_clients (void *arg)
 
       task_write_state_setup (client, id);
 
-      pthread_mutex_lock (&client->mutex);
+      pthread_mutex_lock (&client->conn.mutex);
       client->task_slots[id].in_use = true;
-      pthread_mutex_unlock (&client->mutex);
+      pthread_mutex_unlock (&client->conn.mutex);
 
       push_status_t ps = push_job_checked (client, send_task_job);
       switch (ps)
@@ -938,15 +857,15 @@ handle_starving_clients (void *arg)
           break;
         }
 
-      pthread_mutex_lock (&client->mutex);
+      pthread_mutex_lock (&client->conn.mutex);
       client->state = CS_ACTIVE;
-      pthread_mutex_unlock (&client->mutex);
+      pthread_mutex_unlock (&client->conn.mutex);
 
       client_unref (client);
       continue;
 
     fail_starving_take:
-      client_disconnect (client);
+      reactor_conn_close (&client->conn);
       client_unref (client);
       return (NULL);
     }
