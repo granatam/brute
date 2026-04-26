@@ -89,6 +89,19 @@ reactor_context_init (reactor_context_t *ctx)
   return (S_SUCCESS);
 }
 
+void
+reactor_context_stop (reactor_context_t *ctx)
+{
+  if (!ctx)
+    return;
+
+  if (ctx->ev_base)
+    event_base_loopbreak (ctx->ev_base);
+
+  if (queue_cancel (&ctx->jobs_queue) == QS_FAILURE)
+    error ("Could not cancel reactor jobs queue");
+}
+
 status_t
 reactor_context_destroy (reactor_context_t *ctx)
 {
@@ -121,7 +134,10 @@ handle_io (void *arg)
   for (;;)
     {
       job_t job;
-      if (queue_pop (&ctx->jobs_queue, &job) != QS_SUCCESS)
+      queue_status_t qs = queue_pop (&ctx->jobs_queue, &job);
+      if (qs == QS_INACTIVE)
+        break;
+      if (qs != QS_SUCCESS)
         {
           error ("Could not pop a job from a job queue");
           break;
@@ -129,7 +145,12 @@ handle_io (void *arg)
 
       trace ("Got job from a job queue");
 
-      if (job.job_func (job.arg) == S_FAILURE)
+      status_t st = job.job_func (job.arg);
+
+      if (job.release_fn)
+        job.release_fn (job.arg);
+
+      if (st == S_FAILURE)
         {
           error ("Could not complete a job");
           break;
@@ -143,25 +164,33 @@ handle_io (void *arg)
 status_t
 write_state_write_wrapper (int socket_fd, struct iovec *vec, int *vec_sz)
 {
-  size_t actual_write = writev (socket_fd, vec, *vec_sz);
-
-  if ((ssize_t)actual_write <= 0)
+  ssize_t written = writev (socket_fd, vec, *vec_sz);
+  if (written < 0)
     {
-      error ("Could not send data to client");
+      if (errno == EAGAIN || errno == EWOULDBLOCK)
+        return (S_SUCCESS);
+
+      error ("Could not send config data to client");
+      return (S_FAILURE);
+    }
+  if (written == 0)
+    {
+      error ("Could not send config data to client");
       return (S_FAILURE);
     }
 
+  size_t bytes_written = written;
   int i = 0;
-  while (actual_write > 0 && vec[i].iov_len <= actual_write)
-    actual_write -= vec[i++].iov_len;
+  while (i < *vec_sz && bytes_written > 0 && vec[i].iov_len <= bytes_written)
+    bytes_written -= vec[i++].iov_len;
 
   *vec_sz -= i;
-  memmove (&vec[0], &vec[i], sizeof (struct iovec) * *vec_sz);
+  memmove (&vec[0], &vec[i], sizeof (struct iovec) * (size_t)*vec_sz);
 
-  if (*vec_sz > 0 && actual_write > 0)
+  if (*vec_sz > 0 && bytes_written > 0)
     {
-      vec[0].iov_base += actual_write;
-      vec[0].iov_len -= actual_write;
+      vec[0].iov_base = (char *)vec[0].iov_base + bytes_written;
+      vec[0].iov_len -= bytes_written;
     }
 
   return (S_SUCCESS);
@@ -174,21 +203,42 @@ write_state_write (int socket_fd, write_state_t *write_state)
                                      &write_state->base_state.vec_sz));
 }
 
+static void
+reactor_job_drain_cb (void *payload, void *arg)
+{
+  (void)arg;
+
+  job_t *job = payload;
+  if (job->release_fn)
+    job->release_fn (job->arg);
+}
+
+status_t
+reactor_context_drain_jobs (reactor_context_t *ctx)
+{
+  return queue_drain (&ctx->jobs_queue, reactor_job_drain_cb, NULL)
+                 == QS_SUCCESS
+             ? S_SUCCESS
+             : S_FAILURE;
+}
+
 status_t
 push_job (reactor_context_t *rctr_ctx, void *arg,
-          status_t (*job_func) (void *))
+          status_t (*job_func) (void *), job_release_fn release_fn)
 {
   job_t job = {
     .arg = arg,
     .job_func = job_func,
+    .release_fn = release_fn,
   };
+
   if (queue_push_back (&rctr_ctx->jobs_queue, &job) != QS_SUCCESS)
     {
       error ("Could not push job to a job queue");
-      return (S_FAILURE);
+      return S_FAILURE;
     }
 
-  return (S_SUCCESS);
+  return S_SUCCESS;
 }
 
 status_t

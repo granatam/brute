@@ -4,6 +4,7 @@
 #include "common.h"
 #include "log.h"
 #include "queue.h"
+#include "reactor_common.h"
 #include "server_common.h"
 #include "thread_pool.h"
 
@@ -45,27 +46,10 @@ typedef struct rsrv_context_t
   thread_pool_t thread_pool;
   config_t *config;
 
-  queue_t jobs_queue;
+  reactor_context_t rctr_ctx;
   queue_t starving_clients;
-  struct event_base *ev_base;
   bool shutting_down;
 } rsrv_context_t;
-
-typedef struct io_state_t
-{
-  struct iovec vec[2];
-  int32_t vec_sz;
-  command_t cmd;
-} io_state_t;
-
-typedef struct write_state_t
-{
-  io_state_t base_state;
-  struct iovec vec_extra[3];
-  command_t cmd_extra;
-  int32_t length;
-  int32_t vec_extra_sz;
-} write_state_t;
 
 typedef struct task_slot_t
 {
@@ -148,6 +132,12 @@ client_unref (client_context_t *ctx)
 }
 
 static void
+client_job_release (void *arg)
+{
+  client_unref (arg);
+}
+
+static void
 client_release_event_ref (client_context_t *ctx)
 {
   pthread_mutex_lock (&ctx->mutex);
@@ -184,7 +174,7 @@ client_close_async (client_context_t *ctx)
 
   client_mark_closing (ctx);
 
-  if (event_base_once (ctx->rsrv_ctx->ev_base, -1, EV_TIMEOUT,
+  if (event_base_once (ctx->rsrv_ctx->rctr_ctx.ev_base, -1, EV_TIMEOUT,
                        release_event_cb, ctx, NULL)
       != 0)
     {
@@ -201,14 +191,6 @@ client_is_closing (client_context_t *ctx)
   pthread_mutex_unlock (&ctx->mutex);
 
   return (is_closing);
-}
-
-static void
-jobs_queue_unref_cb (void *payload, void *arg)
-{
-  (void)arg;
-  job_t *job = payload;
-  client_unref (job->arg);
 }
 
 static void
@@ -335,7 +317,7 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
 
   client_ctx->ref_count = 1;
   client_ctx->read_event
-      = event_new (rsrv_ctx->ev_base, client_ctx->socket_fd,
+      = event_new (rsrv_ctx->rctr_ctx.ev_base, client_ctx->socket_fd,
                    EV_READ | EV_PERSIST, handle_read, client_ctx);
   if (!client_ctx->read_event)
     {
@@ -369,10 +351,10 @@ rsrv_context_init (rsrv_context_t *ctx, config_t *config)
   ctx->shutting_down = false;
   ctx->listener.listen_fd = -1;
 
+  bool reactor_initialized = false;
   bool listener_initialized = false;
   bool engine_initialized = false;
   bool starving_clients_initialized = false;
-  bool jobs_queue_initialized = false;
 
   if (srv_listener_init (&ctx->listener, config) == S_FAILURE)
     {
@@ -402,19 +384,12 @@ rsrv_context_init (rsrv_context_t *ctx, config_t *config)
     }
   starving_clients_initialized = true;
 
-  if (queue_init (&ctx->jobs_queue, sizeof (job_t)) == QS_FAILURE)
+  if (reactor_context_init (&ctx->rctr_ctx) != S_SUCCESS)
     {
-      error ("Could not initialize jobs queue");
+      error ("Could not initialize reactor context");
       goto fail;
     }
-  jobs_queue_initialized = true;
-
-  ctx->ev_base = event_base_new ();
-  if (!ctx->ev_base)
-    {
-      error ("Could not initialize event base");
-      goto fail;
-    }
+  reactor_initialized = true;
 
   if (evutil_make_socket_nonblocking (ctx->listener.listen_fd) < 0)
     {
@@ -425,14 +400,9 @@ rsrv_context_init (rsrv_context_t *ctx, config_t *config)
   return S_SUCCESS;
 
 fail:
-  if (ctx->ev_base)
-    {
-      event_base_free (ctx->ev_base);
-      ctx->ev_base = NULL;
-    }
-
-  if (jobs_queue_initialized && queue_destroy (&ctx->jobs_queue) == QS_FAILURE)
-    error ("Could not destroy jobs queue during init cleanup");
+  if (reactor_initialized
+      && reactor_context_destroy (&ctx->rctr_ctx) != S_SUCCESS)
+    error ("Could not destroy reactor context during init cleanup");
 
   if (starving_clients_initialized
       && queue_destroy (&ctx->starving_clients) == QS_FAILURE)
@@ -453,10 +423,7 @@ reactor_server_context_stop (rsrv_context_t *ctx)
 {
   ctx->shutting_down = true;
 
-  event_base_loopbreak (ctx->ev_base);
-
-  if (queue_cancel (&ctx->jobs_queue) == QS_FAILURE)
-    error ("Could not cancel jobs queue");
+  reactor_context_stop (&ctx->rctr_ctx);
 
   if (queue_cancel (&ctx->starving_clients) == QS_FAILURE)
     error ("Could not cancel starving clients queue");
@@ -471,15 +438,11 @@ reactor_server_context_stop (rsrv_context_t *ctx)
 static status_t
 reactor_server_context_destroy (rsrv_context_t *ctx)
 {
-  if (queue_drain (&ctx->jobs_queue, jobs_queue_unref_cb, NULL) != QS_SUCCESS)
-    error ("Could not drain jobs queue");
+  reactor_context_drain_jobs (&ctx->rctr_ctx);
 
   if (queue_drain (&ctx->starving_clients, starving_clients_unref_cb, NULL)
       != QS_SUCCESS)
     error ("Could not drain starving clients queue");
-
-  if (queue_destroy (&ctx->jobs_queue) == QS_FAILURE)
-    return S_FAILURE;
 
   if (queue_destroy (&ctx->starving_clients) == QS_FAILURE)
     return S_FAILURE;
@@ -489,9 +452,11 @@ reactor_server_context_destroy (rsrv_context_t *ctx)
   ev_list.head.next = &ev_list.head;
   ev_list.head.ev = NULL;
 
-  event_base_foreach_event (ctx->ev_base, collect_events_cb, &ev_list);
+  event_base_foreach_event (ctx->rctr_ctx.ev_base, collect_events_cb,
+                            &ev_list);
   clients_cleanup (&ev_list);
-  event_base_free (ctx->ev_base);
+
+  reactor_context_destroy (&ctx->rctr_ctx);
 
   if (brute_engine_destroy (&ctx->engine) == S_FAILURE)
     return S_FAILURE;
@@ -556,19 +521,16 @@ static push_status_t
 push_job_checked (client_context_t *ctx, status_t (*job_func) (void *))
 {
   if (!client_try_ref (ctx))
-    return (PS_SKIPPED);
+    return PS_SKIPPED;
 
-  job_t job = {
-    .arg = ctx,
-    .job_func = job_func,
-  };
-  if (queue_push_back (&ctx->rsrv_ctx->jobs_queue, &job) != QS_SUCCESS)
+  if (push_job (&ctx->rsrv_ctx->rctr_ctx, ctx, job_func, client_job_release)
+      != S_SUCCESS)
     {
       error ("Could not push job to a job queue");
-      return (client_unref (ctx) ? PS_DESTROYED : PS_FAILURE);
+      return client_unref (ctx) ? PS_DESTROYED : PS_FAILURE;
     }
 
-  return (PS_SUCCESS);
+  return PS_SUCCESS;
 }
 
 static status_t
@@ -576,48 +538,6 @@ schedule_job (client_context_t *ctx, status_t (*job_func) (void *))
 {
   return (push_job_checked (ctx, job_func) == PS_FAILURE ? S_FAILURE
                                                          : S_SUCCESS);
-}
-
-static status_t
-write_state_write_wrapper (int socket_fd, struct iovec *vec, int *vec_sz)
-{
-  ssize_t written = writev (socket_fd, vec, *vec_sz);
-  if (written < 0)
-    {
-      if (errno == EAGAIN || errno == EWOULDBLOCK)
-        return (S_SUCCESS);
-
-      error ("Could not send config data to client");
-      return (S_FAILURE);
-    }
-  if (written == 0)
-    {
-      error ("Could not send config data to client");
-      return (S_FAILURE);
-    }
-
-  size_t bytes_written = written;
-  int i = 0;
-  while (i < *vec_sz && bytes_written > 0 && vec[i].iov_len <= bytes_written)
-    bytes_written -= vec[i++].iov_len;
-
-  *vec_sz -= i;
-  memmove (&vec[0], &vec[i], sizeof (struct iovec) * (size_t)*vec_sz);
-
-  if (*vec_sz > 0 && bytes_written > 0)
-    {
-      vec[0].iov_base = (char *)vec[0].iov_base + bytes_written;
-      vec[0].iov_len -= bytes_written;
-    }
-
-  return (S_SUCCESS);
-}
-
-static inline status_t
-write_state_write (int socket_fd, write_state_t *write_state)
-{
-  return (write_state_write_wrapper (socket_fd, write_state->base_state.vec,
-                                     &write_state->base_state.vec_sz));
 }
 
 static inline status_t
@@ -803,7 +723,7 @@ handle_accept_error (struct evconnlistener *listener, void *arg)
 
   warn ("Got error on connection accept: %m");
   rsrv_context_t *ctx = arg;
-  event_base_loopbreak (ctx->ev_base);
+  event_base_loopbreak (ctx->rctr_ctx.ev_base);
 }
 
 static void
@@ -931,7 +851,7 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
           == S_FAILURE)
         goto out;
 
-      event_base_loopbreak (ctx->rsrv_ctx->ev_base);
+      event_base_loopbreak (ctx->rsrv_ctx->rctr_ctx.ev_base);
     }
 
   trace ("Calling brute_engine_task_done");
@@ -1036,46 +956,6 @@ handle_starving_clients (void *arg)
     }
 }
 
-static void *
-handle_io (void *arg)
-{
-  rsrv_context_t *ctx = *(rsrv_context_t **)arg;
-
-  for (;;)
-    {
-      job_t job;
-      queue_status_t qs = queue_pop (&ctx->jobs_queue, &job);
-      if (qs == QS_INACTIVE)
-        break;
-      if (qs != QS_SUCCESS)
-        {
-          error ("Could not pop a job from a job queue");
-          break;
-        }
-
-      status_t st = job.job_func (job.arg);
-      client_unref (job.arg);
-      if (st == S_FAILURE)
-        {
-          error ("Could not complete a job");
-          break;
-        }
-    }
-
-  event_base_loopbreak (ctx->ev_base);
-  return (NULL);
-}
-
-static void *
-dispatch_event_loop (void *arg)
-{
-  rsrv_context_t *ctx = *(rsrv_context_t **)arg;
-  if (event_base_dispatch (ctx->ev_base) != 0)
-    error ("Could not dispatch the event loop");
-
-  return (NULL);
-}
-
 bool
 run_reactor_server (task_t *task, config_t *config)
 {
@@ -1090,8 +970,8 @@ run_reactor_server (task_t *task, config_t *config)
     return false;
 
   struct evconnlistener *listener = evconnlistener_new (
-      rsrv_ctx.ev_base, handle_accept, &rsrv_ctx, LEV_OPT_REUSEABLE, -1,
-      rsrv_ctx.listener.listen_fd);
+      rsrv_ctx.rctr_ctx.ev_base, handle_accept, &rsrv_ctx, LEV_OPT_REUSEABLE,
+      -1, rsrv_ctx.listener.listen_fd);
 
   if (!listener)
     goto cleanup;
@@ -1100,20 +980,13 @@ run_reactor_server (task_t *task, config_t *config)
 
   thread_pool_t *thread_pool = &rsrv_ctx.thread_pool;
 
-  long number_of_threads
-      = (config->number_of_threads > 2) ? config->number_of_threads - 2 : 1;
+  reactor_context_t *rctr_ptr = &rsrv_ctx.rctr_ctx;
 
-  if (create_threads (thread_pool, number_of_threads, handle_io, &context_ptr,
-                      sizeof (context_ptr), "i/o handler")
-      == 0)
+  if (create_reactor_threads (thread_pool, config, rctr_ptr) == S_FAILURE)
     goto cleanup_listener;
 
   if (!thread_create (thread_pool, handle_starving_clients, &context_ptr,
                       sizeof (context_ptr), "starving clients handler"))
-    goto cleanup_listener;
-
-  if (!thread_create (thread_pool, dispatch_event_loop, &context_ptr,
-                      sizeof (context_ptr), "event loop dispatcher"))
     goto cleanup_listener;
 
   if (brute_engine_run (&rsrv_ctx.engine, task, config, &found) == S_FAILURE)

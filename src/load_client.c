@@ -98,8 +98,7 @@ static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
 static void
 spawner_context_destroy (spawner_context_t *ctx)
 {
-  if (queue_cancel (&ctx->rctx->jobs_queue) != QS_SUCCESS)
-    error ("Could not cancel jobs queue");
+  reactor_context_stop (ctx->rctx);
 
   if (thread_pool_join (&ctx->thread_pool) == S_FAILURE)
     error ("Could not join thread pool");
@@ -259,15 +258,22 @@ result_write_state_setup (client_context_t *ctx)
   base_state->vec_sz = 1;
 }
 
+static void client_finish (client_context_t *ctx);
+
 static status_t
 send_result_job (void *arg)
 {
   client_context_t *ctx = arg;
 
-  write_state_write (ctx->client_base.socket_fd, &ctx->write_state);
-
+  if (write_state_write (ctx->client_base.socket_fd, &ctx->write_state)
+      != S_SUCCESS)
+    {
+      error ("Could not send result to server");
+      client_finish (ctx);
+      return S_SUCCESS;
+    }
   if (ctx->write_state.base_state.vec_sz != 0)
-    return (push_job (ctx->rctr_conn.rctr_ctx, ctx, send_result_job));
+    return (push_job (ctx->rctr_conn.rctr_ctx, ctx, send_result_job, NULL));
 
   trace ("Sent result %s to server", ctx->result_buffer.password);
 
@@ -288,7 +294,7 @@ send_result_job (void *arg)
 
   result_write_state_setup (ctx);
 
-  return (push_job (ctx->rctr_conn.rctr_ctx, ctx, send_result_job));
+  return (push_job (ctx->rctr_conn.rctr_ctx, ctx, send_result_job, NULL));
 }
 
 static void
@@ -308,10 +314,7 @@ client_finish (client_context_t *ctx)
       if (pthread_cond_signal (&s_ctx->cond_sem) != 0)
         error ("Could not signal spawner conditional semaphore");
 
-      if (queue_cancel (&s_ctx->rctx->jobs_queue) != QS_SUCCESS)
-        error ("Could not cancel jobs queue");
-
-      event_base_loopbreak (s_ctx->rctx->ev_base);
+      reactor_context_stop (s_ctx->rctx);
     }
 
   if (pthread_mutex_unlock (&s_ctx->mutex) != 0)
@@ -382,7 +385,7 @@ timer_callback (evutil_socket_t fd, short what, void *arg)
   memcpy (&due.ctx->result_buffer, result, sizeof (*result));
   result_write_state_setup (due.ctx);
 
-  if (push_job (due.ctx->rctr_conn.rctr_ctx, due.ctx, send_result_job)
+  if (push_job (due.ctx->rctr_conn.rctr_ctx, due.ctx, send_result_job, NULL)
       != S_SUCCESS)
     {
       error ("Could not push send result job");

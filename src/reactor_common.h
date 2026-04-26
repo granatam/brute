@@ -39,11 +39,13 @@ typedef struct reactor_conn_t
 } reactor_conn_t;
 
 typedef void (*client_ctx_destroy_fn) (void *);
+typedef void (*job_release_fn) (void *);
 
 typedef struct job_t
 {
   void *arg;
   status_t (*job_func) (void *);
+  job_release_fn release_fn;
 } job_t;
 
 void *handle_io (void *arg);
@@ -54,14 +56,15 @@ status_t write_state_write_wrapper (int socket_fd, struct iovec *vec,
 status_t write_state_write (int socket_fd, write_state_t *write_state);
 
 status_t push_job (reactor_context_t *rctr_ctx, void *arg,
-                   status_t (*job_func) (void *));
-
+                   status_t (*job_func) (void *), job_release_fn release_fn);
+status_t reactor_context_drain_jobs (reactor_context_t *ctx);
 status_t reactor_conn_init (reactor_conn_t *conn, reactor_context_t *rctr_ctx,
                             evutil_socket_t fd, event_callback_fn on_read,
                             void *arg);
 status_t reactor_conn_destroy (reactor_conn_t *conn, evutil_socket_t fd);
 
 status_t reactor_context_init (reactor_context_t *ctx);
+void reactor_context_stop (reactor_context_t *ctx);
 status_t reactor_context_destroy (reactor_context_t *ctx);
 
 status_t create_reactor_threads (thread_pool_t *tp, config_t *config,
@@ -70,5 +73,15 @@ status_t create_reactor_threads (thread_pool_t *tp, config_t *config,
 void reactor_cleanup_clients (reactor_context_t *ctx,
                               event_callback_fn client_read_cb,
                               client_ctx_destroy_fn destroy_ctx);
+
+typedef enum reactor_io_status
+{
+  RIO_SUCCESS,
+  RIO_PENDING,
+  RIO_FAILURE,
+} reactor_io_status_t;
+
+reactor_io_status_t reactor_writev_advance (int fd, struct iovec *vec,
+                                            int *vec_sz);
 
 #endif // REACTOR_COMMON_H
