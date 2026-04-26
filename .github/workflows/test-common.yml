@@ -23,7 +23,7 @@ jobs:
       - name: set max_examples config for MacOS tests
         if: ${{ contains(inputs.runs_on, 'macos') }}
         run: |
-          echo "HYPOTHESIS_MAX_EXAMPLES=50" >> $GITHUB_ENV
+          echo "HYPOTHESIS_MAX_EXAMPLES=200" >> $GITHUB_ENV
       - name: install python dependencies
         run: pip install pytest hypothesis pytest-xdist
       - name: build (dev)
