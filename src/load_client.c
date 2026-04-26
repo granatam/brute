@@ -222,8 +222,7 @@ client_context_destroy (void *arg)
   client_context_t *ctx = arg;
 
   trace ("Destroying client context");
-  if (reactor_conn_destroy (&ctx->rctr_conn, ctx->client_base.socket_fd)
-      != S_SUCCESS)
+  if (reactor_conn_destroy (&ctx->rctr_conn) != S_SUCCESS)
     {
       error ("Could not destroy reactor connection");
     }

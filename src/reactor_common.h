@@ -34,6 +34,7 @@ typedef struct reactor_conn_t
 {
   reactor_context_t *rctr_ctx;
   struct event *read_event;
+  evutil_socket_t fd;
   bool is_writing;
   pthread_mutex_t is_writing_mutex;
 } reactor_conn_t;
@@ -61,7 +62,7 @@ status_t reactor_context_drain_jobs (reactor_context_t *ctx);
 status_t reactor_conn_init (reactor_conn_t *conn, reactor_context_t *rctr_ctx,
                             evutil_socket_t fd, event_callback_fn on_read,
                             void *arg);
-status_t reactor_conn_destroy (reactor_conn_t *conn, evutil_socket_t fd);
+status_t reactor_conn_destroy (reactor_conn_t *conn);
 
 status_t reactor_context_init (reactor_context_t *ctx);
 void reactor_context_stop (reactor_context_t *ctx);

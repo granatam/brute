@@ -70,6 +70,7 @@ typedef struct client_context_t
   result_t read_buffer;
   pthread_mutex_t mutex;
   _Atomic int ref_count;
+  bool close_scheduled;
 } client_context_t;
 
 typedef struct event_node_t
@@ -170,15 +171,32 @@ release_event_cb (evutil_socket_t fd, short what, void *arg)
 static void
 client_close_async (client_context_t *ctx)
 {
-  client_ref (ctx); /* release_event_cb owns this ref */
+  pthread_mutex_lock (&ctx->mutex);
 
-  client_mark_closing (ctx);
+  if (ctx->close_scheduled)
+    {
+      ctx->state = CS_CLOSING;
+      pthread_mutex_unlock (&ctx->mutex);
+      return;
+    }
+
+  ctx->state = CS_CLOSING;
+  ctx->close_scheduled = true;
+  pthread_mutex_unlock (&ctx->mutex);
+
+  client_ref (ctx); /* release_event_cb owns this ref */
 
   if (event_base_once (ctx->rsrv_ctx->rctr_ctx.ev_base, -1, EV_TIMEOUT,
                        release_event_cb, ctx, NULL)
       != 0)
     {
       error ("Could not schedule client event cleanup");
+
+      pthread_mutex_lock (&ctx->mutex);
+      ctx->close_scheduled = false;
+      pthread_mutex_unlock (&ctx->mutex);
+
+      client_release_event_ref (ctx);
       client_unref (ctx);
     }
 }
@@ -264,6 +282,7 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
       return (NULL);
     }
   client_ctx->state = CS_ACTIVE;
+  client_ctx->close_scheduled = false;
 
   client_ctx->socket_fd = fd;
   client_ctx->rsrv_ctx = rsrv_ctx;
@@ -325,7 +344,7 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
       goto fail;
     }
 
-  client_try_ref (client_ctx);
+  client_ref (client_ctx);
 
   return (client_ctx);
 
@@ -438,15 +457,6 @@ reactor_server_context_stop (rsrv_context_t *ctx)
 static status_t
 reactor_server_context_destroy (rsrv_context_t *ctx)
 {
-  reactor_context_drain_jobs (&ctx->rctr_ctx);
-
-  if (queue_drain (&ctx->starving_clients, starving_clients_unref_cb, NULL)
-      != QS_SUCCESS)
-    error ("Could not drain starving clients queue");
-
-  if (queue_destroy (&ctx->starving_clients) == QS_FAILURE)
-    return S_FAILURE;
-
   event_list_t ev_list;
   ev_list.head.prev = &ev_list.head;
   ev_list.head.next = &ev_list.head;
@@ -456,7 +466,18 @@ reactor_server_context_destroy (rsrv_context_t *ctx)
                             &ev_list);
   clients_cleanup (&ev_list);
 
-  reactor_context_destroy (&ctx->rctr_ctx);
+  if (reactor_context_drain_jobs (&ctx->rctr_ctx) == S_FAILURE)
+    error ("Could not drain jobs queue");
+
+  if (queue_drain (&ctx->starving_clients, starving_clients_unref_cb, NULL)
+      != QS_SUCCESS)
+    error ("Could not drain starving clients queue");
+
+  if (queue_destroy (&ctx->starving_clients) == QS_FAILURE)
+    return S_FAILURE;
+
+  if (reactor_context_destroy (&ctx->rctr_ctx) == S_FAILURE)
+    return S_FAILURE;
 
   if (brute_engine_destroy (&ctx->engine) == S_FAILURE)
     return S_FAILURE;

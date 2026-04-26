@@ -23,51 +23,71 @@ status_t
 reactor_conn_init (reactor_conn_t *conn, reactor_context_t *rctr_ctx,
                    evutil_socket_t fd, event_callback_fn on_read, void *arg)
 {
+  memset (conn, 0, sizeof (*conn));
+
   conn->rctr_ctx = rctr_ctx;
+  conn->fd = fd;
+
   conn->read_event = event_new (conn->rctr_ctx->ev_base, fd,
                                 EV_READ | EV_PERSIST, on_read, arg);
   if (!conn->read_event)
     {
       error ("Could not create read event");
-      return (S_FAILURE);
+      return S_FAILURE;
     }
 
   if (event_add (conn->read_event, NULL) != 0)
     {
       error ("Could not add event to event base");
-      goto cleanup;
+      goto cleanup_event;
     }
 
   if (pthread_mutex_init (&conn->is_writing_mutex, NULL) != 0)
     {
       error ("Could not initialize mutex for write state");
-      goto cleanup;
+      goto cleanup_event_del;
     }
 
   conn->is_writing = false;
+  return S_SUCCESS;
 
-  return (S_SUCCESS);
+cleanup_event_del:
+  if (event_del (conn->read_event) == -1)
+    error ("Could not delete read event");
 
-cleanup:
+cleanup_event:
   event_free (conn->read_event);
-  return (S_FAILURE);
+  conn->read_event = NULL;
+  return S_FAILURE;
 }
 
 status_t
-reactor_conn_destroy (reactor_conn_t *conn, evutil_socket_t fd)
+reactor_conn_destroy (reactor_conn_t *conn)
 {
+  if (!conn)
+    return S_SUCCESS;
+
   pthread_mutex_destroy (&conn->is_writing_mutex);
 
-  shutdown (fd, SHUT_RDWR);
-  close (fd);
+  if (conn->read_event)
+    {
+      if (event_del (conn->read_event) == -1)
+        error ("Could not delete read event");
 
-  if (event_del (conn->read_event) == -1)
-    error ("Could not delete read event");
-  event_free (conn->read_event);
+      event_free (conn->read_event);
+      conn->read_event = NULL;
+    }
 
-  // event_base_loopbreak (conn->rctr_ctx->ev_base);
+  if (conn->fd >= 0)
+    {
+      shutdown (conn->fd, SHUT_RDWR);
+      if (close (conn->fd) != 0)
+        error ("Could not close socket");
 
-  return (S_SUCCESS);
+      conn->fd = -1;
+    }
+
+  return S_SUCCESS;
 }
 
 status_t
