@@ -71,6 +71,7 @@ typedef struct client_context_t
   pthread_mutex_t mutex;
   _Atomic int ref_count;
   bool close_scheduled;
+  bool close_cb_ref;
 } client_context_t;
 
 typedef struct event_node_t
@@ -143,7 +144,8 @@ client_release_event_ref (client_context_t *ctx)
 {
   pthread_mutex_lock (&ctx->mutex);
   struct event *ev = ctx->read_event;
-  ctx->read_event = NULL;
+  if (ev)
+    ctx->read_event = NULL;
   pthread_mutex_unlock (&ctx->mutex);
 
   if (!ev)
@@ -151,6 +153,7 @@ client_release_event_ref (client_context_t *ctx)
 
   if (event_del (ev) == -1)
     error ("Could not delete read event");
+
   event_free (ev);
 
   client_unref (ctx);
@@ -165,7 +168,14 @@ release_event_cb (evutil_socket_t fd, short what, void *arg)
   client_context_t *ctx = arg;
 
   client_release_event_ref (ctx);
-  client_unref (ctx);
+
+  pthread_mutex_lock (&ctx->mutex);
+  bool had_cb_ref = ctx->close_cb_ref;
+  ctx->close_cb_ref = false;
+  pthread_mutex_unlock (&ctx->mutex);
+
+  if (had_cb_ref)
+    client_unref (ctx);
 }
 
 static void
@@ -182,9 +192,10 @@ client_close_async (client_context_t *ctx)
 
   ctx->state = CS_CLOSING;
   ctx->close_scheduled = true;
-  pthread_mutex_unlock (&ctx->mutex);
-
+  ctx->close_cb_ref = true;
   client_ref (ctx); /* release_event_cb owns this ref */
+
+  pthread_mutex_unlock (&ctx->mutex);
 
   if (event_base_once (ctx->rsrv_ctx->rctr_ctx.ev_base, -1, EV_TIMEOUT,
                        release_event_cb, ctx, NULL)
@@ -194,10 +205,11 @@ client_close_async (client_context_t *ctx)
 
       pthread_mutex_lock (&ctx->mutex);
       ctx->close_scheduled = false;
+      ctx->close_cb_ref = false;
       pthread_mutex_unlock (&ctx->mutex);
 
       client_release_event_ref (ctx);
-      client_unref (ctx);
+      client_unref (ctx); /* release failed callback ref */
     }
 }
 
