@@ -169,8 +169,8 @@ client_unref_dbg (client_context_t *ctx, const char *func, int line)
 
   if (old <= 0)
     {
-      error ("CLIENT_UNREF UNDERFLOW ctx=%p old=%d at %s:%d", (void *)ctx,
-             old, func, line);
+      error ("CLIENT_UNREF UNDERFLOW ctx=%p old=%d at %s:%d", (void *)ctx, old,
+             func, line);
       assert (old > 0);
     }
 
@@ -208,8 +208,8 @@ client_try_ref_dbg (client_context_t *ctx, const char *func, int line)
   trace ("CLIENT_TRY_REF_OK ctx=%p %d->%d state=%s read_event=%p "
          "close_scheduled=%d close_cb_ref=%d at %s:%d",
          (void *)ctx, old, old + 1, client_state_name (ctx->state),
-         (void *)ctx->conn.read_event, ctx->close_scheduled,
-         ctx->close_cb_ref, func, line);
+         (void *)ctx->conn.read_event, ctx->close_scheduled, ctx->close_cb_ref,
+         func, line);
 
   pthread_mutex_unlock (&ctx->mutex);
   return true;
@@ -367,9 +367,23 @@ release_event_cb (evutil_socket_t fd, short what, void *arg)
     CLIENT_UNREF (ctx);
 }
 
+static status_t return_tasks (client_context_t *ctx);
+
+static void
+client_return_tasks_on_close (client_context_t *ctx)
+{
+  if (ctx->rsrv_ctx->shutting_down)
+    return;
+
+  if (return_tasks (ctx) == S_FAILURE)
+    error ("Could not return tasks from closing client");
+}
+
 static void
 client_close_async (client_context_t *ctx)
 {
+  bool should_return_tasks = false;
+
   pthread_mutex_lock (&ctx->mutex);
 
   trace ("CLIENT_CLOSE_ASYNC ctx=%p state=%s close_scheduled=%d "
@@ -378,11 +392,19 @@ client_close_async (client_context_t *ctx)
          ctx->close_cb_ref,
          atomic_load_explicit (&ctx->ref_count, memory_order_relaxed));
 
-  ctx->state = CS_CLOSING;
+  if (ctx->state != CS_CLOSING)
+    {
+      ctx->state = CS_CLOSING;
+      should_return_tasks = true;
+    }
 
   if (ctx->close_scheduled)
     {
       pthread_mutex_unlock (&ctx->mutex);
+
+      if (should_return_tasks)
+        client_return_tasks_on_close (ctx);
+
       return;
     }
 
@@ -391,6 +413,9 @@ client_close_async (client_context_t *ctx)
   CLIENT_REF (ctx); /* release_event_cb owns this ref */
 
   pthread_mutex_unlock (&ctx->mutex);
+
+  if (should_return_tasks)
+    client_return_tasks_on_close (ctx);
 
   if (event_base_once (ctx->rsrv_ctx->rctr_ctx.ev_base, -1, EV_TIMEOUT,
                        release_event_cb, ctx, NULL)
@@ -851,7 +876,7 @@ create_task_job (void *arg)
   task_write_state_setup (ctx, id);
 
   return continue_client_job (ctx, send_task_job) == PS_FAILURE ? S_FAILURE
-                                                               : S_SUCCESS;
+                                                                : S_SUCCESS;
 }
 
 static status_t
@@ -872,12 +897,12 @@ send_task_job (void *arg)
 
   if (ctx->write_state.base_state.vec_sz != 0)
     return continue_client_job (ctx, send_task_job) == PS_FAILURE ? S_FAILURE
-                                                                 : S_SUCCESS;
+                                                                  : S_SUCCESS;
 
   trace ("Sent task to client");
 
   return continue_client_job (ctx, create_task_job) == PS_FAILURE ? S_FAILURE
-                                                                 : S_SUCCESS;
+                                                                  : S_SUCCESS;
 }
 
 static void
@@ -1151,4 +1176,3 @@ cleanup:
 
   return found;
 }
-
