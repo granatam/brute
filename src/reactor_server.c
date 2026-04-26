@@ -9,7 +9,6 @@
 #include "thread_pool.h"
 
 #include <assert.h>
-#include <errno.h>
 #include <event2/event.h>
 #include <event2/listener.h>
 #include <event2/thread.h>
@@ -72,18 +71,6 @@ typedef struct client_context_t
   bool close_scheduled;
   bool close_cb_ref;
 } client_context_t;
-
-typedef struct event_node_t
-{
-  const struct event *ev;
-  struct event_node_t *next;
-  struct event_node_t *prev;
-} event_node_t;
-
-typedef struct event_list_t
-{
-  event_node_t head;
-} event_list_t;
 
 static void
 client_mark_closing (client_context_t *ctx)
@@ -150,12 +137,10 @@ client_release_event_ref (client_context_t *ctx)
   if (!ev)
     return;
 
-  if (event_del (ev) == -1)
-    error ("Could not delete read event");
+  if (reactor_event_del_free (ev) == S_FAILURE)
+    error ("Could not release client read event");
 
-  event_free (ev);
-
-  client_unref (ctx);
+  client_unref (ctx); /* read_event owns this ref */
 }
 
 static void
@@ -166,12 +151,12 @@ release_event_cb (evutil_socket_t fd, short what, void *arg)
 
   client_context_t *ctx = arg;
 
-  client_release_event_ref (ctx);
-
   pthread_mutex_lock (&ctx->mutex);
   bool had_cb_ref = ctx->close_cb_ref;
   ctx->close_cb_ref = false;
   pthread_mutex_unlock (&ctx->mutex);
+
+  client_release_event_ref (ctx);
 
   if (had_cb_ref)
     client_unref (ctx);
@@ -230,50 +215,22 @@ starving_clients_unref_cb (void *payload, void *arg)
   client_unref (client);
 }
 
-static int
-collect_events_cb (const struct event_base *ev_base, const struct event *ev,
-                   void *arg)
-{
-  (void)ev_base; /* to suppress the "unused parameter" warning */
-
-  event_list_t *list = arg;
-  event_node_t *node = calloc (1, sizeof (*node));
-  if (!node)
-    return -1;
-  node->next = &list->head;
-  node->prev = list->head.prev;
-  node->ev = ev;
-
-  list->head.prev->next = node;
-  list->head.prev = node;
-
-  return 0;
-}
-
 static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
 
 static void
-clients_cleanup (event_list_t *list)
+release_client_event_if_read_cb (const struct event *ev, void *arg)
 {
-  event_node_t *curr = list->head.next;
-  while (curr->ev)
-    {
-      event_node_t *dummy = curr;
-      if (event_get_callback (curr->ev) == handle_read)
-        {
-          client_context_t *ctx = event_get_callback_arg (curr->ev);
-          if (ctx)
-            {
-              trace ("Releasing client event reference");
-              client_release_event_ref (ctx);
-            }
-        }
+  (void)arg;
 
-      curr->prev->next = curr->next;
-      curr->next->prev = curr->prev;
-      curr = curr->next;
-      free (dummy);
-    }
+  if (event_get_callback (ev) != handle_read)
+    return;
+
+  client_context_t *ctx = event_get_callback_arg (ev);
+  if (!ctx)
+    return;
+
+  trace ("Releasing client event reference");
+  client_release_event_ref (ctx);
 }
 
 static client_context_t *
@@ -293,8 +250,10 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
       return (NULL);
     }
   client_ctx->state = CS_ACTIVE;
+  client_ctx->close_cb_ref = false;
   client_ctx->close_scheduled = false;
 
+  client_ctx->conn.rctr_ctx = &rsrv_ctx->rctr_ctx;
   client_ctx->conn.fd = fd;
   client_ctx->rsrv_ctx = rsrv_ctx;
   client_ctx->read_state.vec[0].iov_base = &client_ctx->read_buffer;
@@ -468,14 +427,10 @@ reactor_server_context_stop (rsrv_context_t *ctx)
 static status_t
 reactor_server_context_destroy (rsrv_context_t *ctx)
 {
-  event_list_t ev_list;
-  ev_list.head.prev = &ev_list.head;
-  ev_list.head.next = &ev_list.head;
-  ev_list.head.ev = NULL;
-
-  event_base_foreach_event (ctx->rctr_ctx.ev_base, collect_events_cb,
-                            &ev_list);
-  clients_cleanup (&ev_list);
+  if (reactor_for_each_event_snapshot (&ctx->rctr_ctx,
+                                       release_client_event_if_read_cb, NULL)
+      == S_FAILURE)
+    error ("Could not release client events");
 
   if (reactor_context_drain_jobs (&ctx->rctr_ctx) == S_FAILURE)
     error ("Could not drain jobs queue");

@@ -7,18 +7,6 @@
 #include <string.h>
 #include <unistd.h>
 
-typedef struct event_node_t
-{
-  const struct event *ev;
-  struct event_node_t *next;
-  struct event_node_t *prev;
-} event_node_t;
-
-typedef struct event_list_t
-{
-  event_node_t head;
-} event_list_t;
-
 status_t
 reactor_conn_init (reactor_conn_t *conn, reactor_context_t *rctr_ctx,
                    evutil_socket_t fd, event_callback_fn on_read, void *arg)
@@ -241,64 +229,6 @@ create_reactor_threads (thread_pool_t *tp, config_t *config,
   return (S_SUCCESS);
 }
 
-static int
-collect_events_cb (const struct event_base *ev_base, const struct event *ev,
-                   void *arg)
-{
-  (void)ev_base;
-
-  event_list_t *list = arg;
-  event_node_t *node = calloc (1, sizeof (*node));
-  if (!node)
-    return 0;
-
-  node->next = &list->head;
-  node->prev = list->head.prev;
-  node->ev = ev;
-
-  list->head.prev->next = node;
-  list->head.prev = node;
-
-  return 0;
-}
-
-void
-reactor_cleanup_clients (reactor_context_t *ctx,
-                         event_callback_fn client_read_cb,
-                         client_ctx_destroy_fn destroy_ctx)
-{
-  if (!ctx || !ctx->ev_base || !destroy_ctx)
-    return;
-
-  event_list_t ev_list;
-  ev_list.head.prev = &ev_list.head;
-  ev_list.head.next = &ev_list.head;
-  ev_list.head.ev = NULL;
-
-  event_base_foreach_event (ctx->ev_base, collect_events_cb, &ev_list);
-
-  event_node_t *curr = ev_list.head.next;
-  while (curr->ev)
-    {
-      event_node_t *dummy = curr;
-
-      if (!client_read_cb || event_get_callback (curr->ev) == client_read_cb)
-        {
-          void *client_ctx = event_get_callback_arg (curr->ev);
-          if (client_ctx)
-            {
-              trace ("Destroying client context from reactor_cleanup_clients");
-              destroy_ctx (client_ctx);
-            }
-        }
-
-      curr->prev->next = curr->next;
-      curr->next->prev = curr->prev;
-      curr = curr->next;
-      free (dummy);
-    }
-}
-
 static void
 reactor_iov_advance (struct iovec *vec, int *vec_sz, size_t bytes)
 {
@@ -381,4 +311,84 @@ write_state_write (int socket_fd, write_state_t *write_state)
 {
   return (write_state_write_wrapper (socket_fd, write_state->base_state.vec,
                                      &write_state->base_state.vec_sz));
+}
+
+typedef struct reactor_event_node_t
+{
+  const struct event *ev;
+  struct reactor_event_node_t *next;
+  struct reactor_event_node_t *prev;
+} reactor_event_node_t;
+
+typedef struct reactor_event_list_t
+{
+  reactor_event_node_t head;
+} reactor_event_list_t;
+
+static int
+reactor_collect_events_cb (const struct event_base *ev_base,
+                           const struct event *ev, void *arg)
+{
+  (void)ev_base;
+
+  reactor_event_list_t *list = arg;
+  reactor_event_node_t *node = calloc (1, sizeof (*node));
+  if (!node)
+    return -1;
+
+  node->next = &list->head;
+  node->prev = list->head.prev;
+  node->ev = ev;
+
+  list->head.prev->next = node;
+  list->head.prev = node;
+
+  return 0;
+}
+
+status_t
+reactor_for_each_event_snapshot (reactor_context_t *ctx,
+                                 reactor_event_visit_fn visit, void *arg)
+{
+  if (!ctx || !ctx->ev_base || !visit)
+    return S_FAILURE;
+
+  reactor_event_list_t list;
+  list.head.prev = &list.head;
+  list.head.next = &list.head;
+  list.head.ev = NULL;
+
+  if (event_base_foreach_event (ctx->ev_base, reactor_collect_events_cb,
+                                &list)
+      != 0)
+    return S_FAILURE;
+
+  reactor_event_node_t *curr = list.head.next;
+  while (curr->ev)
+    {
+      reactor_event_node_t *next = curr->next;
+      visit (curr->ev, arg);
+      free (curr);
+      curr = next;
+    }
+
+  return S_SUCCESS;
+}
+
+status_t
+reactor_event_del_free (struct event *ev)
+{
+  if (!ev)
+    return S_SUCCESS;
+
+  status_t status = S_SUCCESS;
+
+  if (event_del (ev) == -1)
+    {
+      error ("Could not delete event");
+      status = S_FAILURE;
+    }
+
+  event_free (ev);
+  return status;
 }

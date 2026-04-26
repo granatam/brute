@@ -53,7 +53,6 @@ typedef struct reactor_conn_t
   pthread_mutex_t is_writing_mutex;
 } reactor_conn_t;
 
-typedef void (*client_ctx_destroy_fn) (void *);
 typedef void (*job_release_fn) (void *);
 
 typedef struct job_t
@@ -62,6 +61,14 @@ typedef struct job_t
   status_t (*job_func) (void *);
   job_release_fn release_fn;
 } job_t;
+
+typedef void (*reactor_event_visit_fn) (const struct event *ev, void *arg);
+
+status_t reactor_for_each_event_snapshot (reactor_context_t *ctx,
+                                          reactor_event_visit_fn visit,
+                                          void *arg);
+
+status_t reactor_event_del_free (struct event *ev);
 
 void *handle_io (void *arg);
 void *dispatch_event_loop (void *arg);
@@ -84,9 +91,5 @@ status_t reactor_context_destroy (reactor_context_t *ctx);
 
 status_t create_reactor_threads (thread_pool_t *tp, config_t *config,
                                  reactor_context_t *ptr);
-
-void reactor_cleanup_clients (reactor_context_t *ctx,
-                              event_callback_fn client_read_cb,
-                              client_ctx_destroy_fn destroy_ctx);
 
 #endif // REACTOR_COMMON_H

@@ -96,6 +96,22 @@ static void client_context_destroy (void *arg);
 static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
 
 static void
+destroy_load_client_if_read_cb (const struct event *ev, void *arg)
+{
+  (void)arg;
+
+  if (event_get_callback (ev) != handle_read)
+    return;
+
+  client_context_t *ctx = event_get_callback_arg (ev);
+  if (!ctx)
+    return;
+
+  trace ("Destroying load client from event snapshot");
+  client_context_destroy (ctx);
+}
+
+static void
 spawner_context_destroy (spawner_context_t *ctx)
 {
   reactor_context_stop (ctx->rctx);
@@ -103,7 +119,10 @@ spawner_context_destroy (spawner_context_t *ctx)
   if (thread_pool_join (&ctx->thread_pool) == S_FAILURE)
     error ("Could not join thread pool");
 
-  reactor_cleanup_clients (ctx->rctx, handle_read, client_context_destroy);
+  if (reactor_for_each_event_snapshot (ctx->rctx,
+                                       destroy_load_client_if_read_cb, NULL)
+      == S_FAILURE)
+    error ("Could not cleanup load clients");
 
   if (event_del (ctx->timer_event) == -1)
     error ("Could not delete timer event");
