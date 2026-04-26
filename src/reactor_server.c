@@ -440,8 +440,13 @@ static void
 starving_clients_unref_cb (void *payload, void *arg)
 {
   (void)arg;
+
   client_context_t *client = *(client_context_t **)payload;
-  CLIENT_UNREF (client);
+
+  client_mark_closing (client);
+  client_release_event_ref (client);
+
+  CLIENT_UNREF (client); /* starving queue ref */
 }
 
 static void
@@ -901,8 +906,8 @@ send_task_job (void *arg)
 
   trace ("Sent task to client");
 
-  return continue_client_job (ctx, create_task_job) == PS_FAILURE ? S_FAILURE
-                                                                  : S_SUCCESS;
+  client_busy_to_active (ctx);
+  return S_SUCCESS;
 }
 
 static void
