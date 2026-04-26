@@ -1,10 +1,7 @@
 #include "server_common.h"
 
-#include "brute.h"
 #include "common.h"
 #include "log.h"
-#include "multi.h"
-#include "queue.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -21,19 +18,19 @@
 #define MAX_CONN_QUEUE_LEN (10)
 
 status_t
-srv_base_context_init (srv_base_context_t *srv_base, config_t *config)
+srv_listener_init (srv_listener_t *listener, config_t *config)
 {
-  if (mt_context_init ((mt_context_t *)srv_base, config) == S_FAILURE)
-    return (S_FAILURE);
+  listener->listen_fd = -1;
 
-  if ((srv_base->listen_fd = socket (AF_INET, SOCK_STREAM, 0)) == -1)
+  listener->listen_fd = socket (AF_INET, SOCK_STREAM, 0);
+  if (listener->listen_fd == -1)
     {
       error ("Could not initialize server socket");
-      return (S_FAILURE);
+      return S_FAILURE;
     }
 
   int option = 1;
-  if (setsockopt (srv_base->listen_fd, SOL_SOCKET, SO_REUSEADDR, &option,
+  if (setsockopt (listener->listen_fd, SOL_SOCKET, SO_REUSEADDR, &option,
                   sizeof (option))
       == -1)
     {
@@ -46,7 +43,7 @@ srv_base_context_init (srv_base_context_t *srv_base, config_t *config)
   srv_addr.sin_addr.s_addr = inet_addr (config->addr);
   srv_addr.sin_port = htons (config->port);
 
-  if (bind (srv_base->listen_fd, (struct sockaddr *)&srv_addr,
+  if (bind (listener->listen_fd, (struct sockaddr *)&srv_addr,
             sizeof (srv_addr))
       == -1)
     {
@@ -54,37 +51,37 @@ srv_base_context_init (srv_base_context_t *srv_base, config_t *config)
       goto fail;
     }
 
-  if (listen (srv_base->listen_fd, MAX_CONN_QUEUE_LEN) == -1)
+  if (listen (listener->listen_fd, MAX_CONN_QUEUE_LEN) == -1)
     {
       error ("Could not start listening to incoming connections");
       goto fail;
     }
 
-  return (S_SUCCESS);
+  return S_SUCCESS;
 
 fail:
-  close (srv_base->listen_fd);
-  return (S_FAILURE);
+  close (listener->listen_fd);
+  listener->listen_fd = -1;
+  return S_FAILURE;
 }
 
 status_t
-srv_base_context_destroy (srv_base_context_t *srv_base)
+srv_listener_destroy (srv_listener_t *listener)
 {
-  if (srv_base->listen_fd >= 0)
+  if (listener->listen_fd >= 0)
     {
-      shutdown (srv_base->listen_fd, SHUT_RDWR);
-      if (close (srv_base->listen_fd) != 0)
+      shutdown (listener->listen_fd, SHUT_RDWR);
+
+      if (close (listener->listen_fd) != 0)
         {
           error ("Could not close server socket");
-          return (S_FAILURE);
+          return S_FAILURE;
         }
-      srv_base->listen_fd = -1;
+
+      listener->listen_fd = -1;
     }
 
-  if (mt_context_destroy ((mt_context_t *)srv_base) == S_FAILURE)
-    return (S_FAILURE);
-
-  return (S_SUCCESS);
+  return S_SUCCESS;
 }
 
 status_t
@@ -95,18 +92,20 @@ accept_client (int srv_socket_fd, int *client_socket_fd)
       if (srv_socket_fd < 0)
         {
           error ("Invalid server socket");
-          return (S_FAILURE);
+          return S_FAILURE;
         }
 
       *client_socket_fd = accept (srv_socket_fd, NULL, NULL);
       if (*client_socket_fd == -1)
         {
           error ("Could not accept new connection: %s", strerror (errno));
+
           if (errno == EINVAL || errno == EBADF)
-            return (S_FAILURE);
+            return S_FAILURE;
 
           continue;
         }
+
       break;
     }
 
@@ -118,145 +117,93 @@ accept_client (int srv_socket_fd, int *client_socket_fd)
       == -1)
     {
       error ("Could not set socket option");
-      return (S_FAILURE);
+      close (*client_socket_fd);
+      *client_socket_fd = -1;
+      return S_FAILURE;
     }
 
-  return (S_SUCCESS);
+  return S_SUCCESS;
 }
 
 status_t
-send_hash (int socket_fd, mt_context_t *mt_ctx)
+send_hash (int socket_fd, config_t *config)
 {
   command_t cmd = CMD_HASH;
 
   struct iovec vec[] = {
     { .iov_base = &cmd, .iov_len = sizeof (cmd) },
-    { .iov_base = mt_ctx->config->hash, .iov_len = HASH_LENGTH },
+    { .iov_base = config->hash, .iov_len = HASH_LENGTH },
   };
 
   if (send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
       == S_FAILURE)
     {
       error ("Could not send hash to client");
-      return (S_FAILURE);
+      return S_FAILURE;
     }
 
-  return (S_SUCCESS);
+  return S_SUCCESS;
 }
 
 status_t
-send_alph (int socket_fd, mt_context_t *mt_ctx)
+send_alph (int socket_fd, config_t *config)
 {
   command_t cmd = CMD_ALPH;
-  uint32_t length = strlen (mt_ctx->config->alph);
+  uint32_t length = strlen (config->alph);
 
   struct iovec vec[] = {
     { .iov_base = &cmd, .iov_len = sizeof (cmd) },
     { .iov_base = &length, .iov_len = sizeof (length) },
-    { .iov_base = mt_ctx->config->alph, .iov_len = length },
+    { .iov_base = config->alph, .iov_len = length },
   };
 
   if (send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
       == S_FAILURE)
     {
       error ("Could not send alphabet to client");
-      return (S_FAILURE);
+      return S_FAILURE;
     }
 
-  return (S_SUCCESS);
+  return S_SUCCESS;
 }
 
 status_t
-send_config_data (int socket_fd, mt_context_t *ctx)
+send_config_data (int socket_fd, config_t *config)
 {
-  if (send_hash (socket_fd, ctx) == S_FAILURE)
-    return (S_FAILURE);
+  if (send_hash (socket_fd, config) == S_FAILURE)
+    return S_FAILURE;
+
   trace ("Sent hash to client");
 
-  if (send_alph (socket_fd, ctx) == S_FAILURE)
-    return (S_FAILURE);
+  if (send_alph (socket_fd, config) == S_FAILURE)
+    return S_FAILURE;
+
   trace ("Sent alphabet to client");
 
-  return (S_SUCCESS);
+  return S_SUCCESS;
 }
 
 status_t
 send_task (int socket_fd, task_t *task)
 {
   command_t cmd = CMD_TASK;
+  task_t wire_task = *task;
 
-  task->result.is_correct = false;
-  struct iovec vec[] = { { .iov_base = &cmd, .iov_len = sizeof (cmd) },
-                         { .iov_base = task, .iov_len = sizeof (*task) } };
+  wire_task.result.is_correct = false;
+
+  struct iovec vec[] = {
+    { .iov_base = &cmd, .iov_len = sizeof (cmd) },
+    { .iov_base = &wire_task, .iov_len = sizeof (wire_task) },
+  };
 
   if (send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
       == S_FAILURE)
     {
       error ("Could not send task to client");
-      return (S_FAILURE);
+      return S_FAILURE;
     }
 
-  trace ("Sent task %s to client", task->result.password);
+  trace ("Sent task %s to client", wire_task.result.password);
 
-  return (S_SUCCESS);
-}
-
-status_t
-srv_trysignal (mt_context_t *ctx)
-{
-  if (pthread_mutex_lock (&ctx->mutex) != 0)
-    {
-      error ("Could not lock a mutex");
-      return (S_FAILURE);
-    }
-  status_t status = S_SUCCESS;
-  pthread_cleanup_push (cleanup_mutex_unlock, &ctx->mutex);
-
-  if (--ctx->passwords_remaining == 0 || ctx->password[0] != 0)
-    {
-      trace (ctx->passwords_remaining == 0
-                 ? "No passwords are left, signaling now"
-                 : "Password is found, signaling now");
-
-      if (pthread_cond_signal (&ctx->cond_sem) != 0)
-        {
-          error ("Could not signal a condition");
-          status = S_FAILURE;
-        }
-      trace ("Signaled on conditional semaphore");
-    }
-
-  pthread_cleanup_pop (!0);
-
-  return (status);
-}
-
-status_t
-process_tasks (task_t *task, config_t *config, mt_context_t *mt_ctx)
-{
-  task->from = (config->length < 3) ? 1 : 2;
-  task->to = config->length;
-
-  brute (task, config, queue_push_wrapper, mt_ctx);
-
-  trace ("Calculated all tasks");
-
-  if (wait_password (mt_ctx) == S_FAILURE)
-    return (S_FAILURE);
-
-  trace ("Got password");
-
-  if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
-    {
-      error ("Could not cancel a queue");
-      return (S_FAILURE);
-    }
-
-  trace ("Cancelled global queue");
-
-  if (mt_ctx->password[0] != 0)
-    memcpy (task->result.password, mt_ctx->password,
-            sizeof (mt_ctx->password));
-
-  return (S_SUCCESS);
+  return S_SUCCESS;
 }

@@ -1,8 +1,9 @@
 #include "reactor_server.h"
 
+#include "brute.h"
+#include "brute_engine.h"
 #include "common.h"
 #include "log.h"
-#include "multi.h"
 #include "queue.h"
 #include "server_common.h"
 #include "thread_pool.h"
@@ -40,7 +41,11 @@ typedef enum
 
 typedef struct rsrv_context_t
 {
-  srv_base_context_t srv_base;
+  srv_listener_t listener;
+  brute_engine_t engine;
+  thread_pool_t thread_pool;
+  config_t *config;
+
   queue_t jobs_queue;
   queue_t starving_clients;
   struct event_base *ev_base;
@@ -251,7 +256,7 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
   client_ctx->read_state.vec[0].iov_len = sizeof (client_ctx->read_buffer);
   client_ctx->read_state.vec_sz = 1;
 
-  mt_context_t *mt_ctx = &client_ctx->rsrv_ctx->srv_base.mt_ctx;
+  config_t *config = client_ctx->rsrv_ctx->config;
 
   write_state_t *write_state = &client_ctx->write_state;
   io_state_t *write_state_base = &write_state->base_state;
@@ -260,18 +265,18 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
   write_state_base->cmd = CMD_HASH;
   write_state_base->vec[0].iov_base = &write_state_base->cmd;
   write_state_base->vec[0].iov_len = sizeof (write_state_base->cmd);
-  write_state_base->vec[1].iov_base = mt_ctx->config->hash;
+  write_state_base->vec[1].iov_base = config->hash;
   write_state_base->vec[1].iov_len = HASH_LENGTH;
   write_state_base->vec_sz = 2;
 
   /* Set up vector for alphabet sending */
   write_state->cmd_extra = CMD_ALPH;
-  write_state->length = strlen (mt_ctx->config->alph);
+  write_state->length = strlen (config->alph);
   write_state->vec_extra[0].iov_base = &write_state->cmd_extra;
   write_state->vec_extra[0].iov_len = sizeof (write_state->cmd_extra);
   write_state->vec_extra[1].iov_base = &write_state->length;
   write_state->vec_extra[1].iov_len = sizeof (write_state->length);
-  write_state->vec_extra[2].iov_base = mt_ctx->config->alph;
+  write_state->vec_extra[2].iov_base = config->alph;
   write_state->vec_extra[2].iov_len = write_state->length;
   write_state->vec_extra_sz = 3;
 
@@ -321,13 +326,38 @@ fail:
 }
 
 static status_t
-rsrv_context_init (rsrv_context_t *ctx)
+rsrv_context_init (rsrv_context_t *ctx, config_t *config)
 {
+  memset (ctx, 0, sizeof (*ctx));
+
+  ctx->config = config;
+  ctx->shutting_down = false;
+  ctx->listener.listen_fd = -1;
+
+  bool listener_initialized = false;
+  bool engine_initialized = false;
   bool starving_clients_initialized = false;
   bool jobs_queue_initialized = false;
 
-  ctx->shutting_down = false;
-  ctx->ev_base = NULL;
+  if (srv_listener_init (&ctx->listener, config) == S_FAILURE)
+    {
+      error ("Could not initialize server listener");
+      goto fail;
+    }
+  listener_initialized = true;
+
+  if (brute_engine_init (&ctx->engine) == S_FAILURE)
+    {
+      error ("Could not initialize brute engine");
+      goto fail;
+    }
+  engine_initialized = true;
+
+  if (thread_pool_init (&ctx->thread_pool) == S_FAILURE)
+    {
+      error ("Could not initialize thread pool");
+      goto fail;
+    }
 
   if (queue_init (&ctx->starving_clients, sizeof (client_context_t *))
       == QS_FAILURE)
@@ -351,13 +381,13 @@ rsrv_context_init (rsrv_context_t *ctx)
       goto fail;
     }
 
-  if (evutil_make_socket_nonblocking (ctx->srv_base.listen_fd) < 0)
+  if (evutil_make_socket_nonblocking (ctx->listener.listen_fd) < 0)
     {
       error ("Could not change socket to be nonblocking");
       goto fail;
     }
 
-  return (S_SUCCESS);
+  return S_SUCCESS;
 
 fail:
   if (ctx->ev_base)
@@ -373,34 +403,39 @@ fail:
       && queue_destroy (&ctx->starving_clients) == QS_FAILURE)
     error ("Could not destroy starving clients queue during init cleanup");
 
-  return (S_FAILURE);
+  if (engine_initialized && brute_engine_destroy (&ctx->engine) == S_FAILURE)
+    error ("Could not destroy brute engine during init cleanup");
+
+  if (listener_initialized
+      && srv_listener_destroy (&ctx->listener) == S_FAILURE)
+    error ("Could not destroy server listener during init cleanup");
+
+  return S_FAILURE;
+}
+
+static void
+reactor_server_context_stop (rsrv_context_t *ctx)
+{
+  ctx->shutting_down = true;
+
+  event_base_loopbreak (ctx->ev_base);
+
+  if (queue_cancel (&ctx->jobs_queue) == QS_FAILURE)
+    error ("Could not cancel jobs queue");
+
+  if (queue_cancel (&ctx->starving_clients) == QS_FAILURE)
+    error ("Could not cancel starving clients queue");
+
+  if (brute_engine_cancel (&ctx->engine) == S_FAILURE)
+    error ("Could not cancel brute engine");
+
+  if (srv_listener_destroy (&ctx->listener) == S_FAILURE)
+    error ("Could not destroy server listener");
 }
 
 static status_t
-rsrv_context_destroy (rsrv_context_t *ctx)
+reactor_server_context_destroy (rsrv_context_t *ctx)
 {
-  ctx->shutting_down = true;
-  event_base_loopbreak (ctx->ev_base);
-  trace ("Stopped event loop");
-
-  if (queue_cancel (&ctx->jobs_queue) == QS_FAILURE)
-    {
-      error ("Could not cancel jobs queue");
-      return (S_FAILURE);
-    }
-  if (queue_cancel (&ctx->starving_clients) == QS_FAILURE)
-    {
-      error ("Could not cancel starving clients queue");
-      return (S_FAILURE);
-    }
-
-  if (srv_base_context_destroy (&ctx->srv_base) == S_FAILURE)
-    {
-      error ("Could not destroy server context");
-      return (S_FAILURE);
-    }
-  trace ("Destroyed server context");
-
   if (queue_drain (&ctx->jobs_queue, jobs_queue_unref_cb, NULL) != QS_SUCCESS)
     error ("Could not drain jobs queue");
 
@@ -409,34 +444,29 @@ rsrv_context_destroy (rsrv_context_t *ctx)
     error ("Could not drain starving clients queue");
 
   if (queue_destroy (&ctx->jobs_queue) == QS_FAILURE)
-    {
-      error ("Could not destroy jobs queue");
-      return (S_FAILURE);
-    }
+    return S_FAILURE;
+
   if (queue_destroy (&ctx->starving_clients) == QS_FAILURE)
-    {
-      error ("Could not destroy starving clients queue");
-      return (S_FAILURE);
-    }
-  trace ("Destroyed reactor server queues");
+    return S_FAILURE;
 
   event_list_t ev_list;
   ev_list.head.prev = &ev_list.head;
   ev_list.head.next = &ev_list.head;
   ev_list.head.ev = NULL;
+
   event_base_foreach_event (ctx->ev_base, collect_events_cb, &ev_list);
   clients_cleanup (&ev_list);
   event_base_free (ctx->ev_base);
 
-  trace ("Destroyed client contexts");
+  if (brute_engine_destroy (&ctx->engine) == S_FAILURE)
+    return S_FAILURE;
 
-  return (S_SUCCESS);
+  return S_SUCCESS;
 }
 
 static status_t
 return_tasks (client_context_t *ctx)
 {
-  mt_context_t *mt_ctx = &ctx->rsrv_ctx->srv_base.mt_ctx;
   status_t status = S_SUCCESS;
 
   pthread_mutex_lock (&ctx->mutex);
@@ -444,7 +474,8 @@ return_tasks (client_context_t *ctx)
     {
       if (ctx->task_slots[i].in_use)
         {
-          if (queue_push_back (&mt_ctx->queue, &ctx->task_slots[i].task)
+          if (brute_engine_return_task (&ctx->rsrv_ctx->engine,
+                                        &ctx->task_slots[i].task)
               != QS_SUCCESS)
             {
               status = S_FAILURE;
@@ -645,9 +676,8 @@ create_task_job (void *arg)
     }
 
   task_t *task = &ctx->task_slots[id].task;
-  mt_context_t *mt_ctx = &ctx->rsrv_ctx->srv_base.mt_ctx;
 
-  qs = queue_trypop (&mt_ctx->queue, task);
+  qs = brute_engine_try_take_task (&ctx->rsrv_ctx->engine, task);
   if (qs == QS_EMPTY)
     {
       trace ("No tasks in global queue, add to starving clients");
@@ -794,7 +824,6 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
   (void)socket_fd; /* to suppress "unused parameter" warning */
 
   client_context_t *ctx = arg;
-  mt_context_t *mt_ctx = &ctx->rsrv_ctx->srv_base.mt_ctx;
 
   ssize_t nread
       = readv (ctx->socket_fd, ctx->read_state.vec, ctx->read_state.vec_sz);
@@ -855,16 +884,14 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
 
   if (result->is_correct)
     {
-      if (queue_cancel (&mt_ctx->queue) == QS_FAILURE)
-        {
-          error ("Could not cancel a queue");
-          return;
-        }
-      memcpy (mt_ctx->password, result->password, sizeof (result->password));
+      if (brute_engine_report_result (&ctx->rsrv_ctx->engine, result->password)
+          == S_FAILURE)
+        return;
+
       event_base_loopbreak (ctx->rsrv_ctx->ev_base);
     }
 
-  if (srv_trysignal (mt_ctx) == S_FAILURE)
+  if (brute_engine_task_done (&ctx->rsrv_ctx->engine) == S_FAILURE)
     return;
 
   trace ("Received %s result %s with id %d from client",
@@ -927,7 +954,7 @@ handle_starving_clients (void *arg)
         }
 
       task_t *task = &client->task_slots[id].task;
-      if (queue_pop (&ctx->srv_base.mt_ctx.queue, task) != QS_SUCCESS)
+      if (brute_engine_take_task (&ctx->engine, task) != QS_SUCCESS)
         {
           error ("Could not pop from the global queue");
           goto fail_starving_take;
@@ -1008,72 +1035,83 @@ dispatch_event_loop (void *arg)
   return (NULL);
 }
 
+static bool
+submit_task_cb (task_t *task, void *context)
+{
+  brute_engine_t *engine = context;
+
+  queue_status_t status = brute_engine_submit_task (engine, task);
+  if (status == QS_FAILURE)
+    {
+      error ("Could not submit task to brute engine");
+      return false;
+    }
+
+  return brute_engine_has_result (engine);
+}
+
 bool
 run_reactor_server (task_t *task, config_t *config)
 {
   evthread_use_pthreads ();
   signal (SIGPIPE, SIG_IGN);
+
   rsrv_context_t rsrv_ctx;
   rsrv_context_t *context_ptr = &rsrv_ctx;
+  bool found = false;
 
-  if (srv_base_context_init (&rsrv_ctx.srv_base, config) == S_FAILURE)
-    {
-      error ("Could not initialize server context");
-      srv_base_context_destroy (&rsrv_ctx.srv_base);
-      return (false);
-    }
-
-  if (rsrv_context_init (context_ptr) == S_FAILURE)
-    goto fail;
+  if (rsrv_context_init (&rsrv_ctx, config) == S_FAILURE)
+    return false;
 
   struct evconnlistener *listener = evconnlistener_new (
       rsrv_ctx.ev_base, handle_accept, &rsrv_ctx, LEV_OPT_REUSEABLE, -1,
-      rsrv_ctx.srv_base.listen_fd);
+      rsrv_ctx.listener.listen_fd);
+
   if (!listener)
-    {
-      error ("Could not create a listener");
-      goto fail;
-    }
+    goto cleanup;
+
   evconnlistener_set_error_cb (listener, handle_accept_error);
 
-  thread_pool_t *thread_pool = &rsrv_ctx.srv_base.mt_ctx.thread_pool;
+  thread_pool_t *thread_pool = &rsrv_ctx.thread_pool;
 
   long number_of_threads
       = (config->number_of_threads > 2) ? config->number_of_threads - 2 : 1;
+
   if (create_threads (thread_pool, number_of_threads, handle_io, &context_ptr,
                       sizeof (context_ptr), "i/o handler")
       == 0)
-    goto free_listener;
-  trace ("Created I/O handler thread");
+    goto cleanup_listener;
 
   if (!thread_create (thread_pool, handle_starving_clients, &context_ptr,
                       sizeof (context_ptr), "starving clients handler"))
-    goto free_listener;
-  trace ("Created starving clients handler thread");
+    goto cleanup_listener;
 
   if (!thread_create (thread_pool, dispatch_event_loop, &context_ptr,
                       sizeof (context_ptr), "event loop dispatcher"))
-    goto free_listener;
-  trace ("Created event loop dispatcher thread");
+    goto cleanup_listener;
 
-  mt_context_t *mt_ctx = &rsrv_ctx.srv_base.mt_ctx;
-  if (process_tasks (task, config, mt_ctx) == S_FAILURE)
-    goto free_listener;
+  task->from = (config->length < 3) ? 1 : 2;
+  task->to = config->length;
 
-  evconnlistener_free (listener);
+  brute (task, config, submit_task_cb, &rsrv_ctx.engine);
 
-  if (rsrv_context_destroy (&rsrv_ctx) == S_FAILURE)
-    error ("Could not destroy server context");
+  if (brute_engine_wait (&rsrv_ctx.engine) == S_FAILURE)
+    goto cleanup_listener;
 
-  return (mt_ctx->password[0] != 0);
+  found = brute_engine_copy_result (&rsrv_ctx.engine, task->result.password);
 
-free_listener:
+cleanup_listener:
   if (listener)
     evconnlistener_free (listener);
-fail:
-  trace ("Failed, destroying server context");
-  if (rsrv_context_destroy (&rsrv_ctx) == S_FAILURE)
-    error ("Could not destroy server context");
 
-  return (false);
+cleanup:
+  reactor_server_context_stop (&rsrv_ctx);
+
+  if (thread_pool_join (&rsrv_ctx.thread_pool) == S_FAILURE)
+    error ("Could not join thread pool");
+
+  if (reactor_server_context_destroy (&rsrv_ctx) == S_FAILURE)
+    error ("Could not destroy reactor server context");
+
+  return found;
 }
