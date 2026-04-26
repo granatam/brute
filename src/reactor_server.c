@@ -300,6 +300,7 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
       goto fail;
     }
 
+  client_ctx->ref_count = 1;
   client_ctx->read_event
       = event_new (rsrv_ctx->ev_base, client_ctx->socket_fd,
                    EV_READ | EV_PERSIST, handle_read, client_ctx);
@@ -308,7 +309,8 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
       error ("Could not create read event");
       goto fail;
     }
-  client_ctx->ref_count = 1;
+
+  client_try_ref (client_ctx);
 
   return (client_ctx);
 
@@ -804,10 +806,13 @@ handle_accept (struct evconnlistener *listener, evutil_socket_t fd,
       goto release_event_ref;
     }
 
+  client_unref (client_ctx);
+
   return;
 
 release_event_ref:
   client_release_event_ref (client_ctx);
+  client_unref (client_ctx);
   return;
 
 fail:
@@ -820,36 +825,40 @@ static void
 handle_read (evutil_socket_t socket_fd, short what, void *arg)
 {
   assert (what == EV_READ);
-  /* We already have socket_fd in client_context_t */
-  (void)socket_fd; /* to suppress "unused parameter" warning */
+  (void)socket_fd;
 
   client_context_t *ctx = arg;
+
+  if (!client_try_ref (ctx))
+    return;
 
   ssize_t nread
       = readv (ctx->socket_fd, ctx->read_state.vec, ctx->read_state.vec_sz);
   if (nread < 0)
     {
       if (errno == EAGAIN || errno == EWOULDBLOCK)
-        return;
+        goto out;
 
       error ("Could not read result from a client");
       client_disconnect (ctx);
-      return;
+      goto out;
     }
+
   if (nread == 0)
     {
       error ("Client closed connection");
       client_disconnect (ctx);
-      return;
+      goto out;
     }
 
-  size_t bytes_read = nread;
+  size_t bytes_read = (size_t)nread;
 
   ctx->read_state.vec[0].iov_len -= bytes_read;
-  ctx->read_state.vec[0].iov_base += bytes_read;
+  ctx->read_state.vec[0].iov_base
+      = (char *)ctx->read_state.vec[0].iov_base + bytes_read;
 
   if (ctx->read_state.vec[0].iov_len > 0)
-    return;
+    goto out;
 
   ctx->read_state.vec[0].iov_len = sizeof (ctx->read_buffer);
   ctx->read_state.vec[0].iov_base = &ctx->read_buffer;
@@ -860,7 +869,7 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
     {
       warn ("Unexpected result id: %d", result->id);
       client_disconnect (ctx);
-      return;
+      goto out;
     }
 
   pthread_mutex_lock (&ctx->mutex);
@@ -871,13 +880,14 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
   if (!is_used)
     {
       warn ("Unexpected result id: %d", result->id);
-      return;
+      goto out;
     }
 
   if (queue_push_back (&ctx->free_slot_idx, &result->id) != QS_SUCCESS)
     {
       error ("Could not return id to a queue");
-      return;
+      client_disconnect (ctx);
+      goto out;
     }
 
   trace ("Returned slot index %d to free slot queue", result->id);
@@ -886,13 +896,13 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
     {
       if (brute_engine_report_result (&ctx->rsrv_ctx->engine, result->password)
           == S_FAILURE)
-        return;
+        goto out;
 
       event_base_loopbreak (ctx->rsrv_ctx->ev_base);
     }
 
   if (brute_engine_task_done (&ctx->rsrv_ctx->engine) == S_FAILURE)
-    return;
+    goto out;
 
   trace ("Received %s result %s with id %d from client",
          result->is_correct ? "correct" : "incorrect", result->password,
@@ -906,14 +916,14 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
     {
       push_status_t ps = push_job_checked (ctx, create_task_job);
       if (ps == PS_FAILURE)
-        {
-          error ("Could not schedule create task job from read event");
-          return;
-        }
-      if (ps == PS_DESTROYED || ps == PS_SKIPPED)
-        return;
-      trace ("Pushed create task job from read event");
+        error ("Could not schedule create task job from read event");
+
+      if (ps == PS_SUCCESS)
+        trace ("Pushed create task job from read event");
     }
+
+out:
+  client_unref (ctx);
 }
 
 static void *
@@ -980,10 +990,6 @@ handle_starving_clients (void *arg)
         case PS_SUCCESS:
           break;
         }
-
-      pthread_mutex_lock (&client->mutex);
-      client->state = CS_ACTIVE;
-      pthread_mutex_unlock (&client->mutex);
 
       client_unref (client);
       continue;
