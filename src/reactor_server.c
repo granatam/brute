@@ -298,7 +298,7 @@ continue_client_job (client_context_t *ctx, status_t (*job_func) (void *))
     {
       error ("Could not push job to a job queue");
       CLIENT_UNREF (ctx);
-      return PS_FAILURE;
+      return PS_SKIPPED;
     }
 
   return PS_SUCCESS;
@@ -1118,10 +1118,14 @@ handle_starving_clients (void *arg)
       pthread_mutex_unlock (&client->mutex);
 
       push_status_t ps = continue_client_job (client, send_task_job);
-      if (ps == PS_FAILURE)
-        goto fail_starving_take;
+      if (ps != PS_SUCCESS)
+        {
+          client_mark_closing (client);
+          CLIENT_UNREF (client);
+          return NULL;
+        }
 
-      CLIENT_UNREF (client); /* starving queue ref */
+      CLIENT_UNREF (client);
       continue;
 
     fail_starving_take:
