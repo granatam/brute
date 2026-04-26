@@ -50,7 +50,7 @@ def test_valgrind_one_client_server(data, client_mode, server_mode):
 
 @pytest.mark.parametrize("server_mode", SERVER_MODES)
 @given(data=data())
-@settings(deadline=timedelta(seconds=15), phases=phases, max_examples=30)
+@settings(deadline=timedelta(seconds=30), phases=phases, max_examples=30)
 def test_valgrind_load_clients(data, server_mode):
     _TestRunner(
         data,

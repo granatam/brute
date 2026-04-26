@@ -560,10 +560,6 @@ reactor_server_context_stop (rsrv_context_t *ctx)
 static status_t
 reactor_server_context_destroy (rsrv_context_t *ctx)
 {
-  if (reactor_for_each_event_snapshot (&ctx->rctr_ctx,
-                                       release_client_event_if_read_cb, NULL)
-      == S_FAILURE)
-    error ("Could not release client events");
 
   if (reactor_context_drain_jobs (&ctx->rctr_ctx) == S_FAILURE)
     error ("Could not drain jobs queue");
@@ -571,6 +567,11 @@ reactor_server_context_destroy (rsrv_context_t *ctx)
   if (queue_drain (&ctx->starving_clients, starving_clients_unref_cb, NULL)
       != QS_SUCCESS)
     error ("Could not drain starving clients queue");
+
+  if (reactor_for_each_event_snapshot (&ctx->rctr_ctx,
+        release_client_event_if_read_cb, NULL)
+      == S_FAILURE)
+    error ("Could not release client events");
 
   if (queue_destroy (&ctx->starving_clients) == QS_FAILURE)
     return S_FAILURE;
