@@ -34,7 +34,7 @@ def test_valgrind_simple(data, run_mode):
 @pytest.mark.parametrize("client_mode", CLIENT_MODES)
 @pytest.mark.parametrize("server_mode", SERVER_MODES)
 @given(data=data())
-@settings(deadline=timedelta(seconds=10), phases=phases, max_examples=5)
+@settings(deadline=timedelta(seconds=30), phases=phases, max_examples=10)
 def test_valgrind_one_client_server(data, client_mode, server_mode):
     _TestRunner(
         data,
@@ -69,7 +69,7 @@ def test_valgrind_load_clients(data, server_mode):
 @pytest.mark.parametrize("second_client_mode", CLIENT_MODES)
 @pytest.mark.parametrize("server_mode", SERVER_MODES)
 @given(data=data())
-@settings(deadline=timedelta(seconds=10), phases=phases, max_examples=5)
+@settings(deadline=timedelta(seconds=30), phases=phases, max_examples=10)
 def test_valgrind_two_clients_server(
     data, first_client_mode, second_client_mode, server_mode
 ):
