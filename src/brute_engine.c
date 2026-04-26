@@ -1,5 +1,6 @@
 #include "brute_engine.h"
 
+#include "brute.h"
 #include "log.h"
 
 #include <pthread.h>
@@ -264,4 +265,32 @@ brute_engine_copy_result (brute_engine_t *engine, password_t out)
     }
 
   return (found);
+}
+
+static bool
+submit_task_cb (task_t *task, void *context)
+{
+  brute_engine_t *engine = context;
+
+  if (brute_engine_submit_task (engine, task) == QS_FAILURE)
+    return false;
+
+  return brute_engine_has_result (engine);
+}
+
+status_t
+brute_engine_run (brute_engine_t *engine, task_t *task, config_t *config,
+                  bool *found)
+{
+  task->from = (config->length < 3) ? 1 : 2;
+  task->to = config->length;
+
+  brute (task, config, submit_task_cb, engine);
+
+  if (brute_engine_wait (engine) == S_FAILURE)
+    return S_FAILURE;
+
+  *found = brute_engine_copy_result (engine, task->result.password);
+
+  return S_SUCCESS;
 }

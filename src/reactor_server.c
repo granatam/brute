@@ -1035,21 +1035,6 @@ dispatch_event_loop (void *arg)
   return (NULL);
 }
 
-static bool
-submit_task_cb (task_t *task, void *context)
-{
-  brute_engine_t *engine = context;
-
-  queue_status_t status = brute_engine_submit_task (engine, task);
-  if (status == QS_FAILURE)
-    {
-      error ("Could not submit task to brute engine");
-      return false;
-    }
-
-  return brute_engine_has_result (engine);
-}
-
 bool
 run_reactor_server (task_t *task, config_t *config)
 {
@@ -1090,15 +1075,8 @@ run_reactor_server (task_t *task, config_t *config)
                       sizeof (context_ptr), "event loop dispatcher"))
     goto cleanup_listener;
 
-  task->from = (config->length < 3) ? 1 : 2;
-  task->to = config->length;
-
-  brute (task, config, submit_task_cb, &rsrv_ctx.engine);
-
-  if (brute_engine_wait (&rsrv_ctx.engine) == S_FAILURE)
-    goto cleanup_listener;
-
-  found = brute_engine_copy_result (&rsrv_ctx.engine, task->result.password);
+  if (brute_engine_run (&rsrv_ctx.engine, task, config, &found) == S_FAILURE)
+    goto cleanup;
 
 cleanup_listener:
   if (listener)

@@ -2,6 +2,7 @@
 #define BRUTE_ENGINE_H
 
 #include "common.h"
+#include "config.h"
 #include "queue.h"
 
 #include <pthread.h>
@@ -35,5 +36,8 @@ status_t brute_engine_wait (brute_engine_t *engine);
 
 bool brute_engine_has_result (brute_engine_t *engine);
 bool brute_engine_copy_result (brute_engine_t *engine, password_t out);
+
+status_t brute_engine_run (brute_engine_t *engine, task_t *task,
+                           config_t *config, bool *found);
 
 #endif // BRUTE_ENGINE_H
