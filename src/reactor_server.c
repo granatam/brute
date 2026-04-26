@@ -64,7 +64,7 @@ typedef struct write_state_t
   io_state_t base_state;
   struct iovec vec_extra[3];
   command_t cmd_extra;
-  unsigned long length;
+  int32_t length;
   int32_t vec_extra_sz;
 } write_state_t;
 
@@ -271,7 +271,7 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
 
   /* Set up vector for alphabet sending */
   write_state->cmd_extra = CMD_ALPH;
-  write_state->length = strlen (config->alph);
+  write_state->length = (int32_t)strlen (config->alph);
   write_state->vec_extra[0].iov_base = &write_state->cmd_extra;
   write_state->vec_extra[0].iov_len = sizeof (write_state->cmd_extra);
   write_state->vec_extra[1].iov_base = &write_state->length;

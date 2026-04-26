@@ -55,7 +55,7 @@ typedef struct read_state_t
   read_stage_t stage;
   bool is_partial;
   command_t cmd;
-  int alph_len;
+  int32_t alph_len;
 } read_state_t;
 
 typedef struct client_context_t
