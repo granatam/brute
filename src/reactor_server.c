@@ -696,6 +696,7 @@ return_tasks (client_context_t *ctx)
     {
       if (ctx->task_slots[i].in_use)
         {
+          trace ("Returning task slot %d from closing client ctx=%p", i, (void *)ctx);
           if (brute_engine_return_task (&ctx->rsrv_ctx->engine,
                                         &ctx->task_slots[i].task)
               != QS_SUCCESS)
@@ -888,6 +889,10 @@ static status_t
 send_task_job (void *arg)
 {
   client_context_t *ctx = arg;
+
+  pthread_mutex_lock (&ctx->mutex);
+  assert (ctx->state == CS_WRITING || ctx->state == CS_CLOSING);
+  pthread_mutex_unlock (&ctx->mutex);
 
   if (client_is_closing (ctx))
     return S_SUCCESS;

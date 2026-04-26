@@ -211,8 +211,10 @@ status_t
 create_reactor_threads (thread_pool_t *tp, config_t *config,
                         reactor_context_t *ptr)
 {
-  long number_of_threads
-      = (config->number_of_threads > 2) ? config->number_of_threads - 2 : 1;
+  (void)config;
+  long number_of_threads = 1;
+  // long number_of_threads
+  //     = (config->number_of_threads > 2) ? config->number_of_threads - 2 : 1;
   if (create_threads (tp, number_of_threads, handle_io, &ptr, sizeof (ptr),
                       "i/o handler")
       == 0)
