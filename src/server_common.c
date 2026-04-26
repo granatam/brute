@@ -200,10 +200,12 @@ send_task (int socket_fd, task_t *task)
     { .iov_base = &wire_task, .iov_len = sizeof (wire_task) },
   };
 
-  if (send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
-      == S_FAILURE)
+  io_status_t status
+      = send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]));
+  if (status != IOS_SUCCESS)
     {
-      error ("Could not send task to client");
+      if (status == IOS_FAILURE)
+        error ("Could not send alph to client");
       return S_FAILURE;
     }
 

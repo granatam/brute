@@ -195,11 +195,12 @@ result_sender (void *arg)
         { .iov_base = &result, .iov_len = sizeof (result) },
       };
 
-      if (send_wrapper (ctx->client_base.socket_fd, vec,
-                        sizeof (vec) / sizeof (vec[0]))
-          == S_FAILURE)
+      io_status_t status = send_wrapper (ctx->client_base.socket_fd, vec,
+                                         sizeof (vec) / sizeof (vec[0]));
+      if (status != IOS_SUCCESS)
         {
-          error ("Could not send result to server");
+          if (status == IOS_FAILURE)
+            error ("Could not send result to server");
           break;
         }
       trace ("Sent %s result %s to server",
