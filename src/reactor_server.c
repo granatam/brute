@@ -59,9 +59,8 @@ typedef struct task_slot_t
 
 typedef struct client_context_t
 {
-  struct event *read_event;
+  reactor_conn_t conn;
   rsrv_context_t *rsrv_ctx;
-  evutil_socket_t socket_fd;
   client_state_t state;
   task_slot_t task_slots[QUEUE_SIZE];
   queue_t free_slot_idx;
@@ -143,9 +142,9 @@ static void
 client_release_event_ref (client_context_t *ctx)
 {
   pthread_mutex_lock (&ctx->mutex);
-  struct event *ev = ctx->read_event;
+  struct event *ev = ctx->conn.read_event;
   if (ev)
-    ctx->read_event = NULL;
+    ctx->conn.read_event = NULL;
   pthread_mutex_unlock (&ctx->mutex);
 
   if (!ev)
@@ -296,7 +295,7 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
   client_ctx->state = CS_ACTIVE;
   client_ctx->close_scheduled = false;
 
-  client_ctx->socket_fd = fd;
+  client_ctx->conn.fd = fd;
   client_ctx->rsrv_ctx = rsrv_ctx;
   client_ctx->read_state.vec[0].iov_base = &client_ctx->read_buffer;
   client_ctx->read_state.vec[0].iov_len = sizeof (client_ctx->read_buffer);
@@ -340,17 +339,17 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
         goto fail;
       }
 
-  if (evutil_make_socket_nonblocking (client_ctx->socket_fd) != 0)
+  if (evutil_make_socket_nonblocking (client_ctx->conn.fd) != 0)
     {
       error ("Could not change socket to be nonblocking");
       goto fail;
     }
 
   client_ctx->ref_count = 1;
-  client_ctx->read_event
-      = event_new (rsrv_ctx->rctr_ctx.ev_base, client_ctx->socket_fd,
+  client_ctx->conn.read_event
+      = event_new (rsrv_ctx->rctr_ctx.ev_base, client_ctx->conn.fd,
                    EV_READ | EV_PERSIST, handle_read, client_ctx);
-  if (!client_ctx->read_event)
+  if (!client_ctx->conn.read_event)
     {
       error ("Could not create read event");
       goto fail;
@@ -361,8 +360,8 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
   return (client_ctx);
 
 fail:
-  if (client_ctx->read_event)
-    event_free (client_ctx->read_event);
+  if (client_ctx->conn.read_event)
+    event_free (client_ctx->conn.read_event);
 
   if (free_slot_idx_initialized
       && queue_destroy (&client_ctx->free_slot_idx) != QS_SUCCESS)
@@ -526,7 +525,7 @@ static void
 client_context_destroy (client_context_t *ctx)
 {
   /* Freed in client_release_event_ref. */
-  assert (ctx->read_event == NULL);
+  assert (ctx->conn.read_event == NULL);
   assert (atomic_load_explicit (&ctx->ref_count, memory_order_relaxed) == 0);
 
   if (!ctx->rsrv_ctx->shutting_down && return_tasks (ctx) == S_FAILURE)
@@ -540,8 +539,8 @@ client_context_destroy (client_context_t *ctx)
 
   trace ("Destroyed free slot queue");
 
-  shutdown (ctx->socket_fd, SHUT_RDWR);
-  if (close (ctx->socket_fd) != 0)
+  shutdown (ctx->conn.fd, SHUT_RDWR);
+  if (close (ctx->conn.fd) != 0)
     error ("Could not close client socket");
   else
     trace ("Closed client socket");
@@ -610,7 +609,7 @@ send_config_job (void *arg)
   status_t status;
   if (ctx->write_state.base_state.vec_sz != 0)
     {
-      status = write_state_write (ctx->socket_fd, &ctx->write_state);
+      status = write_state_write (ctx->conn.fd, &ctx->write_state);
       if (status != S_SUCCESS)
         {
           error ("Could not send hash to client");
@@ -622,7 +621,7 @@ send_config_job (void *arg)
         return (schedule_job (ctx, send_config_job));
     }
 
-  status = write_state_write_extra (ctx->socket_fd, &ctx->write_state);
+  status = write_state_write_extra (ctx->conn.fd, &ctx->write_state);
   if (status != S_SUCCESS)
     {
       error ("Could not send alphabet to client");
@@ -729,7 +728,7 @@ send_task_job (void *arg)
   if (client_is_closing (ctx))
     return (S_SUCCESS);
 
-  status_t status = write_state_write (ctx->socket_fd, &ctx->write_state);
+  status_t status = write_state_write (ctx->conn.fd, &ctx->write_state);
   if (status != S_SUCCESS)
     {
       error ("Could not send task to client");
@@ -778,7 +777,7 @@ handle_accept (struct evconnlistener *listener, evutil_socket_t fd,
 
   trace ("Accepted client connection");
 
-  if (event_add (client_ctx->read_event, NULL) != 0)
+  if (event_add (client_ctx->conn.read_event, NULL) != 0)
     {
       error ("Could not add event to event base");
       goto release_event_ref;
@@ -818,33 +817,25 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
   if (!client_try_ref (ctx))
     return;
 
-  ssize_t nread
-      = readv (ctx->socket_fd, ctx->read_state.vec, ctx->read_state.vec_sz);
-  if (nread < 0)
-    {
-      if (errno == EAGAIN || errno == EWOULDBLOCK)
-        goto out;
+  reactor_io_status_t io_status = reactor_readv_advance (
+      ctx->conn.fd, ctx->read_state.vec, &ctx->read_state.vec_sz);
 
+  if (io_status == RIO_PENDING)
+    goto out;
+
+  if (io_status == RIO_ERROR)
+    {
       error ("Could not read result from a client");
       client_close_async (ctx);
       goto out;
     }
 
-  if (nread == 0)
+  if (io_status == RIO_CLOSED)
     {
       error ("Client closed connection");
       client_close_async (ctx);
       goto out;
     }
-
-  size_t bytes_read = (size_t)nread;
-
-  ctx->read_state.vec[0].iov_len -= bytes_read;
-  ctx->read_state.vec[0].iov_base
-      = (char *)ctx->read_state.vec[0].iov_base + bytes_read;
-
-  if (ctx->read_state.vec[0].iov_len > 0)
-    goto out;
 
   ctx->read_state.vec[0].iov_len = sizeof (ctx->read_buffer);
   ctx->read_state.vec[0].iov_base = &ctx->read_buffer;

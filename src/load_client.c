@@ -406,28 +406,18 @@ tryread (client_context_t *ctx, void *base, size_t len)
       ctx->read_state.vec[0].iov_len = len;
     }
 
-  ssize_t nread = readv (ctx->client_base.socket_fd, ctx->read_state.vec, 1);
-  if (nread < 0)
-    {
-      if (errno == EAGAIN || errno == EWOULDBLOCK)
-        return false;
+  int vec_sz = 1;
+  reactor_io_status_t io_status = reactor_readv_advance (
+      ctx->client_base.socket_fd, ctx->read_state.vec, &vec_sz);
 
-      client_finish (ctx);
-      return false;
-    }
-
-  if (nread == 0)
+  if (io_status == RIO_ERROR || io_status == RIO_CLOSED)
     {
       client_finish (ctx);
-      return false;
+      return S_FAILURE;
     }
 
-  size_t bytes_read = (size_t)nread;
-
-  ctx->read_state.vec[0].iov_len -= bytes_read;
-  ctx->read_state.vec[0].iov_base += bytes_read;
-  ctx->read_state.is_partial = (ctx->read_state.vec[0].iov_len != 0);
-  return (ctx->read_state.is_partial ? S_FAILURE : S_SUCCESS);
+  ctx->read_state.is_partial = io_status == RIO_PENDING;
+  return io_status == RIO_DONE ? S_SUCCESS : S_FAILURE;
 }
 
 static void

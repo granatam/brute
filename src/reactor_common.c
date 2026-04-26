@@ -181,47 +181,6 @@ handle_io (void *arg)
   return (NULL);
 }
 
-status_t
-write_state_write_wrapper (int socket_fd, struct iovec *vec, int *vec_sz)
-{
-  ssize_t written = writev (socket_fd, vec, *vec_sz);
-  if (written < 0)
-    {
-      if (errno == EAGAIN || errno == EWOULDBLOCK)
-        return (S_SUCCESS);
-
-      error ("Could not send config data to client");
-      return (S_FAILURE);
-    }
-  if (written == 0)
-    {
-      error ("Could not send config data to client");
-      return (S_FAILURE);
-    }
-
-  size_t bytes_written = written;
-  int i = 0;
-  while (i < *vec_sz && bytes_written > 0 && vec[i].iov_len <= bytes_written)
-    bytes_written -= vec[i++].iov_len;
-
-  *vec_sz -= i;
-  memmove (&vec[0], &vec[i], sizeof (struct iovec) * (size_t)*vec_sz);
-
-  if (*vec_sz > 0 && bytes_written > 0)
-    {
-      vec[0].iov_base = (char *)vec[0].iov_base + bytes_written;
-      vec[0].iov_len -= bytes_written;
-    }
-
-  return (S_SUCCESS);
-}
-
-inline status_t
-write_state_write (int socket_fd, write_state_t *write_state)
-{
-  return (write_state_write_wrapper (socket_fd, write_state->base_state.vec,
-                                     &write_state->base_state.vec_sz));
-}
 
 static void
 reactor_job_drain_cb (void *payload, void *arg)
@@ -338,4 +297,88 @@ reactor_cleanup_clients (reactor_context_t *ctx,
       curr = curr->next;
       free (dummy);
     }
+}
+
+static void
+reactor_iov_advance (struct iovec *vec, int *vec_sz, size_t bytes)
+{
+  int i = 0;
+
+  while (i < *vec_sz && bytes > 0 && vec[i].iov_len <= bytes)
+    {
+      bytes -= vec[i].iov_len;
+      ++i;
+    }
+
+  *vec_sz -= i;
+  memmove (&vec[0], &vec[i], sizeof (struct iovec) * (size_t)*vec_sz);
+
+  if (*vec_sz > 0 && bytes > 0)
+    {
+      vec[0].iov_base = (char *)vec[0].iov_base + bytes;
+      vec[0].iov_len -= bytes;
+    }
+}
+
+reactor_io_status_t
+reactor_writev_advance (int fd, struct iovec *vec, int *vec_sz)
+{
+  ssize_t written = writev (fd, vec, *vec_sz);
+
+  if (written < 0)
+    {
+      if (errno == EAGAIN || errno == EWOULDBLOCK)
+        return RIO_PENDING;
+
+      return RIO_ERROR;
+    }
+
+  if (written == 0)
+    return RIO_CLOSED;
+
+  reactor_iov_advance (vec, vec_sz, (size_t)written);
+
+  return *vec_sz == 0 ? RIO_DONE : RIO_PENDING;
+}
+
+reactor_io_status_t
+reactor_readv_advance (int fd, struct iovec *vec, int *vec_sz)
+{
+  ssize_t nread = readv (fd, vec, *vec_sz);
+
+  if (nread < 0)
+    {
+      if (errno == EAGAIN || errno == EWOULDBLOCK)
+        return RIO_PENDING;
+
+      return RIO_ERROR;
+    }
+
+  if (nread == 0)
+    return RIO_CLOSED;
+
+  reactor_iov_advance (vec, vec_sz, (size_t)nread);
+
+  return *vec_sz == 0 ? RIO_DONE : RIO_PENDING;
+}
+
+status_t
+write_state_write_wrapper (int socket_fd, struct iovec *vec, int *vec_sz)
+{
+  reactor_io_status_t status = reactor_writev_advance (socket_fd, vec, vec_sz);
+
+  if (status == RIO_ERROR || status == RIO_CLOSED)
+    {
+      error ("Could not send data");
+      return S_FAILURE;
+    }
+
+  return S_SUCCESS;
+}
+
+inline status_t
+write_state_write (int socket_fd, write_state_t *write_state)
+{
+  return (write_state_write_wrapper (socket_fd, write_state->base_state.vec,
+                                     &write_state->base_state.vec_sz));
 }

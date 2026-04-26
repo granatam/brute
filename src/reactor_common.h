@@ -8,6 +8,20 @@
 
 #include <event2/event.h>
 
+typedef enum reactor_io_status
+{
+  RIO_DONE,
+  RIO_PENDING,
+  RIO_CLOSED,
+  RIO_ERROR,
+} reactor_io_status_t;
+
+reactor_io_status_t reactor_writev_advance (int fd, struct iovec *vec,
+                                            int *vec_sz);
+
+reactor_io_status_t reactor_readv_advance (int fd, struct iovec *vec,
+                                           int *vec_sz);
+
 typedef struct io_state_t
 {
   struct iovec vec[2];
@@ -74,15 +88,5 @@ status_t create_reactor_threads (thread_pool_t *tp, config_t *config,
 void reactor_cleanup_clients (reactor_context_t *ctx,
                               event_callback_fn client_read_cb,
                               client_ctx_destroy_fn destroy_ctx);
-
-typedef enum reactor_io_status
-{
-  RIO_SUCCESS,
-  RIO_PENDING,
-  RIO_FAILURE,
-} reactor_io_status_t;
-
-reactor_io_status_t reactor_writev_advance (int fd, struct iovec *vec,
-                                            int *vec_sz);
 
 #endif // REACTOR_COMMON_H
