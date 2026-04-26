@@ -169,7 +169,6 @@ handle_io (void *arg)
   return (NULL);
 }
 
-
 static void
 reactor_job_drain_cb (void *payload, void *arg)
 {
@@ -358,8 +357,7 @@ reactor_for_each_event_snapshot (reactor_context_t *ctx,
   list.head.next = &list.head;
   list.head.ev = NULL;
 
-  if (event_base_foreach_event (ctx->ev_base, reactor_collect_events_cb,
-                                &list)
+  if (event_base_foreach_event (ctx->ev_base, reactor_collect_events_cb, &list)
       != 0)
     return S_FAILURE;
 
