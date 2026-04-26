@@ -841,6 +841,7 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
 
       error ("Could not read result from a client");
       client_disconnect (ctx);
+      client_release_event_ref (ctx);
       goto out;
     }
 
@@ -848,6 +849,7 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
     {
       error ("Client closed connection");
       client_disconnect (ctx);
+      client_release_event_ref (ctx);
       goto out;
     }
 
