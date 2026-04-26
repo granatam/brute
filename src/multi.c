@@ -41,21 +41,6 @@ mt_context_destroy (mt_context_t *context)
   return (brute_engine_destroy (&context->engine));
 }
 
-static bool
-submit_task_cb (task_t *task, void *context)
-{
-  mt_context_t *mt_ctx = context;
-
-  queue_status_t status = brute_engine_submit_task (&mt_ctx->engine, task);
-  if (status == QS_FAILURE)
-    {
-      error ("Could not submit task to brute engine");
-      return false;
-    }
-
-  return brute_engine_has_result (&mt_ctx->engine);
-}
-
 static void *
 mt_password_check (void *context)
 {
@@ -106,16 +91,9 @@ run_multi (task_t *task, config_t *config)
   if (active_threads == 0)
     goto fail;
 
-  task->from = (config->length < 3) ? 1 : 2;
-  task->to = config->length;
-
-  brute (task, config, submit_task_cb, &context);
-
-  if (brute_engine_wait (&context.engine) == S_FAILURE)
+  bool found = false;
+  if (brute_engine_run (&context.engine, task, config, &found) == S_FAILURE)
     goto fail;
-
-  bool found
-      = brute_engine_copy_result (&context.engine, task->result.password);
 
   if (brute_engine_cancel (&context.engine) == S_FAILURE)
     error ("Could not cancel brute engine");

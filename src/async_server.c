@@ -387,20 +387,6 @@ handle_clients (void *arg)
   return NULL;
 }
 
-static bool
-submit_task_cb (task_t *task, void *context)
-{
-  brute_engine_t *engine = context;
-
-  if (brute_engine_submit_task (engine, task) == QS_FAILURE)
-    {
-      error ("Could not submit task to brute engine");
-      return false; // stop brute() on failure
-    }
-
-  return brute_engine_has_result (engine); // stop if password already found
-}
-
 bool
 run_async_server (task_t *task, config_t *config)
 {
@@ -423,15 +409,8 @@ run_async_server (task_t *task, config_t *config)
       goto cleanup;
     }
 
-  task->from = (config->length < 3) ? 1 : 2;
-  task->to = config->length;
-
-  brute (task, config, submit_task_cb, &srv.engine);
-
-  if (brute_engine_wait (&srv.engine) == S_FAILURE)
+  if (brute_engine_run (&srv.engine, task, config, &found) == S_FAILURE)
     goto cleanup;
-
-  found = brute_engine_copy_result (&srv.engine, task->result.password);
 
 cleanup:
   async_server_context_stop (&srv);
