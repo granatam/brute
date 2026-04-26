@@ -35,12 +35,13 @@ handle_task (client_base_context_t *client_base, task_t *task, void *arg)
   result_t task_result = task->result;
   struct iovec vec[]
       = { { .iov_base = &task_result, .iov_len = sizeof (task_result) } };
-  if (send_wrapper (client_base->socket_fd, vec,
-                    sizeof (vec) / sizeof (vec[0]))
-      == S_FAILURE)
+  io_status_t status = send_wrapper (client_base->socket_fd, vec,
+                                     sizeof (vec) / sizeof (vec[0]));
+  if (status != IOS_SUCCESS)
     {
-      error ("Could not send result to server");
-      return (S_FAILURE);
+      if (status == IOS_FAILURE)
+        error ("Could not send result to server");
+      return S_FAILURE;
     }
 
   trace ("Sent %s result %s to server",

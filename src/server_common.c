@@ -135,10 +135,12 @@ send_hash (int socket_fd, config_t *config)
     { .iov_base = config->hash, .iov_len = HASH_LENGTH },
   };
 
-  if (send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
-      == S_FAILURE)
+  io_status_t status
+      = send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]));
+  if (status != IOS_SUCCESS)
     {
-      error ("Could not send hash to client");
+      if (status == IOS_FAILURE)
+        error ("Could not send hash to client");
       return S_FAILURE;
     }
 
@@ -157,10 +159,12 @@ send_alph (int socket_fd, config_t *config)
     { .iov_base = config->alph, .iov_len = length },
   };
 
-  if (send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]))
-      == S_FAILURE)
+  io_status_t status
+      = send_wrapper (socket_fd, vec, sizeof (vec) / sizeof (vec[0]));
+  if (status != IOS_SUCCESS)
     {
-      error ("Could not send alphabet to client");
+      if (status == IOS_FAILURE)
+        error ("Could not send alph to client");
       return S_FAILURE;
     }
 
