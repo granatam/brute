@@ -108,6 +108,12 @@ client_mark_closing (client_context_t *ctx)
   pthread_mutex_unlock (&ctx->mutex);
 }
 
+static void
+client_ref (client_context_t *ctx)
+{
+  atomic_fetch_add_explicit (&ctx->ref_count, 1, memory_order_relaxed);
+}
+
 static bool
 client_try_ref (client_context_t *ctx)
 {
@@ -118,7 +124,7 @@ client_try_ref (client_context_t *ctx)
       return (false);
     }
 
-  atomic_fetch_add_explicit (&ctx->ref_count, 1, memory_order_relaxed);
+  client_ref (ctx);
   pthread_mutex_unlock (&ctx->mutex);
   return (true);
 }
@@ -174,10 +180,9 @@ release_event_cb (evutil_socket_t fd, short what, void *arg)
 static void
 client_close_async (client_context_t *ctx)
 {
-  client_mark_closing (ctx);
+  client_ref (ctx); /* release_event_cb owns this ref */
 
-  if (!client_try_ref (ctx))
-    return;
+  client_mark_closing (ctx);
 
   if (event_base_once (ctx->rsrv_ctx->ev_base, -1, EV_TIMEOUT,
                        release_event_cb, ctx, NULL)
