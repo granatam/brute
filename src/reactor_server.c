@@ -22,6 +22,18 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+#define DEBUG_CLIENT_REFS 1
+
+#if DEBUG_CLIENT_REFS
+#define CLIENT_REF(ctx) client_ref_dbg ((ctx), __func__, __LINE__)
+#define CLIENT_UNREF(ctx) client_unref_dbg ((ctx), __func__, __LINE__)
+#define CLIENT_TRY_REF(ctx) client_try_ref_dbg ((ctx), __func__, __LINE__)
+#else
+#define CLIENT_REF(ctx) client_ref ((ctx))
+#define CLIENT_UNREF(ctx) client_unref ((ctx))
+#define CLIENT_TRY_REF(ctx) client_try_ref ((ctx))
+#endif
+
 typedef enum push_status
 {
   PS_SUCCESS,
@@ -80,34 +92,38 @@ client_mark_closing (client_context_t *ctx)
   pthread_mutex_unlock (&ctx->mutex);
 }
 
+static void client_context_destroy (client_context_t *ctx);
+
+static const char *
+client_state_name (client_state_t state)
+{
+  switch (state)
+    {
+    case CS_ACTIVE:
+      return "ACTIVE";
+    case CS_WRITING:
+      return "WRITING";
+    case CS_STARVING:
+      return "STARVING";
+    case CS_CLOSING:
+      return "CLOSING";
+    default:
+      return "UNKNOWN";
+    }
+}
+
 static void
-client_ref (client_context_t *ctx)
+client_ref_raw (client_context_t *ctx)
 {
   atomic_fetch_add_explicit (&ctx->ref_count, 1, memory_order_relaxed);
 }
 
 static bool
-client_try_ref (client_context_t *ctx)
-{
-  pthread_mutex_lock (&ctx->mutex);
-  if (ctx->state == CS_CLOSING)
-    {
-      pthread_mutex_unlock (&ctx->mutex);
-      return (false);
-    }
-
-  client_ref (ctx);
-  pthread_mutex_unlock (&ctx->mutex);
-  return (true);
-}
-
-static void client_context_destroy (client_context_t *ctx);
-
-static bool
-client_unref (client_context_t *ctx)
+client_unref_raw (client_context_t *ctx)
 {
   int old
       = atomic_fetch_sub_explicit (&ctx->ref_count, 1, memory_order_acq_rel);
+
   assert (old > 0);
 
   if (old == 1)
@@ -119,10 +135,127 @@ client_unref (client_context_t *ctx)
   return false;
 }
 
+#if DEBUG_CLIENT_REFS
+
+static void
+client_ref_dbg (client_context_t *ctx, const char *func, int line)
+{
+  int old
+      = atomic_fetch_add_explicit (&ctx->ref_count, 1, memory_order_relaxed);
+
+  pthread_mutex_lock (&ctx->mutex);
+  client_state_t state = ctx->state;
+  bool close_scheduled = ctx->close_scheduled;
+  bool close_cb_ref = ctx->close_cb_ref;
+  struct event *read_event = ctx->conn.read_event;
+  pthread_mutex_unlock (&ctx->mutex);
+
+  trace ("CLIENT_REF   ctx=%p %d->%d state=%s read_event=%p "
+         "close_scheduled=%d close_cb_ref=%d at %s:%d",
+         (void *)ctx, old, old + 1, client_state_name (state),
+         (void *)read_event, close_scheduled, close_cb_ref, func, line);
+}
+
+static bool
+client_unref_dbg (client_context_t *ctx, const char *func, int line)
+{
+  int old = atomic_load_explicit (&ctx->ref_count, memory_order_relaxed);
+
+  pthread_mutex_lock (&ctx->mutex);
+  client_state_t state = ctx->state;
+  bool close_scheduled = ctx->close_scheduled;
+  bool close_cb_ref = ctx->close_cb_ref;
+  struct event *read_event = ctx->conn.read_event;
+  pthread_mutex_unlock (&ctx->mutex);
+
+  trace ("CLIENT_UNREF ctx=%p %d->%d state=%s read_event=%p "
+         "close_scheduled=%d close_cb_ref=%d at %s:%d",
+         (void *)ctx, old, old - 1, client_state_name (state),
+         (void *)read_event, close_scheduled, close_cb_ref, func, line);
+
+  if (old <= 0)
+    {
+      error ("CLIENT_UNREF UNDERFLOW ctx=%p old=%d at %s:%d", (void *)ctx,
+             old, func, line);
+      assert (old > 0);
+    }
+
+  old = atomic_fetch_sub_explicit (&ctx->ref_count, 1, memory_order_acq_rel);
+
+  if (old != 1)
+    return false;
+
+  trace ("CLIENT_DESTROY_TRIGGER ctx=%p at %s:%d", (void *)ctx, func, line);
+  client_context_destroy (ctx);
+  return true;
+}
+
+static bool
+client_try_ref_dbg (client_context_t *ctx, const char *func, int line)
+{
+  pthread_mutex_lock (&ctx->mutex);
+
+  if (ctx->state == CS_CLOSING)
+    {
+      int refs = atomic_load_explicit (&ctx->ref_count, memory_order_relaxed);
+      trace ("CLIENT_TRY_REF_SKIP ctx=%p refs=%d state=%s read_event=%p "
+             "close_scheduled=%d close_cb_ref=%d at %s:%d",
+             (void *)ctx, refs, client_state_name (ctx->state),
+             (void *)ctx->conn.read_event, ctx->close_scheduled,
+             ctx->close_cb_ref, func, line);
+
+      pthread_mutex_unlock (&ctx->mutex);
+      return false;
+    }
+
+  int old
+      = atomic_fetch_add_explicit (&ctx->ref_count, 1, memory_order_relaxed);
+
+  trace ("CLIENT_TRY_REF_OK ctx=%p %d->%d state=%s read_event=%p "
+         "close_scheduled=%d close_cb_ref=%d at %s:%d",
+         (void *)ctx, old, old + 1, client_state_name (ctx->state),
+         (void *)ctx->conn.read_event, ctx->close_scheduled,
+         ctx->close_cb_ref, func, line);
+
+  pthread_mutex_unlock (&ctx->mutex);
+  return true;
+}
+
+#else
+
+static void
+client_ref (client_context_t *ctx)
+{
+  client_ref_raw (ctx);
+}
+
+static bool
+client_unref (client_context_t *ctx)
+{
+  return client_unref_raw (ctx);
+}
+
+static bool
+client_try_ref (client_context_t *ctx)
+{
+  pthread_mutex_lock (&ctx->mutex);
+  if (ctx->state == CS_CLOSING)
+    {
+      pthread_mutex_unlock (&ctx->mutex);
+      return false;
+    }
+
+  client_ref_raw (ctx);
+  pthread_mutex_unlock (&ctx->mutex);
+  return true;
+}
+
+#endif
+
 static void
 client_job_release (void *arg)
 {
-  client_unref (arg);
+  CLIENT_UNREF (arg);
 }
 
 static void
@@ -140,7 +273,7 @@ client_release_event_ref (client_context_t *ctx)
   if (reactor_event_del_free (ev) == S_FAILURE)
     error ("Could not release client read event");
 
-  client_unref (ctx); /* read_event owns this ref */
+  CLIENT_UNREF (ctx); /* read_event owns this ref */
 }
 
 static void
@@ -159,7 +292,7 @@ release_event_cb (evutil_socket_t fd, short what, void *arg)
   client_release_event_ref (ctx);
 
   if (had_cb_ref)
-    client_unref (ctx);
+    CLIENT_UNREF (ctx);
 }
 
 static void
@@ -177,7 +310,7 @@ client_close_async (client_context_t *ctx)
   ctx->state = CS_CLOSING;
   ctx->close_scheduled = true;
   ctx->close_cb_ref = true;
-  client_ref (ctx); /* release_event_cb owns this ref */
+  CLIENT_REF (ctx); /* release_event_cb owns this ref */
 
   pthread_mutex_unlock (&ctx->mutex);
 
@@ -193,7 +326,7 @@ client_close_async (client_context_t *ctx)
       pthread_mutex_unlock (&ctx->mutex);
 
       client_release_event_ref (ctx);
-      client_unref (ctx); /* release failed callback ref */
+      CLIENT_UNREF (ctx); /* release failed callback ref */
     }
 }
 
@@ -212,7 +345,7 @@ starving_clients_unref_cb (void *payload, void *arg)
 {
   (void)arg;
   client_context_t *client = *(client_context_t **)payload;
-  client_unref (client);
+  CLIENT_UNREF (client);
 }
 
 static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
@@ -314,7 +447,7 @@ client_context_init (rsrv_context_t *rsrv_ctx, evutil_socket_t fd)
       goto fail;
     }
 
-  client_ref (client_ctx);
+  CLIENT_REF (client_ctx);
 
   return (client_ctx);
 
@@ -507,14 +640,14 @@ client_context_destroy (client_context_t *ctx)
 static push_status_t
 push_job_checked (client_context_t *ctx, status_t (*job_func) (void *))
 {
-  if (!client_try_ref (ctx))
+  if (!CLIENT_TRY_REF (ctx))
     return PS_SKIPPED;
 
   if (push_job (&ctx->rsrv_ctx->rctr_ctx, ctx, job_func, client_job_release)
       != S_SUCCESS)
     {
       error ("Could not push job to a job queue");
-      return client_unref (ctx) ? PS_DESTROYED : PS_FAILURE;
+      return CLIENT_UNREF (ctx) ? PS_DESTROYED : PS_FAILURE;
     }
 
   return PS_SUCCESS;
@@ -636,13 +769,13 @@ create_task_job (void *arg)
 
       trace ("Returned slot index %d to free slot queue", id);
 
-      if (!client_try_ref (ctx))
+      if (!CLIENT_TRY_REF (ctx))
         return (S_SUCCESS);
       if (queue_push_back (&ctx->rsrv_ctx->starving_clients, &ctx)
           == QS_FAILURE)
         {
           error ("Could not push client to starving clients queue");
-          if (client_unref (ctx))
+          if (CLIENT_UNREF (ctx))
             return (S_SUCCESS);
           client_mark_closing (ctx);
         }
@@ -746,13 +879,13 @@ handle_accept (struct evconnlistener *listener, evutil_socket_t fd,
       goto release_event_ref;
     }
 
-  client_unref (client_ctx);
+  CLIENT_UNREF (client_ctx);
 
   return;
 
 release_event_ref:
   client_release_event_ref (client_ctx);
-  client_unref (client_ctx);
+  CLIENT_UNREF (client_ctx);
   return;
 
 fail:
@@ -769,7 +902,7 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
 
   client_context_t *ctx = arg;
 
-  if (!client_try_ref (ctx))
+  if (!CLIENT_TRY_REF (ctx))
     return;
 
   reactor_io_status_t io_status = reactor_readv_advance (
@@ -857,7 +990,7 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
     }
 
 out:
-  client_unref (ctx);
+  CLIENT_UNREF (ctx);
 }
 
 static void *
@@ -881,7 +1014,7 @@ handle_starving_clients (void *arg)
       if (client->state == CS_CLOSING || client->state == CS_WRITING)
         {
           pthread_mutex_unlock (&client->mutex);
-          client_unref (client);
+          CLIENT_UNREF (client);
           continue;
         }
       client->state = CS_WRITING;
@@ -919,18 +1052,18 @@ handle_starving_clients (void *arg)
         case PS_DESTROYED:
           continue;
         case PS_SKIPPED:
-          client_unref (client);
+          CLIENT_UNREF (client);
           continue;
         case PS_SUCCESS:
           break;
         }
 
-      client_unref (client);
+      CLIENT_UNREF (client);
       continue;
 
     fail_starving_take:
       client_mark_closing (client);
-      client_unref (client);
+      CLIENT_UNREF (client);
       return (NULL);
     }
 }
