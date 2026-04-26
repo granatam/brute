@@ -1,6 +1,5 @@
 #include "reactor_server.h"
 
-#include "brute.h"
 #include "brute_engine.h"
 #include "common.h"
 #include "log.h"
@@ -102,7 +101,7 @@ typedef struct event_list_t
 } event_list_t;
 
 static void
-client_disconnect (client_context_t *ctx)
+client_mark_closing (client_context_t *ctx)
 {
   pthread_mutex_lock (&ctx->mutex);
   ctx->state = CS_CLOSING;
@@ -158,6 +157,35 @@ client_release_event_ref (client_context_t *ctx)
   event_free (ev);
 
   client_unref (ctx);
+}
+
+static void
+release_event_cb (evutil_socket_t fd, short what, void *arg)
+{
+  (void)fd;
+  (void)what;
+
+  client_context_t *ctx = arg;
+
+  client_release_event_ref (ctx);
+  client_unref (ctx);
+}
+
+static void
+client_close_async (client_context_t *ctx)
+{
+  client_mark_closing (ctx);
+
+  if (!client_try_ref (ctx))
+    return;
+
+  if (event_base_once (ctx->rsrv_ctx->ev_base, -1, EV_TIMEOUT,
+                       release_event_cb, ctx, NULL)
+      != 0)
+    {
+      error ("Could not schedule client event cleanup");
+      client_unref (ctx);
+    }
 }
 
 static bool
@@ -628,7 +656,7 @@ send_config_job (void *arg)
       if (status != S_SUCCESS)
         {
           error ("Could not send hash to client");
-          client_disconnect (ctx);
+          client_close_async (ctx);
           return (S_SUCCESS);
         }
 
@@ -640,7 +668,7 @@ send_config_job (void *arg)
   if (status != S_SUCCESS)
     {
       error ("Could not send alphabet to client");
-      client_disconnect (ctx);
+      client_close_async (ctx);
       return (S_SUCCESS);
     }
 
@@ -673,7 +701,7 @@ create_task_job (void *arg)
   if (qs != QS_SUCCESS)
     {
       if (qs != QS_EMPTY)
-        client_disconnect (ctx);
+        client_mark_closing (ctx);
       goto clear_writing_flag;
     }
 
@@ -690,7 +718,7 @@ create_task_job (void *arg)
       if (queue_push_back (&ctx->free_slot_idx, &id) == QS_FAILURE)
         {
           error ("Could not push index to free slot queue");
-          client_disconnect (ctx);
+          client_mark_closing (ctx);
           return (S_SUCCESS);
         }
 
@@ -704,7 +732,7 @@ create_task_job (void *arg)
           error ("Could not push client to starving clients queue");
           if (client_unref (ctx))
             return (S_SUCCESS);
-          client_disconnect (ctx);
+          client_mark_closing (ctx);
         }
 
       trace ("Queued client in starving clients queue");
@@ -715,7 +743,7 @@ create_task_job (void *arg)
     {
       if (queue_push_back (&ctx->free_slot_idx, &id) != QS_SUCCESS)
         error ("Could not push back id to free slot queue");
-      client_disconnect (ctx);
+      client_mark_closing (ctx);
       goto clear_writing_flag;
     }
 
@@ -747,7 +775,7 @@ send_task_job (void *arg)
   if (status != S_SUCCESS)
     {
       error ("Could not send task to client");
-      client_disconnect (ctx);
+      client_close_async (ctx);
       return (S_SUCCESS);
     }
 
@@ -840,16 +868,14 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
         goto out;
 
       error ("Could not read result from a client");
-      client_disconnect (ctx);
-      client_release_event_ref (ctx);
+      client_close_async (ctx);
       goto out;
     }
 
   if (nread == 0)
     {
       error ("Client closed connection");
-      client_disconnect (ctx);
-      client_release_event_ref (ctx);
+      client_close_async (ctx);
       goto out;
     }
 
@@ -870,7 +896,7 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
   if (result->id < 0 || result->id >= QUEUE_SIZE)
     {
       warn ("Unexpected result id: %d", result->id);
-      client_disconnect (ctx);
+      client_close_async (ctx);
       goto out;
     }
 
@@ -888,7 +914,7 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
   if (queue_push_back (&ctx->free_slot_idx, &result->id) != QS_SUCCESS)
     {
       error ("Could not return id to a queue");
-      client_disconnect (ctx);
+      client_close_async (ctx);
       goto out;
     }
 
@@ -903,8 +929,10 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
       event_base_loopbreak (ctx->rsrv_ctx->ev_base);
     }
 
+  trace ("Calling brute_engine_task_done");
   if (brute_engine_task_done (&ctx->rsrv_ctx->engine) == S_FAILURE)
     goto out;
+  trace ("brute_engine_task_done completed");
 
   trace ("Received %s result %s with id %d from client",
          result->is_correct ? "correct" : "incorrect", result->password,
@@ -997,7 +1025,7 @@ handle_starving_clients (void *arg)
       continue;
 
     fail_starving_take:
-      client_disconnect (client);
+      client_mark_closing (client);
       client_unref (client);
       return (NULL);
     }

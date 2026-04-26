@@ -346,6 +346,7 @@ timer_callback (evutil_socket_t fd, short what, void *arg)
 {
   (void)fd;
   (void)what;
+
   spawner_context_t *spawner_ctx = arg;
 
   event_del (spawner_ctx->timer_event);
@@ -353,6 +354,7 @@ timer_callback (evutil_socket_t fd, short what, void *arg)
   pending_task_t due;
   if (priority_queue_top (&spawner_ctx->pending_tasks, &due) != S_SUCCESS)
     return;
+
   if (priority_queue_pop (&spawner_ctx->pending_tasks) != S_SUCCESS)
     return;
 
@@ -366,7 +368,14 @@ timer_callback (evutil_socket_t fd, short what, void *arg)
 
   if (is_writing)
     {
-      queue_push_back (&due.ctx->result_queue, result);
+      if (queue_push_back (&due.ctx->result_queue, result) != QS_SUCCESS)
+        {
+          error ("Could not push result to result queue");
+          client_finish (due.ctx);
+          return;
+        }
+
+      schedule_timer_for_head (spawner_ctx);
       return;
     }
 
@@ -377,6 +386,7 @@ timer_callback (evutil_socket_t fd, short what, void *arg)
       != S_SUCCESS)
     {
       error ("Could not push send result job");
+      client_finish (due.ctx);
       return;
     }
 
@@ -394,13 +404,23 @@ tryread (client_context_t *ctx, void *base, size_t len)
       ctx->read_state.vec[0].iov_len = len;
     }
 
-  size_t bytes_read
-      = readv (ctx->client_base.socket_fd, ctx->read_state.vec, 1);
-  if ((ssize_t)bytes_read <= 0)
+  ssize_t nread = readv (ctx->client_base.socket_fd, ctx->read_state.vec, 1);
+  if (nread < 0)
+    {
+      if (errno == EAGAIN || errno == EWOULDBLOCK)
+        return false;
+
+      client_finish (ctx);
+      return false;
+    }
+
+  if (nread == 0)
     {
       client_finish (ctx);
-      return (S_FAILURE);
+      return false;
     }
+
+  size_t bytes_read = (size_t)nread;
 
   ctx->read_state.vec[0].iov_len -= bytes_read;
   ctx->read_state.vec[0].iov_base += bytes_read;
@@ -429,7 +449,9 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
           = ctx->read_state.cmd == CMD_ALPH ? RS_LEN : RS_DATA;
       break;
     case RS_LEN:
-      if (tryread (ctx, &ctx->read_state.alph_len, sizeof (int)) == S_FAILURE)
+      if (tryread (ctx, &ctx->read_state.alph_len,
+                   sizeof (ctx->read_state.alph_len))
+          == S_FAILURE)
         {
           error ("Could not read alphabet length");
           return;
