@@ -1,0 +1,95 @@
+#ifndef REACTOR_COMMON_H
+#define REACTOR_COMMON_H
+
+#include "common.h"
+#include "config.h"
+#include "queue.h"
+#include "thread_pool.h"
+
+#include <event2/event.h>
+
+typedef enum reactor_io_status
+{
+  RIO_DONE,
+  RIO_PENDING,
+  RIO_CLOSED,
+  RIO_ERROR,
+} reactor_io_status_t;
+
+reactor_io_status_t reactor_writev_advance (int fd, struct iovec *vec,
+                                            int *vec_sz);
+
+reactor_io_status_t reactor_readv_advance (int fd, struct iovec *vec,
+                                           int *vec_sz);
+
+typedef struct io_state_t
+{
+  struct iovec vec[2];
+  int32_t vec_sz;
+  command_t cmd;
+} io_state_t;
+
+typedef struct write_state_t
+{
+  io_state_t base_state;
+  struct iovec vec_extra[3];
+  command_t cmd_extra;
+  int32_t length;
+  int32_t vec_extra_sz;
+} write_state_t;
+
+typedef struct reactor_context_t
+{
+  queue_t jobs_queue;
+  struct event_base *ev_base;
+} reactor_context_t;
+
+typedef struct reactor_conn_t
+{
+  reactor_context_t *rctr_ctx;
+  struct event *read_event;
+  evutil_socket_t fd;
+  bool is_writing;
+  pthread_mutex_t is_writing_mutex;
+} reactor_conn_t;
+
+typedef void (*job_release_fn) (void *);
+
+typedef struct job_t
+{
+  void *arg;
+  status_t (*job_func) (void *);
+  job_release_fn release_fn;
+} job_t;
+
+typedef void (*reactor_event_visit_fn) (const struct event *ev, void *arg);
+
+status_t reactor_for_each_event_snapshot (reactor_context_t *ctx,
+                                          reactor_event_visit_fn visit,
+                                          void *arg);
+
+status_t reactor_event_del_free (struct event *ev);
+
+void *handle_io (void *arg);
+void *dispatch_event_loop (void *arg);
+
+status_t write_state_write_wrapper (int socket_fd, struct iovec *vec,
+                                    int *vec_sz);
+status_t write_state_write (int socket_fd, write_state_t *write_state);
+
+status_t push_job (reactor_context_t *rctr_ctx, void *arg,
+                   status_t (*job_func) (void *), job_release_fn release_fn);
+status_t reactor_context_drain_jobs (reactor_context_t *ctx);
+status_t reactor_conn_init (reactor_conn_t *conn, reactor_context_t *rctr_ctx,
+                            evutil_socket_t fd, event_callback_fn on_read,
+                            void *arg);
+status_t reactor_conn_destroy (reactor_conn_t *conn);
+
+status_t reactor_context_init (reactor_context_t *ctx);
+void reactor_context_stop (reactor_context_t *ctx);
+status_t reactor_context_destroy (reactor_context_t *ctx);
+
+status_t create_reactor_threads (thread_pool_t *tp, config_t *config,
+                                 reactor_context_t *ptr);
+
+#endif // REACTOR_COMMON_H
