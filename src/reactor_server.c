@@ -71,11 +71,13 @@ typedef struct client_context_t
   bool starving_queued;
   bool has_reserved_task;
   task_t reserved_task;
+  task_t write_task;
 } client_context_t;
 
 static void handle_read (evutil_socket_t socket_fd, short what, void *arg);
 static void client_context_destroy (client_context_t *ctx);
 static status_t client_advance_job (void *arg);
+static status_t return_tasks (client_context_t *ctx);
 
 static void
 client_disconnect (client_context_t *ctx)
@@ -83,6 +85,10 @@ client_disconnect (client_context_t *ctx)
   pthread_mutex_lock (&ctx->mutex);
   ctx->state = CS_CLOSING;
   pthread_mutex_unlock (&ctx->mutex);
+
+  if (!ctx->rsrv_ctx->shutting_down && return_tasks (ctx) == S_FAILURE)
+    error ("Could not return tasks to global queue");
+  shutdown (ctx->conn.fd, SHUT_RDWR);
 }
 
 static bool
@@ -566,7 +572,8 @@ write_state_write_extra (int socket_fd, write_state_t *write_state)
 static void
 task_write_state_setup (client_context_t *ctx, int id)
 {
-  task_t *task = &ctx->task_slots[id].task;
+  ctx->write_task = ctx->task_slots[id].task;
+  task_t *task = &ctx->write_task;
   task->result.id = id;
   task->to = task->from;
   task->from = 0;
@@ -865,7 +872,10 @@ handle_read (evutil_socket_t socket_fd, short what, void *arg)
   client_context_t *ctx = arg;
 
   if (!client_try_ref (ctx))
-    return;
+    {
+      client_release_event_ref (ctx);
+      return;
+    }
 
   reactor_io_status_t rio = reactor_conn_readv (
       &ctx->conn, ctx->read_state.vec, &ctx->read_state.vec_sz);

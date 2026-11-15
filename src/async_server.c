@@ -156,6 +156,8 @@ sender_receiver_cleanup (void *arg)
   if (queue_cancel (&ctx->registry_idx) != QS_SUCCESS)
     error ("Could not cancel registry indices queue");
 
+  shutdown (ctx->socket_fd, SHUT_RDWR);
+
   task_t to_return[QUEUE_SIZE];
   int to_return_count = 0;
 
@@ -193,11 +195,6 @@ sender_receiver_cleanup (void *arg)
       = (atomic_fetch_sub_explicit (&ctx->ref_count, 1, memory_order_acq_rel)
          == 1);
 
-  /* If sender is the first thread to exit, shutdown socket connection so the
-   * receiver blocked in recv unblocks and exits. */
-  if (!is_last && ctx->socket_fd >= 0)
-    shutdown (ctx->socket_fd, SHUT_RDWR);
-
   if (is_last)
     client_context_destroy (ctx);
 }
@@ -224,15 +221,14 @@ result_receiver (void *arg)
       trace ("Received %s result %s from client",
              result.is_correct ? "correct" : "incorrect", result.password);
 
-      if (queue_push (&client_ctx->registry_idx, &result.id) != QS_SUCCESS)
+      pthread_mutex_lock (&client_ctx->mutex);
+      if (client_ctx->tasks_returned)
         {
-          error ("Could not return id to a queue");
+          pthread_mutex_unlock (&client_ctx->mutex);
           break;
         }
-
-      trace ("Pushed index of received task back to indices queue");
-
       client_ctx->registry_used[result.id] = false;
+      pthread_mutex_unlock (&client_ctx->mutex);
 
       if (result.is_correct)
         if (brute_engine_report_result (&srv->engine, result.password)
@@ -241,6 +237,14 @@ result_receiver (void *arg)
 
       if (brute_engine_task_done (&srv->engine) == S_FAILURE)
         break;
+
+      if (queue_push (&client_ctx->registry_idx, &result.id) != QS_SUCCESS)
+        {
+          error ("Could not return id to a queue");
+          break;
+        }
+
+      trace ("Pushed index of received task back to indices queue");
 
       if (brute_engine_has_result (&srv->engine))
         break;
@@ -283,7 +287,16 @@ task_sender (void *arg)
 
       trace ("Got task from global queue");
 
+      pthread_mutex_lock (&client_ctx->mutex);
+      if (client_ctx->tasks_returned)
+        {
+          pthread_mutex_unlock (&client_ctx->mutex);
+          if (brute_engine_return_task (&srv->engine, task) == QS_FAILURE)
+            error ("Could not return task to brute engine");
+          break;
+        }
       client_ctx->registry_used[id] = true;
+      pthread_mutex_unlock (&client_ctx->mutex);
 
       task_t task_copy = *task;
       task_copy.result.id = id;
@@ -293,9 +306,6 @@ task_sender (void *arg)
       if (send_task (client_ctx->socket_fd, &task_copy) == S_FAILURE)
         {
           error ("Could not send task to client");
-          if (brute_engine_return_task (&srv->engine, task) != QS_SUCCESS)
-            error ("Could not return task to brute engine");
-          client_ctx->registry_used[task->result.id] = false;
           break;
         }
     }
