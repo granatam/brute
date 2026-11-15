@@ -1,7 +1,8 @@
 import os
-import signal
+import select
 import socket
 import string
+import struct
 import subprocess
 import sys
 import tempfile
@@ -44,6 +45,12 @@ VALGRIND_CMD = " ".join(
         "./brute",
     )
 )
+
+HASH_LENGTH = 14
+MAX_PASSWORD_LENGTH = 7
+COMMAND_SIZE = struct.calcsize("@i")
+LENGTH_SIZE = struct.calcsize("@i")
+TASK_SIZE = struct.calcsize(f"@i?{MAX_PASSWORD_LENGTH + 1}sii")
 
 
 class CommandMode(str, Enum):
@@ -135,15 +142,43 @@ def run_brute(
     load_clients: int | None = None,
 ):
     if run_mode == RunMode.NETCAT:
-        cmd = f"nc localhost {port}"
-        # New session so we can kill the whole process group (shell + nc) later.
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=log_file,
-            shell=True,
-            start_new_session=True,
+        cmd = f"nc 127.0.0.1 {port}"
+        deadline = time.monotonic() + 10
+        config_size = (
+            COMMAND_SIZE + HASH_LENGTH
+            + COMMAND_SIZE + LENGTH_SIZE + len(alph)
         )
+        expected_size = config_size + COMMAND_SIZE + TASK_SIZE
+        while True:
+            proc = subprocess.Popen(
+                cmd.split(),
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=log_file,
+            )
+            received = b""
+            try:
+                while len(received) < expected_size:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0 or not select.select(
+                        [proc.stdout], [], [], max(0, remaining)
+                    )[0]:
+                        raise AssertionError("nc did not receive a server task")
+                    chunk = os.read(proc.stdout.fileno(), 4096)
+                    if not chunk:
+                        break
+                    received += chunk
+                if len(received) >= expected_size:
+                    return cmd, proc
+            except BaseException:
+                proc.kill()
+                proc.communicate()
+                raise
+            proc.kill()
+            proc.communicate()
+            if received or time.monotonic() >= deadline:
+                raise AssertionError("nc disconnected without receiving a task")
+            time.sleep(0.01)
     else:
         hash = crypt(passwd, passwd)
         base_cmd = f"{mode.value} -H {hash} -l {len(str(passwd))} -a {alph}"
@@ -301,17 +336,9 @@ class _TestRunner:
             client_data.append(
                 (client_mode, client_cmd, client_proc, client_stderr_log)
             )
-
-        for run_mode, _, client_proc, _ in client_data:
-            if run_mode == RunMode.NETCAT:
-                time.sleep(0.1)
-                try:
-                    os.killpg(client_proc.pid, signal.SIGKILL)
-                except (ProcessLookupError, OSError):
-                    try:
-                        client_proc.kill()
-                    except ProcessLookupError:
-                        pass
+            if client_mode == RunMode.NETCAT:
+                client_proc.kill()
+                client_proc.communicate()
 
         output, main_ec = self.wait_for_process(
             self.config.run_mode, main_proc, 10
